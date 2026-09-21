@@ -266,7 +266,7 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - **The orchestrator chaos-tested the one the implementer did not:** flipping both `<=` to `<` fails 3 tests — at-ok becomes `Unresolved` instead of `Included`, and at-good reports `IsLowConfidence` true because it falls through to the ok branch. Exactly the off-by-one, reverted, 28/28 green.
 
 > **Reorder, 2026-09-21: S0.5a and S0.5b run BEFORE S0.4a/S0.4b.** The plan lists the pipeline first, but CONTRACTS.md says the pipeline's test *is* the end-to-end suite, and that suite needs the fakes. Written in listed order, S0.4a — the highest-risk code in Stream 0, holding the lock and the frame-ownership handoff — would sit untested until S0.6a, or would need throwaway test doubles that the real fakes then duplicate. The fakes do not depend on the pipeline in either direction, so nothing is lost by swapping them, and S0.4a then gets tested against the same fakes the end-to-end suite uses. This is within the plan's own rules: S0.5a and S0.5b are marked ∥. New order: **S0.5a → S0.5b → S0.4a → S0.4b → S0.6a → S0.6b → S0.7 → S0.2 → S0.8.** S0.2 (CI) moves late because its test leg cannot pass until S0.7 adds the placeholder tests.
-- [ ] **S0.4a** `Core/Scanning`: `DetectionSnapshot`, `IScanPipeline` and its implementation. Rules:
+- [x] **S0.4a** `Core/Scanning`: `DetectionSnapshot`, `IScanPipeline` and its implementation. Rules:
   - The pipeline retains exactly one frame, guarded by a lock.
   - `CaptureAsync` takes ownership of the frame under the lock, then does its work outside the lock.
   - Detection always uses `maxCards = 9` (V12).
@@ -274,6 +274,20 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - `NotifyCaptured()` is called on every capture, manual or auto.
   - `SourceFailed` is raised before `RunAsync` faults.
   - Thresholds come from `ScanSettings` and are passed into each tile.
+
+  *Done 2026-09-21, verified independently.* 285 lines in `ScanPipeline.cs` + 48 in `IScanPipeline.cs`, 13 new tests, clean Release build at 0 warnings, **`Passed! Failed: 0, Passed: 93, Total: 93`**, stable across repeated runs.
+
+  **The ownership handoff, which is the reason this package was the risky one:** one private `TryCaptureFromRetained` is the *only* code that reads or clears `_retainedFrame`/`_latestSnapshot`, and both the manual and auto paths go through it. Under the lock it either returns null without touching anything, or takes the frame **and** its snapshot together and nulls both fields — so the pipeline holds neither until the next frame arrives. Rectify and identify then run outside the lock, and a `finally` disposes the owned frame exactly once. Two callers can therefore only ever contend for the lock, never for the object.
+
+  🔴 **The chaos test that earns the package, re-run by the orchestrator.** Removing the two lines that transfer ownership does **not** throw. It silently corrupts: the torn-frame check counted **114 bad pixel reads** on the orchestrator's run and 150 on the implementer's — the count varies with timing, as a concurrency test should. Real code: 0, and 93/93.
+
+  That result is worth more than the passing suite. **This bug class produces no exception, no crash and no log line** — just a rectified card built from a buffer already returned to the pool, i.e. a wrong hash, a wrong match and bad inventory with nothing saying so. It is precisely what CONTRACTS.md predicted (*"fine in dev, torn frames under load"*) and why frames cross the seam as pooled `byte[]` rather than `IntPtr`. And **114 rather than 1** means the window is wide, not a lucky-timing rarity — it would have bitten on real hardware. Had the test reported 0 with the sabotage in place it would have been decoration, and the race would have shipped undetectable.
+
+  Other verifications: `MaxDetectionCards = 9` is a named constant and detection is called with it, never with `ExpectedCount` (V12; breaking it fails the recorded-argument test with 1 and 3). Dropping the dispose-the-replaced-frame line leaks **39 of 40** pooled buffers. The only threshold reference in the file is `_settings.GoodDistance`/`OkDistance` passed straight into the `CohortTile` constructor — no comparison, no literal, which is I4 satisfied early. `SourceFailed` fires inside the `catch` before the rethrow, so the ordering is structural rather than incidental.
+
+  Two judgement calls made by the implementer, both accepted:
+  - `CaptureAsync` does **not** call `NotifyCaptured` when there were zero detections. Correct: CLAUDE.md's interaction model makes Space a no-op on 0 detections, so nothing was captured and there is nothing to re-arm from.
+  - A second `_triggerLock` serialises every `IAutoCaptureTrigger` call, because the trigger is reached from both the loop thread and `CaptureAsync`'s worker and the contract promises it no thread safety. Not asked for; it is the same hazard one layer up, and stream A's A0 implementation now cannot be broken by a race it never has to think about.
 - [ ] **S0.4b** `ScanPipelineFactory.Create(...)`, plus the thresholds loader `ThresholdsFile.Load(path) → ThresholdsFile`. Schema v1 is JSON with these fields: `formatVersion`, `goodDistance`, `okDistance`, `referenceFloor`, `indexArtworkCount`, `indexSha256`, `measuredAt`, `notes`. Unknown `formatVersion`, a missing file or a missing field throws `InvalidDataException` or `FileNotFoundException`. Also `DataFiles.IndexPath` and `DataFiles.ThresholdsPath`, relative to `AppContext.BaseDirectory`. Accept: loader unit tests for a valid file, a missing file, a bad version and a missing field.
 - [x] **S0.5a** ∥ Fakes in `src/LoreFetch.Core/Fakes/`: `FolderFrameSource` plus `FolderFrameSourceFactory` (V20), `StubCardDetector` (1/3/9 layouts) and `StubRectifier`. Accept: unit tests. `FolderFrameSource` disposes every frame it drops.
 
