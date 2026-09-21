@@ -105,12 +105,14 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
   - Mark RECONCILIATION's "branches not merged" as done.
 
   Accept: `grep -rn "OpenCvSharp5.AvaloniaExtensions\|both CI legs" docs CLAUDE.md` finds only historical or record text.
-- [ ] **G0.6** 🧭 Hook fixes, with each case chaos-tested using synthetic payloads:
+- [x] **G0.6** 🧭 Hook fixes, with each case chaos-tested using synthetic payloads:
   - `guard-write.sh` resolves the git dir **of the target file's directory** (`git -C "$(dirname "$abs")" rev-parse …`), not `$PWD` (V3).
   - Exempt the Windows scratchpad path.
   - Add `Directory.Build.props`, `Directory.Packages.props`, `global.json`, `*/Core/Fakes/*` and `*/Tests/Integration/*` to the frozen list.
 
   Accept: a write aimed at a worktree's `Core/Abstractions` while the session cwd is `main` is denied, and the same path in `main` is allowed.
+
+  *Done 2026-09-21.* **33 synthetic payloads, target path and session cwd varied independently; all 33 pass, and the pre-fix hook gets 13 of them wrong** — the V3 hole itself (worktree target + `main` cwd allowed silently, with no output at all, for every one of the six frozen categories), its inverse (a worktree cwd froze `main`'s own contract files), and the Windows scratchpad denial. Also verified live through the real `Write` tool from `main`, which is the exact configuration every subagent runs in. Target directories that do not exist yet resolve by walking up to the nearest existing ancestor, so the guard holds before Stream 0 creates `src/`. Harness: `scratchpad/test-guard-write.sh` (not committed — it hardcodes absolute machine paths; the 33 cases are listed in the commit body).
 
 ### Stream 0 — Foundation (serial, on `main`, one implementer at a time)
 Write scope for S0 is the whole repo, except for other streams' future directories.
