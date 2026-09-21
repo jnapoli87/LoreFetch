@@ -13,8 +13,8 @@ public class CohortTileTests
             sourceQuad: new CardQuad(
                 new PointF2(0, 0), new PointF2(1, 0), new PointF2(1, 1), new PointF2(0, 1)));
 
-    private static CardCandidate Candidate(int distance, string oracleId = "oracle-1", string name = "Forest") =>
-        new(oracleId, name, distance, ArtworkId: null);
+    private static CardCandidate Candidate(int distance, string oracleId = "oracle-1", string name = "Forest", string? artworkId = null) =>
+        new(oracleId, name, distance, artworkId);
 
     private static CohortTile MakeTile(IReadOnlyList<CardCandidate> candidates) =>
         new(MakeImage(), candidates, GoodDistance, OkDistance);
@@ -29,6 +29,15 @@ public class CohortTileTests
         Assert.Equal(new OracleEntry("oracle-1", "Forest"), tile.Chosen);
         Assert.Equal(GoodDistance, tile.ChosenDistance);
         Assert.False(tile.IsLowConfidence);
+    }
+
+    [Fact]
+    public void InitialState_BestWithinGood_ExposesChosenArtworkId()
+    {
+        var candidates = new[] { Candidate(GoodDistance, artworkId: "art-1") };
+        var tile = MakeTile(candidates);
+
+        Assert.Equal("art-1", tile.ChosenArtworkId);
     }
 
     [Fact]
@@ -56,6 +65,17 @@ public class CohortTileTests
     }
 
     [Fact]
+    public void InitialState_BestBeyondOk_ChosenArtworkIdIsNull()
+    {
+        // Same null rule as ChosenDistance: an Unresolved tile proposes
+        // nothing, art id included, even when the best candidate carried one.
+        var candidates = new[] { Candidate(OkDistance + 1, artworkId: "art-1") };
+        var tile = MakeTile(candidates);
+
+        Assert.Null(tile.ChosenArtworkId);
+    }
+
+    [Fact]
     public void InitialState_NoCandidates_IsUnresolved()
     {
         var tile = MakeTile(Array.Empty<CardCandidate>());
@@ -64,6 +84,14 @@ public class CohortTileTests
         Assert.Null(tile.Chosen);
         Assert.Null(tile.ChosenDistance);
         Assert.False(tile.IsLowConfidence);
+    }
+
+    [Fact]
+    public void InitialState_NoCandidates_ChosenArtworkIdIsNull()
+    {
+        var tile = MakeTile(Array.Empty<CardCandidate>());
+
+        Assert.Null(tile.ChosenArtworkId);
     }
 
     [Fact]
@@ -118,6 +146,18 @@ public class CohortTileTests
     }
 
     [Fact]
+    public void SetManually_NullsChosenArtworkId()
+    {
+        // A manual pick names a CARD, not an art — recording the hash's guess
+        // would attribute a printing to a choice made on other grounds.
+        var tile = MakeTile(new[] { Candidate(GoodDistance, artworkId: "art-1") });
+
+        tile.SetManually(new OracleEntry("oracle-2", "Island"));
+
+        Assert.Null(tile.ChosenArtworkId);
+    }
+
+    [Fact]
     public void Clear_FromManuallySet_WithBestWithinOk_ReturnsToIncluded()
     {
         var candidates = new[] { Candidate(OkDistance) };
@@ -130,6 +170,21 @@ public class CohortTileTests
         Assert.Equal(new OracleEntry("oracle-1", "Forest"), tile.Chosen);
         Assert.Equal(OkDistance, tile.ChosenDistance);
         Assert.True(tile.IsLowConfidence);
+    }
+
+    [Fact]
+    public void Clear_FromManuallySet_RestoresChosenArtworkIdToHashValue()
+    {
+        // Clear() re-runs ProposeFromHash rather than remembering the
+        // pre-manual value, so this proves the restore is computed, not cached.
+        var candidates = new[] { Candidate(OkDistance, artworkId: "art-1") };
+        var tile = MakeTile(candidates);
+        tile.SetManually(new OracleEntry("oracle-2", "Island"));
+        Assert.Null(tile.ChosenArtworkId); // sanity: the manual set nulled it first
+
+        tile.Clear();
+
+        Assert.Equal("art-1", tile.ChosenArtworkId);
     }
 
     [Fact]

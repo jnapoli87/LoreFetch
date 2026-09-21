@@ -94,6 +94,145 @@ public class StubCollectionStoreTests
     }
 
     [Fact]
+    public async Task CommitCohortAsync_IncludedTile_WritesArtworkIdOnSourceHashRow()
+    {
+        var store = new StubCollectionStore();
+        var tile = MakeIncludedTile("oracle-forest", "Forest", distance: 42, artworkId: "art-1");
+        var cohort = MakeCohort(tile);
+
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(RowSource.Hash, rows[0].Source);
+        Assert.Equal("art-1", rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_ManuallySetTile_WritesNullArtworkId()
+    {
+        // Starts from a candidate that DID carry an art id, so this proves
+        // SetManually's null-out survives to the committed row rather than
+        // the row merely being null because nothing was ever proposed.
+        var store = new StubCollectionStore();
+        var tile = MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-1");
+        tile.SetManually(new OracleEntry("oracle-island", "Island"));
+        var cohort = MakeCohort(tile);
+
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(RowSource.Manual, rows[0].Source);
+        Assert.Null(rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_TwoTilesOfOneCard_AgreeingArtworkIds_PreservesArtworkId()
+    {
+        // The ordinary case: one card scanned twice in one cohort is the same
+        // art both times, so the fold must keep the non-null ArtworkId.
+        var store = new StubCollectionStore();
+        var cohort = MakeCohort(
+            MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-1"),
+            MakeIncludedTile("oracle-forest", "Forest", distance: 20, artworkId: "art-1"));
+
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(2, rows[0].Quantity);
+        Assert.Equal("art-1", rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_TwoTilesOfOneCard_DisagreeingArtworkIds_NullsArtworkId()
+    {
+        // Two different printings' art matched under the same oracle card —
+        // agree-or-null means the merged row admits it does not know, rather
+        // than picking whichever tile happened to fold in last.
+        var store = new StubCollectionStore();
+        var cohort = MakeCohort(
+            MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-1"),
+            MakeIncludedTile("oracle-forest", "Forest", distance: 20, artworkId: "art-2"));
+
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(2, rows[0].Quantity);
+        Assert.Null(rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_AgainstSeededRow_DifferingArtworkId_NullsMergedArtworkId()
+    {
+        var store = new StubCollectionStore();
+        store.Seed(new CollectionRow(
+            "oracle-forest", "Forest", Quantity: 1, Condition: null,
+            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: 50, Source: RowSource.Hash,
+            ArtworkId: "art-1"));
+
+        var cohort = MakeCohort(MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-2"));
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(2, rows[0].Quantity);
+        Assert.Null(rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_AgainstSeededRow_AgreeingArtworkId_PreservesArtworkId()
+    {
+        var store = new StubCollectionStore();
+        store.Seed(new CollectionRow(
+            "oracle-forest", "Forest", Quantity: 1, Condition: null,
+            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: 50, Source: RowSource.Hash,
+            ArtworkId: "art-1"));
+
+        var cohort = MakeCohort(MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-1"));
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(2, rows[0].Quantity);
+        Assert.Equal("art-1", rows[0].ArtworkId);
+    }
+
+    [Fact]
+    public async Task CommitCohortAsync_TwoMergingManualRows_BothNullArtworkId_StaysNull()
+    {
+        // The trap agree-or-null must not fall into: null vs null must read
+        // as agreement, not as a disagreement that happens to render the
+        // same as agreement's result. Seeded row is Manual (null); the
+        // committed tile is manually set from a candidate that DID carry an
+        // art id, so a naive "any null means disagreement" implementation
+        // would still show null here — this only distinguishes from that if
+        // paired with the disagreement cases above, which show a genuine
+        // difference producing null too.
+        var store = new StubCollectionStore();
+        store.Seed(new CollectionRow(
+            "oracle-forest", "Forest", Quantity: 1, Condition: null,
+            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: null, Source: RowSource.Manual,
+            ArtworkId: null));
+
+        var tile = MakeIncludedTile("oracle-forest", "Forest", distance: 10, artworkId: "art-1");
+        tile.SetManually(new OracleEntry("oracle-forest", "Forest"));
+        var cohort = MakeCohort(tile);
+
+        await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
+        var rows = await store.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.Single(rows);
+        Assert.Equal(2, rows[0].Quantity);
+        Assert.Equal(RowSource.Manual, rows[0].Source);
+        Assert.Null(rows[0].ArtworkId);
+    }
+
+    [Fact]
     public async Task ArmNextCommitToThrow_Throws_AndLeavesContentsUnchanged()
     {
         var store = new StubCollectionStore();
@@ -176,8 +315,8 @@ public class StubCollectionStoreTests
         Assert.Equal(1, scanned.Quantity);
     }
 
-    private static CohortTile MakeIncludedTile(string oracleId, string oracleName, int distance) =>
-        new(MakeImage(), new[] { new CardCandidate(oracleId, oracleName, distance, ArtworkId: null) },
+    private static CohortTile MakeIncludedTile(string oracleId, string oracleName, int distance, string? artworkId = null) =>
+        new(MakeImage(), new[] { new CardCandidate(oracleId, oracleName, distance, artworkId) },
             GoodDistance, OkDistance);
 
     private static CohortTile MakeUnresolvedTile() =>
