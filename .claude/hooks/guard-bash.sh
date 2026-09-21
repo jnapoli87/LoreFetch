@@ -40,13 +40,30 @@ warn() {
 # ---------------------------------------------------------------------------
 # Force-push: blocked outright
 # ---------------------------------------------------------------------------
-# Deliberately loose: `git ... push` anywhere in the command. An earlier
-# attempt matched only flag NAMES between `git` and `push`, so it missed
-# `git -C /some/repo push --force` — a flag VALUE broke the pattern. Loose is
-# the safe direction: the deny below additionally requires a force flag, so a
-# false-positive push match can only ever produce a warning.
+# DETECTING the push is deliberately loose: `git ... push` anywhere in the
+# command. An earlier attempt matched only flag NAMES between `git` and `push`,
+# so it missed `git -C /some/repo push --force` — a flag VALUE broke the
+# pattern. Loose is the safe direction here, because a loose match only ever
+# adds the warning.
+#
+# DENYING is a separate question, and the first version got it wrong. It
+# searched the WHOLE command for a force flag, so any `-f` belonging to any
+# other command denied the call: `git commit -F msg && git push; rm -f tmp`
+# was refused as a force-push. The claim recorded in CLAUDE.md — that a
+# false-positive push match "can only ever produce a warning, because the deny
+# additionally requires a force flag" — was simply wrong. Both halves were
+# loose, so the conjunction was loose too, and `rm -f` was enough to block a
+# legitimate push.
+#
+# So the force flag must now appear AFTER `push` and in the SAME shell segment
+# ([^;&|] stops at ; && || and pipes). That still catches every real form —
+# `git push --force`, `git push origin main -f`, `git -C /r push
+# --force-with-lease`, and any of them after a `cd x &&` — while a `-f` on an
+# unrelated command in another segment no longer denies. A force flag passed
+# through a variable still slips past the deny, which is why the warning below
+# is unconditional.
 if printf '%s' "$cmd" | grep -Eq '\bgit\b.*\bpush\b'; then
-  if printf '%s' "$cmd" | grep -Eq -- '(--force-with-lease|--force\b|[[:space:]]-f\b)'; then
+  if printf '%s' "$cmd" | grep -Eq -- '\bgit\b[^;&|]*\bpush\b[^;&|]*(--force-with-lease|--force\b|[[:space:]]-f\b)'; then
     deny "Force-push is blocked in this repository.
 
 LoreFetch is published, so rewriting history is not recoverable for anyone
