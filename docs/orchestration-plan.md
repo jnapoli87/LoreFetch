@@ -641,7 +641,7 @@ Global overrides for every D brief:
 - Never sanitise `+2 Mace`.
 - Duplicate rows merge on read, justified by import robustness.
 
-- [ ] **D1** Native CSV codec:
+- [x] **D1** Native CSV codec: — *done 2026-09-21, `stream/d` `f952d55`. Hand-written RFC 4180 codec (`NativeCsvCodec`, 539 lines — over the tripwire on the tokenizer and doc comments, not scope); CsvHelper rejected because no CSV library refuses unknown extra columns. Header checked as a column **set** (order-tolerant). Blank ↔ `null` for `Condition` and `ArtworkId`: quoted-empty and unquoted-empty are indistinguishable, so there is no third state. Duplicate merge sums quantity, keeps the newest row's name/distance/source (as the stub does), and folds `ArtworkId` agree-or-null via a public `FoldArtworkId` for D3 to reuse. 39 tests; all 4 briefed chaos cases fail correctly, and an independent one (whitespace-before-quote treated as a quote) fails `LeadingWhitespaceBeforeQuote_…`.*
   - an RFC 4180 writer that quotes on `,`, `"`, CR and LF, and whenever a field contains a quote
   - a parser that rejects whitespace before an opening quote as a quote, treating it as content
   - an exact header check, which throws on any unknown or missing column
