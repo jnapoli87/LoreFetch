@@ -1,0 +1,94 @@
+LoreFetch — Third-Party Notices
+===============================
+
+LoreFetch is licensed under the GNU General Public License v3 (see LICENSE).
+It incorporates third-party work under the licences reproduced below. Those
+notices must be retained in source and binary distributions, including in the
+self-contained single-file build.
+
+This file is enforced by hooks/pre-commit: a commit that removes the
+CardSpotter attribution is refused. That is deliberate — it is a licence
+obligation, not a courtesy, and it is the kind of thing that quietly
+disappears during a refactor.
+
+
+-------------------------------------------------------------------------------
+CardSpotter — BSD 3-Clause
+-------------------------------------------------------------------------------
+
+LoreFetch's card identification is a C# port of the 1024-bit perceptual hash
+from CardSpotter by Jonas Gillberg (https://github.com/relgin/cardspotter),
+specifically the hashing and matching logic in Code/CardData.cpp and
+Code/ImageHash.*. The port is a derivative work of that source.
+
+  Copyright (c) 2019, Jonas Gillberg
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+
+  2. Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+
+  3. Neither the name of the copyright holder nor the names of its
+     contributors may be used to endorse or promote products derived from
+     this software without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+  ⚠ VERIFY BEFORE v0.1.0: the copyright line above was taken from a research
+  summary, not read from the upstream LICENSE file. Confirm the exact holder
+  and year against https://github.com/relgin/cardspotter/blob/master/LICENSE
+  and correct it here if it differs.
+
+
+-------------------------------------------------------------------------------
+Runtime dependencies
+-------------------------------------------------------------------------------
+
+Entries are added as each package is actually referenced. Until Stream 0
+creates the projects, this section lists what the plan commits to using, so
+nothing is forgotten — but it is not yet a statement about shipped binaries.
+
+  Avalonia .......................... MIT          (planned)
+  Avalonia.Controls.DataGrid ........ MIT          (planned)
+  CommunityToolkit.Mvvm ............. MIT          (planned)
+  OpenCvSharp4 ...................... Apache-2.0   (planned)
+  OpenCvSharp4.runtime.win .......... Apache-2.0   (planned)
+  FlashCap .......................... Apache-2.0   (planned)
+  .NET runtime ...................... MIT          (bundled by self-contained publish)
+
+Note on the OpenCvSharp native runtimes: the NuGet packages declare
+Apache-2.0, but the native binaries statically link or ship third-party
+libraries including FFmpeg (LGPL-2.1+, or GPL-2+ when built with --enable-gpl).
+Both upgrade cleanly into GPLv3, so this is compatible — but the specific
+notices those libraries require have not been enumerated here. Chase this
+before promoting a release widely.
+
+
+-------------------------------------------------------------------------------
+Data
+-------------------------------------------------------------------------------
+
+Card data and images are retrieved from Scryfall (https://scryfall.com) under
+its API terms. LoreFetch ships only DERIVED fingerprints and card names — no
+Wizards of the Coast imagery is redistributed in this repository or in any
+build artifact.
+
+LoreFetch is unofficial Fan Content permitted under the Wizards of the Coast
+Fan Content Policy. Not approved or endorsed by Wizards. Magic: The Gathering
+and its logos are trademarks of Wizards of the Coast LLC.

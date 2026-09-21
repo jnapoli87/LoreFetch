@@ -18,6 +18,14 @@
 #      bypasses that; this catches it. Once artwork is in history it is there
 #      permanently, short of a rewrite.
 #
+#   3. Attribution — the identification engine is a port of CardSpotter
+#      (BSD-3-Clause), which REQUIRES its copyright notice and conditions be
+#      retained in distributions. This lives in a git hook rather than in CI
+#      or a Claude hook on purpose: a git hook binds every commit from any
+#      tool by any author, which is the only thing that actually covers
+#      working on this repo without Claude. CI catches it on the wrong side
+#      of the push.
+#
 # Escape hatch is git's own --no-verify. Deliberately not advertised in the
 # failure output: if you need it you already know, and the default should be
 # that these rules hold.
@@ -90,6 +98,58 @@ if [ -n "$staged" ]; then
     note "Allowed image paths: src/LoreFetch.App/Assets/ and docs/img/"
     note "Fixtures belong outside the repo, or in a gitignored path."
     fail=1
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Third-party attribution
+# ---------------------------------------------------------------------------
+# Checked against the working tree, not the index: the obligation is about what
+# the repository contains, and a commit that leaves the notice missing is a
+# violation whether or not this particular commit touched the file.
+NOTICES="THIRD-PARTY-NOTICES"
+
+# Markers that must survive. Conditions text as well as the copyright line,
+# because BSD-3-Clause requires "this list of conditions" be retained too —
+# a bare "uses CardSpotter" credit does not satisfy it.
+if [ ! -f "$NOTICES" ]; then
+  err "pre-commit: refusing — $NOTICES is missing."
+  note "LoreFetch's identification engine is a port of CardSpotter"
+  note "(BSD-3-Clause), whose licence requires its copyright notice and"
+  note "conditions be retained in distributions. That file is the notice."
+  fail=1
+else
+  missing=""
+  grep -q 'CardSpotter'                              "$NOTICES" || missing="$missing CardSpotter-credit"
+  grep -q 'Jonas Gillberg'                           "$NOTICES" || missing="$missing copyright-holder"
+  grep -q 'Redistributions of source code must retain' "$NOTICES" || missing="$missing bsd3-conditions"
+  grep -q 'THIS SOFTWARE IS PROVIDED'                "$NOTICES" || missing="$missing bsd3-disclaimer"
+
+  if [ -n "$missing" ]; then
+    err "pre-commit: refusing — $NOTICES is missing required attribution."
+    note "absent:$missing"
+    note ""
+    note "BSD-3-Clause requires the copyright notice, the list of conditions"
+    note "AND the disclaimer be retained — a bare credit line is not enough."
+    note "Restore them rather than trimming the file."
+    fail=1
+  fi
+fi
+
+# Advisory only: flag PackageReference ids absent from the notices file. Not a
+# blocker, because packages legitimately land before their notice entry does.
+if [ -f "$NOTICES" ]; then
+  unlisted=""
+  for proj in $(git ls-files '*.csproj' 2>/dev/null); do
+    [ -f "$proj" ] || continue
+    for pkg in $(sed -n 's/.*PackageReference[[:space:]]*Include="\([^"]*\)".*/\1/p' "$proj"); do
+      grep -qi -- "$pkg" "$NOTICES" || unlisted="$unlisted $pkg"
+    done
+  done
+  if [ -n "$unlisted" ]; then
+    printf '\033[33m%s\033[0m\n' "pre-commit: note — packages not yet in $NOTICES:" >&2
+    for p in $unlisted; do note "$p"; done
+    note "(advisory, not blocking — add them before cutting a release)"
   fi
 fi
 

@@ -163,6 +163,10 @@ Repo-local, **no global config touched** (the global default on these machines i
 | Identity | Uses `git var GIT_AUTHOR_IDENT` / `GIT_COMMITTER_IDENT`, **not** `git config user.email` — `git var` reports the identity git will *actually* use, catching `GIT_AUTHOR_EMAIL` overrides a config lookup would miss. Author and committer are checked independently. |
 | Identity | Accepts both noreply forms via `^([0-9]+\+)?jnapoli87@users\.noreply\.github\.com$` — GitHub's web UI uses the ID-prefixed variant, so rejecting it would block every web edit. |
 | Imagery | Rejects staged raster files outside `src/LoreFetch.App/Assets/` and `docs/img/`. This is the layer that catches **`git add -f`**, which bypasses `.gitignore` entirely. |
+| Attribution | Requires `THIRD-PARTY-NOTICES` to retain the CardSpotter **credit, copyright holder, BSD-3 conditions *and* disclaimer** — all four. BSD-3-Clause requires "this list of conditions" be retained, so a bare "uses CardSpotter" credit does not satisfy it, and trimming the file to one is the realistic way this rots. Checked against the working tree, not the index: the obligation is about what the repo *contains*, not what this commit touched. |
+| Attribution | Also prints an **advisory** (non-blocking) list of `PackageReference` ids absent from the notices file, since packages legitimately land before their notice entry does. |
+
+**Why attribution is a git hook rather than CI or a Claude hook:** a git hook binds every commit from any tool by any author — which is the only thing that covers working on this repo without Claude. A Claude hook binds only Claude, and CI catches a licence violation on the wrong side of the push.
 
 ⚠️ **Do not rewrite that identity regex as `^(|[0-9]+\+)…`.** BSD grep on macOS rejects an empty alternative with *"empty (sub)expression"* and then matches nothing — which silently converts the guard into "refuse every commit." That bug was in the first version and only surfaced because the hook was tested rather than eyeballed. **An untested guard is not a guard.**
 
