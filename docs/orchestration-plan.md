@@ -237,7 +237,7 @@ A second consequence is permanent rather than fixable: **the guard reads command
 The user called a push at the end of S0.1 rather than waiting for P1, so the Windows PC can start its own pull/build/validate loop while Stream 0 continues. `2af13a2..0a61aff`, 8 commits, 30 files, no imagery, every commit authored `jnapoli87 <…users.noreply.github.com>`.
 
 **This is not P1 and does not tick it.** P1 still means the end of Stream 0. Two things P1 requires that this push could not satisfy: `.github/workflows/ci.yml` does not exist yet (S0.2), so **no CI leg ran at all** — "both CI legs green" is vacuous here rather than met; and Stream 0 is unfinished, so this is a coherent checkpoint, not a foundation. What the PC can verify today is `doctor` and `build`.
-- [ ] **S0.2** CI at `.github/workflows/ci.yml`: `windows-latest` and `macos-latest` each run restore, build and `dotnet test`. The macOS leg adds `--filter "Category!=WindowsOnly"`. Both legs add `Category!=Hardware`. Accept: the YAML lints, and it runs at the P1 push.
+- [x] **S0.2** CI at `.github/workflows/ci.yml`: `windows-latest` and `macos-latest` each run restore, build and `dotnet test`. The macOS leg adds `--filter "Category!=WindowsOnly"`. Both legs add `Category!=Hardware`. Accept: the YAML lints, and it runs at the P1 push.
 
   **Overrides — this one changed shape after S0.1, read it carefully:**
 
@@ -367,6 +367,12 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   🔎 **Finding for stream D, which corrected the orchestrator's own prediction.** Testing the `ArtworkId` rules, I predicted that breaking `CohortTile.SetManually` would fail both the tile-level and the store-level Manual case. **It does not fail the store-level one**, and the reason is structural: `StubCollectionStore` derives the row's `ArtworkId` — and, pre-existing since S0.5b, its `BestMatchDistance` — with its own independent `tile.State == ManuallySet ? null : …` guard. So the store never trusts a manual tile's values, and a tile-level regression is **invisible at the store layer**.
 
   That is defensible as defence-in-depth, and it is not a contract violation — the store still produces what `ICollectionStore` promises. But it duplicates a rule, which is the same class of thing V10 was created to prevent, and it has a consequence **D3 must decide deliberately rather than inherit**: if the real `CsvCollectionStore` *trusts* the tile instead of re-deriving, a `CohortTile` regression leaks a stale art id and a stale distance into the user's file — and the stub's behaviour will not have warned anyone. Whichever D3 picks, its Manual-row tests must construct a tile whose `ChosenArtworkId` is set (seeded, not via `SetManually`) or they cannot tell the two designs apart.
+
+  *Done 2026-09-21 by the orchestrator rather than dispatched: the design hinges entirely on the `dotnet test` measurement above, so the brief would have been longer than the file.* Two legs with `fail-fast: false`, so one leg's failure cannot hide the other's — they test different propositions, not the same one twice — plus `concurrency` with `cancel-in-progress`, and .NET from `global-json-file: global.json`. The YAML was parsed and **asserted programmatically**: it must invoke the script and must not contain `dotnet test`. The exact CI command was then run locally from the repo root, green.
+
+  `Restore` and `Build` stay as separate steps even though `lorefetch.sh test` builds too, so a build failure reads as a build failure in the CI UI instead of being buried in a test step. The duplicate work is seconds of incremental build.
+
+  The file itself documents what is deliberately *not* run: Accuracy (a committed measurement, and it needs the uncommittable fixture corpus), Hardware (needs the C920), and the `Real` cases, which skip by construction because they need the index and the Scryfall cache — which is exactly why "integration is done" is V7's local `LOREFETCH_REQUIRE_REAL=1` run and not zero skips in CI.
 - [ ] **S0.7** Scaffolding:
   - one placeholder test per `Tests/StreamX` project, so each builds and runs
   - README: add a `## Stream A — UI` … `## Stream D — Collection & export` section skeleton, and keep the existing content
