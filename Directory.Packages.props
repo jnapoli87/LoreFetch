@@ -1,0 +1,49 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Avalonia — stream A. Pinned to 12.1.x; 12.0.x has a 5-40x render-pass regression. -->
+    <PackageVersion Include="Avalonia" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
+    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.2" />
+
+    <!-- DevTools for stream A; may require a paid tier per RECONCILIATION.md. -->
+    <PackageVersion Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+
+    <!-- MVVM toolkit — stream A. -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+
+    <!-- OpenCvSharp — the trimmed-down package variant is banned: it has no
+         videoio, i.e. no camera. Only the packages below may be added. -->
+    <PackageVersion Include="OpenCvSharp4" Version="4.13.0.20260627" />
+    <PackageVersion Include="OpenCvSharp4.runtime.win" Version="4.13.0.20260627" />
+    <PackageVersion Include="OpenCvSharp4.runtime.osx.arm64" Version="4.13.0.20260627" />
+
+    <!-- Capture — stream C. -->
+    <PackageVersion Include="FlashCap" Version="1.12.0" />
+
+    <!-- Logging seam (CONTRACTS.md "Logging") — Abstractions on the contract
+         surface, plus the implementation and a console sink so diagnostic
+         output described as "the log shows..." is actually visible. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+
+    <!-- CsvHelper — insurance only; dual-licensed MS-PL / Apache-2.0, Apache-2.0 elected. -->
+    <PackageVersion Include="CsvHelper" Version="33.1.0" />
+
+    <!-- Test stack — every test project needs all three, in this exact
+         combination (proven 2026-09-21): without xunit.runner.visualstudio,
+         `dotnet test` discovers 0 tests, prints "No test is available", and
+         exits 0. -->
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+  </ItemGroup>
+
+</Project>

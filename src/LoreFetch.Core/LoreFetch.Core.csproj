@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>LoreFetch.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Core/Imaging and FolderFrameSource decode via OpenCvSharp. -->
+    <PackageReference Include="OpenCvSharp4" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" />
+    <PackageReference Include="OpenCvSharp4.runtime.osx.arm64" />
+
+    <!-- Collection store (Core/Collection) — insurance only. -->
+    <PackageReference Include="CsvHelper" />
+
+    <!-- Logging seam. -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+</Project>

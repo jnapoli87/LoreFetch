@@ -1,0 +1,10 @@
+<Project>
+
+  <!-- Import the repo-root Directory.Build.props, then tighten it for src/ only. -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

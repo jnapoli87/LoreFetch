@@ -1,0 +1,15 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+      Warnings-as-errors applies to src/ only, not to the test projects — see
+      src/Directory.Build.props, which imports this file and then turns it on.
+      Left off (false) here so it is the default for everything else (Tests/**).
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>
