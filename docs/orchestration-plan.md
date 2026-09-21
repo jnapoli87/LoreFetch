@@ -547,7 +547,7 @@ Global overrides for every B brief:
 - The Scryfall image cache lives **outside the repo**: `C:\LoreFetchData\scryfall-cache` on the PC, `~/LoreFetchData/scryfall-cache` on the Mac. Take it as a parameter, never a constant.
 - Golden tests carry `[Trait("Category","WindowsOnly")]`.
 
-- [ ] **B1a** Hash core in `Core/Imaging`:
+- [x] **B1a** Hash core in `Core/Imaging`: — *done 2026-09-21, `stream/b` `d4badaf`. Measured on win-x64 (bound in brackets): two input scales 4 (≤100); brightness ±30 → 14/7 (≤60); gamma 1.3/0.7 → 17/19 (≤120); inverted 1002 (≥900). 29 tests; all 4 briefed chaos cases fail correctly. **Independent finding:** switching step 5 to `INTER_LINEAR` leaves all 29 green — the invariant tests cannot see an unintended filter change, which is exactly what B1b's goldens must catch; carried into B1b's brief as a named chaos case.*
   - `ReferenceTransform.Prepare`: GaussianBlur 3×3 with σX = σY = 1 given explicitly, then resize to 96 px wide `INTER_AREA`, then grayscale
   - `QueryTransform.Prepare`: grayscale only
   - the **single** shared `CardHasher.Hash(gray)` for steps 4–6: region `w×0.85w`, then 32×32 `INTER_AREA`, then per cell the **upper order statistic (33rd of 64)** with the tie-break `v == m && m > 128`, packed one `ulong` per cell
