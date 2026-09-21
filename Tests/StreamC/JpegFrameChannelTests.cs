@@ -22,7 +22,8 @@ public class JpegFrameChannelTests
             channel.Push([(byte)i], DateTimeOffset.UtcNow);
         }
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(5));
         var sawAny = false;
         await foreach (var frame in channel.ReadAsync(cts.Token))
         {
@@ -67,37 +68,39 @@ public class JpegFrameChannelTests
         var pool = new CountingArrayPool();
         var channel = new JpegFrameChannel(pool);
         using var gate = new SemaphoreSlim(0, 1);
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var dequeuedFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         // The consumer takes hold of exactly one frame and then never
         // advances past it until the test cancels — the worst case for
         // "slow consumer," and the case that most directly exercises
         // DropOldest against a fast producer.
-        var consumerTask = Task.Run(async () =>
-        {
-            try
+        var consumerTask = Task.Run(
+            async () =>
             {
-                var isFirst = true;
-                await foreach (var frame in channel.ReadAsync(cts.Token))
+                try
                 {
-                    using (frame)
+                    var isFirst = true;
+                    await foreach (var frame in channel.ReadAsync(cts.Token))
                     {
-                        if (isFirst)
+                        using (frame)
                         {
-                            dequeuedFirst.SetResult();
-                            isFirst = false;
-                        }
+                            if (isFirst)
+                            {
+                                dequeuedFirst.SetResult();
+                                isFirst = false;
+                            }
 
-                        await gate.WaitAsync(cts.Token);
+                            await gate.WaitAsync(cts.Token);
+                        }
                     }
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // Expected: cancellation is how this test ends the run.
-            }
-        });
+                catch (OperationCanceledException)
+                {
+                    // Expected: cancellation is how this test ends the run.
+                }
+            },
+            TestContext.Current.CancellationToken);
 
         // Prime the channel and wait — via a signal, not a sleep — for the
         // consumer to actually dequeue it before flooding the channel.
@@ -105,7 +108,7 @@ public class JpegFrameChannelTests
         // mean "the producer finished before the consumer ever ran," which
         // would prove nothing about a frame being held while more arrive.
         channel.Push([0], DateTimeOffset.UtcNow);
-        await dequeuedFirst.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await dequeuedFirst.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
         const int floodCount = 500;
         for (var i = 1; i <= floodCount; i++)
@@ -114,7 +117,11 @@ public class JpegFrameChannelTests
         }
 
         cts.Cancel();
-        await consumerTask;
+
+        // Bounded rather than an open-ended await: if cancellation somehow
+        // failed to unwind the consumer, this surfaces as a TimeoutException
+        // (a clear test failure) instead of a hung test run.
+        await consumerTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         await channel.DisposeAsync();
 
         var totalPushed = floodCount + 1;
@@ -131,7 +138,7 @@ public class JpegFrameChannelTests
     public async Task ReadAsync_SecondConcurrentEnumeration_Throws()
     {
         await using var channel = new JpegFrameChannel();
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
 
         // An async iterator's body runs synchronously up to its first
         // suspension point, and the reader-slot guard is the very first
@@ -140,11 +147,19 @@ public class JpegFrameChannelTests
         // channel has nothing to read yet. That makes this test
         // single-threaded and deterministic: no race to win, nothing to
         // gate.
-        var firstEnumerator = channel.ReadAsync(cts.Token).GetAsyncEnumerator();
+        var firstEnumerator = channel.ReadAsync(cts.Token).GetAsyncEnumerator(cts.Token);
         var firstMove = firstEnumerator.MoveNextAsync();
 
-        var secondEnumerator = channel.ReadAsync(cts.Token).GetAsyncEnumerator();
-        await Assert.ThrowsAsync<InvalidOperationException>(async () => await secondEnumerator.MoveNextAsync());
+        var secondEnumerator = channel.ReadAsync(cts.Token).GetAsyncEnumerator(cts.Token);
+
+        // Bounded, not open-ended: without the reader-slot guard, a second
+        // enumeration doesn't throw at all — it just blocks on the same
+        // empty channel forever (confirmed by chaos-testing this guard's
+        // removal). Wrapping the call in WaitAsync turns that hang into a
+        // TimeoutException, so a missing guard fails the test in seconds
+        // instead of stalling the run.
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => secondEnumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
 
         cts.Cancel();
         try
