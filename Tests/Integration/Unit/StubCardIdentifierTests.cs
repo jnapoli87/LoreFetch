@@ -60,14 +60,57 @@ public class StubCardIdentifierTests
         Assert.Empty(candidates);
     }
 
+    // Replaced 2026-09-21 by the ArtworkId contract change. This previously
+    // asserted `ArtworkId` is ALWAYS null, which pinned the behaviour that
+    // left the new collection column dead on every fakes path. The contract
+    // still ALLOWS null for stubs — it is now opt-in rather than the only
+    // option, and these three cases cover all the shapes the store's
+    // agree-or-null fold needs.
     [Fact]
-    public void Identify_ArtworkIdIsAlwaysNull()
+    public void Identify_ByDefault_EmitsAnArtworkId()
     {
         var identifier = new StubCardIdentifier { NextDistances = new[] { 10 } };
 
         var candidates = identifier.Identify(MakeCard(), maxCandidates: 1);
 
-        Assert.Null(candidates[0].ArtworkId);
+        Assert.NotNull(candidates[0].ArtworkId);
+    }
+
+    [Fact]
+    public void Identify_ByDefault_AgreesAcrossCalls_SoARepeatScanKeepsItsArt()
+    {
+        var identifier = new StubCardIdentifier { NextDistances = new[] { 10 } };
+
+        var first = identifier.Identify(MakeCard(), maxCandidates: 1);
+        var second = identifier.Identify(MakeCard(), maxCandidates: 1);
+
+        // The ordinary case: the same card scanned twice is the same art, so
+        // a dedup fold must keep a non-null ArtworkId.
+        Assert.Equal(first[0].ArtworkId, second[0].ArtworkId);
+    }
+
+    [Fact]
+    public void ArtworkIdSelector_CanDisagreeAcrossCalls_AndCanReturnNull()
+    {
+        var varying = new StubCardIdentifier
+        {
+            NextDistances = new[] { 10 },
+            ArtworkIdSelector = (call, _) => $"art-call-{call}",
+        };
+
+        var a = varying.Identify(MakeCard(), maxCandidates: 1);
+        var b = varying.Identify(MakeCard(), maxCandidates: 1);
+
+        // Two tiles of ONE card whose arts differ — the case that must null
+        // the merged row's ArtworkId rather than pick a winner.
+        Assert.NotEqual(a[0].ArtworkId, b[0].ArtworkId);
+
+        var nulled = new StubCardIdentifier
+        {
+            NextDistances = new[] { 10 },
+            ArtworkIdSelector = (_, _) => null,
+        };
+        Assert.Null(nulled.Identify(MakeCard(), maxCandidates: 1)[0].ArtworkId);
     }
 
     [Fact]

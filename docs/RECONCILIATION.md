@@ -229,6 +229,24 @@ These two timeouts are not tuning knobs — they are the *entire* mechanism for 
 | 3 | Duplicate rows **merge on read**, logged (D-Q4) | **Confirmed — and the premise corrected.** Hand-editing CSV in Excel was never a requirement; the justification is import robustness. `CLAUDE.md`'s CSV rationale amended accordingly. |
 | 4 | Target framework (A-Q5) | **Overridden: `net10.0`, not my `net8.0`.** The longer-lived LTS. Cost: no pin was verified against it, so Stream 0 item 1 must prove a clean restore and build before the freeze, falling back to `net8.0` there if one fails. |
 
+### Ruled 2026-09-21, after Stream 0 and before the fork — `CollectionRow` carries `ArtworkId`
+
+Raised as a proposal, reviewed, accepted with two amendments. **Contract change to a surface that freezes at the fork, so it was applied once on `main` and before any worktree existed** — exactly the path the freeze rule prescribes.
+
+**The finding.** Identification already produces the exact artwork: `CardCandidate.ArtworkId` carries the Scryfall printing id of the matched art, and `cards.lfidx` stores it per entry. It was then **discarded at the tile** — `CohortTile.Chosen` narrows to `OracleEntry` = (`OracleId`, `OracleName`), and `CollectionRow` had no artwork column. That contradicted this file's own SOT rule, that the native format "carries everything we have at commit time", and it is the one piece of printing-level data we get for free.
+
+**Why it could not wait.** Adding a column cost nothing while no released build had written a collection file. After the fork it means stopping all four streams — and every row scanned in the meantime has lost its art **irrecoverably**, because the only way back is to rescan the physical card. The asymmetry, not the feature, is the argument.
+
+**Amendment 1 — the fold rule is agree-or-null, not last-write-wins** (as originally proposed). Two copies of one oracle card in the same condition dedup into one row; if their arts differ, `ArtworkId` becomes **null**. This preserves the property that makes the column worth having: *a non-null `ArtworkId` is trustworthy.* Last-write-wins yields a column right sometimes and wrong sometimes with nothing able to tell which — and since the field exists for printing and price resolution, a wrong printing produces a confidently wrong price. Identical reasoning to *Condition is blank in v1*: a column that looks authoritative and is wrong is worse than one that admits it does not know. A list-valued column was rejected as over-building that also makes the row shape variable, fighting the fail-loudly reader. Dedup identity is unchanged: `OracleId` + `Condition`.
+
+**Amendment 2 — the single-printing measurement is deferred to B4a**, not done before the fork. The proposal asked to measure what fraction of in-scope artworks have exactly one in-scope printing first, while also stating that the number does not decide whether to keep the id. Since it changes nothing about the contract, and measuring needs `default_cards` — a second multi-GB bulk file — plus Lab tooling that belongs to stream B, doing it first would have held the fork and blocked four streams for information with no bearing on the decision. Recorded as an open question against B4a: it decides whether *printing resolution* is a v1.5 feature, not whether to keep the data.
+
+**Caught during review, and it would have shipped a dead column:** `StubCardIdentifier` returned `ArtworkId: null` unconditionally, so every fakes path — which is all of Stream 0 and all of stream A — would have left the new field null forever. Nothing would have exercised it, and it would have arrived broken the first time stream B populated it. The stub now emits synthetic ids, with a mode that makes two candidates for one oracle card disagree so the fold rule is testable, and retains a null mode so "null for stubs" stays covered.
+
+**Corrected in passing:** the SOT justification table claimed `OracleId` "is what a future exporter needs to resolve printings and prices without re-scanning". `OracleId` can *enumerate* a card's printings; it cannot say which one is in hand. Reworded, with `ArtworkId` given its own row.
+
+**Explicitly out of scope, and unchanged:** the hash, the index format (it already carries the id), identification ranking, `ICardIdentifier`, `OracleEntry` (it backs the 33k type-ahead, and a manual pick names a card rather than an art), and Moxfield's v1 output — the adapter ignores the column.
+
 ### Applied, not separately raised
 
 Both are low-stakes and reversible up to the freeze; flag either if you disagree.

@@ -18,6 +18,15 @@ public sealed class StubCardIdentifier : ICardIdentifier
         new[] { 40, 90, 140, 190, 240, 290 };
 
     private IReadOnlyList<int> _nextDistances = DefaultDistances;
+    private Func<int, int, string?> _artworkIdSelector = DefaultArtworkId;
+    private int _identifyCallCount;
+
+    /// Deterministic in the candidate index and INDEPENDENT of the call
+    /// index, so two tiles of the same card agree on their art — which is
+    /// the ordinary case, and the one that must keep a non-null ArtworkId
+    /// through a dedup fold.
+    private static string? DefaultArtworkId(int callIndex, int candidateIndex) =>
+        $"stub-art-{candidateIndex}";
 
     public string Name => "Stub";
 
@@ -34,10 +43,29 @@ public sealed class StubCardIdentifier : ICardIdentifier
         set => _nextDistances = value ?? throw new ArgumentNullException(nameof(value));
     }
 
+    /// Chooses the ArtworkId for each returned candidate, given the
+    /// zero-based index of this `Identify` call and of the candidate within
+    /// it. Configurable because the collection store's fold rule is
+    /// agree-or-null, so a test needs all three shapes:
+    ///   - the default AGREES across calls, so repeated scans of one card
+    ///     keep their art through a merge;
+    ///   - varying on `callIndex` makes two tiles of the same card DISAGREE,
+    ///     which must null the merged row's ArtworkId;
+    ///   - returning null keeps the "null for stubs" case the contract
+    ///     explicitly allows.
+    /// Without this the stub returned null unconditionally, which would have
+    /// left the ArtworkId column dead on every fakes path — all of Stream 0
+    /// and all of stream A — and broken the first time a real index filled
+    /// it in.
+    public Func<int, int, string?> ArtworkIdSelector
+    {
+        get => _artworkIdSelector;
+        set => _artworkIdSelector = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
     /// Returns at most maxCandidates candidates, ranked by ascending
     /// Distance, each under a distinct synthetic OracleId — this stub never
     /// returns the same oracle card twice, matching the real contract.
-    /// ArtworkId is always null, as the contract explicitly allows for stubs.
     /// NEVER filters by threshold — it has no thresholds to filter by.
     public IReadOnlyList<CardCandidate> Identify(RectifiedCard card, int maxCandidates)
     {
@@ -48,6 +76,7 @@ public sealed class StubCardIdentifier : ICardIdentifier
             return Array.Empty<CardCandidate>();
         }
 
+        var callIndex = _identifyCallCount++;
         var ordered = _nextDistances.OrderBy(d => d).Take(maxCandidates).ToList();
         var candidates = new List<CardCandidate>(ordered.Count);
 
@@ -57,7 +86,7 @@ public sealed class StubCardIdentifier : ICardIdentifier
                 OracleId: $"stub-oracle-{i}",
                 OracleName: $"Stub Card {i}",
                 Distance: ordered[i],
-                ArtworkId: null));
+                ArtworkId: _artworkIdSelector(callIndex, i)));
         }
 
         return candidates;

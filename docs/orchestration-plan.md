@@ -29,6 +29,24 @@ Four consequences that are not just bookkeeping:
 3. **S0.0 is no longer 👤.** It was marked so only because the orchestrator was assumed to be on the PC and a human would have to walk to the Mac. The orchestrator is on the Mac, so it runs S0.0 itself (🧭). G0.3's Mac-access question is answered by construction.
 4. **Stream B's Scryfall cache path** is Windows-shaped (`C:\LoreFetchData\scryfall-cache`). B4b/B4c/B2 run on whichever machine holds the cache; the path becomes a parameter rather than a constant, and B4d's run uses the Windows one.
 
+### Contract change — `ArtworkId` to the collection file, ruled 2026-09-21 before the fork
+
+A proposal raised after Stream 0's contract work: identification already produces the matched art's Scryfall printing id (`CardCandidate.ArtworkId`, also stored per entry in `cards.lfidx`) and then **discards it at the tile**, so the collection file — the stated source of truth that "carries everything we have at commit time" — never sees it. Accepted with two amendments. Full ruling and reasoning in [`RECONCILIATION.md`](RECONCILIATION.md).
+
+**Applied on `main` before any worktree existed**, which is the only moment it is cheap: after the fork it stalls four streams, and every row scanned in the meantime has lost its art irrecoverably — rescanning the physical card is the only way back.
+
+| Package | Amendment |
+|---|---|
+| **S0.3a** | `CollectionRow` gains `string? ArtworkId`, **appended last** — it is a positional record struct, so a mid-list parameter would silently break every positional construction site. `ICollectionStore`'s doc comment gains the fold rule. |
+| **S0.3b** | `CohortTile` gains `ChosenArtworkId`, with the same null rules as `ChosenDistance` (null when `ManuallySet` — a manual pick names a card, not an art — and null when `Unresolved`). `ProposeFromHash` widens to carry it, so **V10 still holds: one function computes the proposal**. |
+| **S0.5b** | `StubCardIdentifier` must emit **synthetic art ids**, with a mode making two candidates for one oracle card disagree so the fold is testable, plus a null mode so "null for stubs" stays covered. It previously returned null unconditionally, which would have left the new column dead on every fakes path — all of Stream 0 and all of stream A — and broken on stream B's first real population. `StubCollectionStore` implements the mapping and the fold. |
+| **S0.6a/S0.6b** | New cases: the tile carries the id; `SetManually` nulls it; `Clear` restores it; commit sets it on `Hash` rows; agreeing arts keep it; **disagreeing arts null it**; `Manual` rows null. |
+| **D1, D3** | The header set changed — the exact-header check and format-version expectation must include it. See the D1 override below. |
+| **B4a** | Gains the deferred measurement as an open question. |
+| **D4** | **Unchanged.** Moxfield ignores the column in v1. |
+
+**The fold rule is agree-or-null, never last-write-wins.** A non-null `ArtworkId` must be trustworthy; a value that is right sometimes and wrong sometimes, with nothing able to tell which, is worse than null for a field whose purpose is price resolution. Same reasoning as *Condition is blank in v1*.
+
 ## 0. How the orchestrator uses this file
 
 **Roles**
@@ -484,6 +502,8 @@ Global overrides for every B brief:
   - apply the filter cascade from stream-b §B4 and print the count at each step
 
   Accept: a unit test over a small committed JSONL sample (text only) reproduces the filter decisions.
+
+  **Open question, deferred here from the `ArtworkId` ruling (2026-09-21):** what fraction of in-scope artworks have exactly **one** in-scope printing (English, non-foil, single-faced, modern frame)? Where the art is unambiguous, the art match *is* the printing — which is what would make accurate prices, and importers needing a set or printing id such as ManaBox, possible. Needs `default_cards` in addition to `unique_artwork`. **This decides whether printing resolution is a v1.5 feature, not whether to keep the id** — that was settled independently, because keeping it is justified at any value of this number. Report the fraction and the exact filter used.
 - [ ] **B4b** Lab `images` command: download `image_uris.normal` into the external cache. It resumes, runs with polite concurrency, respects HTTP 429, and skips files already present.
 - [ ] **B4c** Lab `build-index` command: `ReferenceTransform` → `CardHasher` → `cards.lfidx`. It supports a `--subset N` fallback that labels the index size.
 - [ ] **B4d** 🧭👤 Run B4a–B4c in full on **the win-x64 PC** (a 👤 ask: the orchestrator is on the Mac) (about 6 GB, hours). Commit `data/index/cards.lfidx` and record its artwork count and SHA-256 here. If it stalls, use a labelled 5k subset.
@@ -558,7 +578,11 @@ Global overrides for every D brief:
 
   Accept: all 5 vectors from stream-d §D3 round-trip; the BOM is not taken as data; an empty collection produces a header-only file.
 
+  **Override — the header set now includes `ArtworkId`** (ruling 2026-09-21): appended last, `string?`, set only on `Source.Hash` rows. The exact-header check and the documented format version must include it. Its fold rule is **agree-or-null**: when merging duplicates, keep the id only if every merged row agrees, otherwise null.
+
   **Override, from S0.5b's finding — do not skip this, it is a bug that hides by construction:** the `Condition` half of the `OracleId` + `Condition` dedup key is **unreachable through `CommitCohortAsync`**, because `CohortTile` carries no condition and v1 never assesses one. It is reachable **only through the reader**, on a file that already has conditions in it. So the duplicate-merge tests must be driven from a **written file**, and must cover `null` vs `""` as distinct keys explicitly. Proven on the stub: with the merge key conflating them, 79 unrelated tests passed and nothing failed. CONTRACTS.md calls this the case that "would silently split one card into two rows"; a suite built only around commits will not see it.
+
+  **The same trap applies to `ArtworkId`'s fold, for the same structural reason:** a commit-only suite cannot tell agree-or-null from last-write-wins. Drive that from a written file too, with rows that agree and rows that disagree.
 - [ ] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export.
 - [ ] **D3** `CsvCollectionStore`:
   - commits `Included` and `ManuallySet` tiles, folding duplicates within a cohort

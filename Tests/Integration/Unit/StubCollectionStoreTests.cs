@@ -134,7 +134,8 @@ public class StubCollectionStoreTests
         var store = new StubCollectionStore();
         store.Seed(new CollectionRow(
             "oracle-forest", "Forest", Quantity: 1, Condition: "NM",
-            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: null, Source: RowSource.Manual));
+            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: null, Source: RowSource.Manual,
+            ArtworkId: null));
 
         var cohort = MakeCohort(MakeIncludedTile("oracle-forest", "Forest", distance: 10));
         await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);
@@ -160,7 +161,8 @@ public class StubCollectionStoreTests
         var store = new StubCollectionStore();
         store.Seed(new CollectionRow(
             "oracle-forest", "Forest", Quantity: 1, Condition: "",
-            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: null, Source: RowSource.Manual));
+            LastScannedAt: DateTimeOffset.UtcNow, BestMatchDistance: null, Source: RowSource.Manual,
+            ArtworkId: null));
 
         var cohort = MakeCohort(MakeIncludedTile("oracle-forest", "Forest", distance: 10));
         await store.CommitCohortAsync(cohort, TestContext.Current.CancellationToken);

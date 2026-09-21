@@ -41,7 +41,7 @@ public sealed class CohortTile
         _goodDistance = goodDistance;
         _okDistance = okDistance;
 
-        (State, Chosen, ChosenDistance, IsLowConfidence) =
+        (State, Chosen, ChosenDistance, IsLowConfidence, ChosenArtworkId) =
             ProposeFromHash(candidates, goodDistance, okDistance);
     }
 
@@ -52,6 +52,13 @@ public sealed class CohortTile
     public OracleEntry? Chosen { get; private set; } // null only when Unresolved
 
     public int? ChosenDistance { get; private set; } // null when ManuallySet or Unresolved
+
+    /// The Scryfall printing id of the ART the hash matched. Same null rules
+    /// as ChosenDistance: null when ManuallySet — a manual pick names a CARD
+    /// and not an art — and null when Unresolved. Carried so the collection
+    /// file keeps the printing-level information identification already
+    /// produced, instead of discarding it here.
+    public string? ChosenArtworkId { get; private set; }
 
     public TileState State { get; private set; }
 
@@ -85,6 +92,10 @@ public sealed class CohortTile
         Chosen = card;
         ChosenDistance = null;
         IsLowConfidence = false;
+        // A manual pick names a CARD, not an art, so there is no artwork to
+        // record — and recording the art the hash guessed would attribute a
+        // printing to a choice the user made on other grounds.
+        ChosenArtworkId = null;
     }
 
     /// Revert a manual choice to the hash's own proposal: Included if the
@@ -99,7 +110,7 @@ public sealed class CohortTile
             return; // no-op unless State is ManuallySet
         }
 
-        (State, Chosen, ChosenDistance, IsLowConfidence) =
+        (State, Chosen, ChosenDistance, IsLowConfidence, ChosenArtworkId) =
             ProposeFromHash(Candidates, _goodDistance, _okDistance);
     }
 
@@ -107,27 +118,27 @@ public sealed class CohortTile
     /// constructor and `Clear()` call this, so the rule can never drift
     /// between "what a fresh tile starts as" and "what a cleared tile
     /// reverts to" — they are, by construction, the same computation.
-    private static (TileState State, OracleEntry? Chosen, int? ChosenDistance, bool IsLowConfidence)
+    private static (TileState State, OracleEntry? Chosen, int? ChosenDistance, bool IsLowConfidence, string? ChosenArtworkId)
         ProposeFromHash(IReadOnlyList<CardCandidate> candidates, int goodDistance, int okDistance)
     {
         if (candidates.Count == 0)
         {
-            return (TileState.Unresolved, null, null, false);
+            return (TileState.Unresolved, null, null, false, null);
         }
 
         var best = candidates[0];
 
         if (best.Distance <= goodDistance)
         {
-            return (TileState.Included, new OracleEntry(best.OracleId, best.OracleName), best.Distance, false);
+            return (TileState.Included, new OracleEntry(best.OracleId, best.OracleName), best.Distance, false, best.ArtworkId);
         }
 
         if (best.Distance <= okDistance)
         {
-            return (TileState.Included, new OracleEntry(best.OracleId, best.OracleName), best.Distance, true);
+            return (TileState.Included, new OracleEntry(best.OracleId, best.OracleName), best.Distance, true, best.ArtworkId);
         }
 
-        return (TileState.Unresolved, null, null, false);
+        return (TileState.Unresolved, null, null, false, null);
     }
 }
 

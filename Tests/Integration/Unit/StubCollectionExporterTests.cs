@@ -34,7 +34,7 @@ public class StubCollectionExporterTests
         var exporter = new StubCollectionExporter(format);
         var rows = new[]
         {
-            new CollectionRow("oracle-forest", "Forest", 9, null, DateTimeOffset.UtcNow, 42, RowSource.Hash),
+            new CollectionRow("oracle-forest", "Forest", 9, null, DateTimeOffset.UtcNow, 42, RowSource.Hash, "art-forest-1"),
         };
 
         using var stream = new MemoryStream();

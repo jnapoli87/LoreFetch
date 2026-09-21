@@ -84,6 +84,7 @@ public sealed class StubCollectionStore : ICollectionStore
                 var key = (chosen.OracleId, condition);
                 var source = tile.State == TileState.ManuallySet ? RowSource.Manual : RowSource.Hash;
                 var distance = tile.State == TileState.ManuallySet ? null : tile.ChosenDistance;
+                var artworkId = tile.State == TileState.ManuallySet ? null : tile.ChosenArtworkId;
 
                 cardsCommitted++;
 
@@ -94,8 +95,9 @@ public sealed class StubCollectionStore : ICollectionStore
                         LastScannedAt = cohort.CapturedAt > existing.LastScannedAt ? cohort.CapturedAt : existing.LastScannedAt,
                         BestMatchDistance = distance,
                         Source = source,
+                        ArtworkId = AgreeOrNull(existing.ArtworkId, artworkId),
                     }
-                    : new FoldedRow(chosen.OracleName, 1, cohort.CapturedAt, distance, source);
+                    : new FoldedRow(chosen.OracleName, 1, cohort.CapturedAt, distance, source, artworkId);
             }
 
             foreach (var (key, fold) in folded)
@@ -110,13 +112,14 @@ public sealed class StubCollectionStore : ICollectionStore
                         LastScannedAt = fold.LastScannedAt > existingRow.LastScannedAt ? fold.LastScannedAt : existingRow.LastScannedAt,
                         BestMatchDistance = fold.BestMatchDistance,
                         Source = fold.Source,
+                        ArtworkId = AgreeOrNull(existingRow.ArtworkId, fold.ArtworkId),
                     };
                 }
                 else
                 {
                     _rows.Add(new CollectionRow(
                         key.OracleId, fold.OracleName, fold.Quantity, key.Condition,
-                        fold.LastScannedAt, fold.BestMatchDistance, fold.Source));
+                        fold.LastScannedAt, fold.BestMatchDistance, fold.Source, fold.ArtworkId));
                 }
             }
 
@@ -134,10 +137,21 @@ public sealed class StubCollectionStore : ICollectionStore
         }
     }
 
+    /// Agree-or-null, the contract's fold rule for ArtworkId. Two copies of
+    /// one oracle card in the same condition merge into a single row; if they
+    /// came from different printings their art ids differ, and the merged row
+    /// must then say it does not know rather than pick one. Last-write-wins
+    /// would leave a column right sometimes and wrong sometimes, with nothing
+    /// able to tell which — and a wrong printing yields a confidently wrong
+    /// price. Two nulls agree, so merging Manual rows keeps null.
+    private static string? AgreeOrNull(string? a, string? b) =>
+        string.Equals(a, b, StringComparison.Ordinal) ? a : null;
+
     private sealed record FoldedRow(
         string OracleName,
         int Quantity,
         DateTimeOffset LastScannedAt,
         int? BestMatchDistance,
-        RowSource Source);
+        RowSource Source,
+        string? ArtworkId);
 }

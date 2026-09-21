@@ -205,6 +205,11 @@ public sealed class CohortTile
 
     public OracleEntry? Chosen { get; }      // null only when Unresolved
     public int? ChosenDistance { get; }      // null when ManuallySet or Unresolved
+
+    /// The Scryfall printing id of the ART the hash matched. Same null rules
+    /// as ChosenDistance: null when ManuallySet, because a manual pick names
+    /// a CARD and not an art, and null when Unresolved.
+    public string? ChosenArtworkId { get; }
     public TileState State { get; }
     public bool IsLowConfidence { get; }     // highlight only, never gating
 
@@ -367,13 +372,26 @@ public readonly record struct CollectionRow(
                                 // split one card into two rows.
     DateTimeOffset LastScannedAt,
     int? BestMatchDistance,     // null when Source is Manual
-    RowSource Source);
+    RowSource Source,
+    string? ArtworkId);         // Scryfall printing id of the matched ART.
+                                // Set only on Source.Hash rows; null on
+                                // Manual rows, and null when merged rows
+                                // disagree. See the fold rule below.
+                                // APPENDED, not inserted: this is a
+                                // positional record struct, so a mid-list
+                                // parameter would silently break every
+                                // positional construction site. Order is
+                                // incidental; the column SET is the version.
 
 public interface ICollectionStore
 {
     /// Commits every tile whose State is Included or ManuallySet.
     /// Tile → row: Chosen gives OracleId/OracleName; ManuallySet → Source.Manual
-    /// with BestMatchDistance null; Included → Source.Hash with ChosenDistance.
+    /// with BestMatchDistance AND ArtworkId null; Included → Source.Hash with
+    /// ChosenDistance and ChosenArtworkId.
+    /// When folding duplicates — within one cohort, or against an existing
+    /// row — ArtworkId survives ONLY if every merged row agrees; any
+    /// disagreement sets it null.
     /// Returns the number of CARDS committed — the sum of the quantity
     /// increments, not the number of rows touched. Committing nine basic
     /// lands returns 9, which is the number a UI shows the user; the rows
@@ -448,12 +466,17 @@ One verified adapter beats four guessed ones, and `IsVerified` would have to be 
 
 | Field | Why it's worth a column |
 |---|---|
-| `OracleId` | The identity key — survives card renames, and is what a future exporter needs to resolve printings and prices without re-scanning. Free from the hash index. |
+| `OracleId` | The identity key — survives card renames, and lets a future exporter *enumerate* a card's printings. It cannot say **which** printing is in hand; `ArtworkId` is what narrows that. Free from the hash index. |
+| `ArtworkId` | The art the hash actually matched — the one piece of printing-level information identification already produces, which was previously discarded at the tile. Many artworks appear in exactly one printing, so where the art is unambiguous the printing is too: that is what makes accurate prices, and importers that require a set or printing id, possible later. **Free**: the id is already in the index (`cards.lfidx` carries it per entry) and already on `CardCandidate`. Costs nothing to keep and cannot be recovered later without rescanning the card. |
 | `Source` | Distinguishes rows a human confirmed from rows the machine set. |
 | `BestMatchDistance` | Makes "show me everything the machine set at distance > 200" answerable. Since identification is opt-out, that query is the remedy for wrong matches that slipped through. |
 | `LastScannedAt` | Audit and dedupe, one field, no cost. |
 
 **Versioning:** the header row's exact column set *is* the format version, documented in the repo. A reader encountering unknown or missing columns must **fail loudly rather than mis-parse** — a silently shifted column is how a collection file quietly becomes wrong.
+
+**`ArtworkId` is agree-or-null, never last-write-wins.** Two copies of one oracle card in the same condition dedup into a single row; if they came from different printings their art ids differ, and the merged row's `ArtworkId` becomes **null**. That preserves the invariant that matters: **a non-null `ArtworkId` is trustworthy.** Last-write-wins would leave a column that is right sometimes and wrong sometimes with nothing able to tell which — and since the field exists to enable printing and price resolution, a wrong printing yields a confidently wrong price. This is the same reasoning as *Condition is blank in v1*: a column that looks authoritative and is wrong is worse than a column that admits it does not know. A list-valued column was considered and rejected as over-building, and it would make the row shape variable, which fights the fail-loudly reader.
+
+Adding the column cost nothing when it was added, because no released build had written a collection file. After the streams fork it would mean stopping all four, and every row scanned in the meantime would have lost its art irrecoverably — rescanning the physical card is the only way back.
 
 ---
 

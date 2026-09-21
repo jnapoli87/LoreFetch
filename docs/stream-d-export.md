@@ -65,6 +65,8 @@ Implement `ICollectionStore` over the native CSV:
 
 Nine things D0 has to pin down that the list above leaves open — most of them ways user data goes silently wrong, which is this stream's stated risk #5:
 
+0. **Two dedup bugs here are invisible through the commit path, and must be tested through a written FILE.** Measured on the Stream 0 stub 2026-09-21: `CommitCohortAsync` can never produce a non-null `Condition`, because `CohortTile` carries none and v1 never assesses it — so a bug conflating `null` with `""` in the dedup key passed **79 unrelated tests and was caught by none of them**. The same applies to the new `ArtworkId` fold: a commit-only suite cannot distinguish agree-or-null from last-write-wins. Drive both from a file the reader parses, and cover `null` vs `""` vs a real value explicitly.
+
 1. **Normalise blank condition on both sides of the round trip.** `CollectionRow.Condition` is `string?` where null means *not assessed*, but a CSV blank field naturally parses back as `""`. If the committer produces `null` and the parser produces `""`, the dedup key `OracleId + Condition` stops matching and the same card silently becomes two rows with quantity 1. Pick one canonical in-memory representation — recommend **`null`**, with the parser mapping `""` → `null` — and assert the round trip in D3. This is the highest-probability data-corruption bug in the stream and it is invisible until someone counts their cards.
 2. **Aggregate duplicates *within* a cohort, not just against the file.** A 3×3 capture of basic lands is the documented smoke-test path, so nine tiles sharing one `OracleId` is a first-run case, not an edge case. Commit must fold them into one `+9`, not nine sequential `+1`s against a re-read file.
 3. **Define `CommitCohortAsync`'s return value.** The contract says "rows inserted or incremented"; with (2), committing nine Forests returns `1`, which is useless as the "committed N cards" number a UI would want to show. Decide which it is and write it down — this is a number that will end up in front of a user.
@@ -79,6 +81,12 @@ Nine things D0 has to pin down that the list above leaves open — most of them 
 Our own CSV store format **is the source of truth**, and every adapter projects *down* from it. It carries the full `CollectionRow` — `OracleId`, `OracleName`, `Quantity`, `Condition`, `LastScannedAt`, `BestMatchDistance`, `Source` — deliberately richer than any v1 adapter consumes, so the SOT never becomes the lossy bottleneck.
 
 Implement it as an `ICollectionExporter` rather than a special case, so the most-used path shares code and tests with the adapters. UTF-8 **with BOM** or Excel mangles non-ASCII names. The header row's exact column set is the format version; a reader seeing unknown or missing columns must fail loudly rather than mis-parse.
+
+> **Contract change, ruled 2026-09-21 before the fork: `CollectionRow` carries `ArtworkId`.** Appended last, `string?`, the Scryfall printing id of the art the hash matched. Set only on `Source.Hash` rows. **Null on `Manual` rows, and null whenever merged rows disagree** — agree-or-null, never last-write-wins, so that a non-null value is trustworthy. Full reasoning in `CONTRACTS.md` §Collection and export and in `RECONCILIATION.md`.
+>
+> Two consequences for this stream:
+> - **The header set changed**, so D1's exact-header check and the format-version expectation must include it.
+> - **Moxfield's output does not change in v1.** The adapter ignores the column. Emitting `Edition` and `Collector Number` from a resolved printing is a later adapter change, gated on B4a's single-printing measurement and a real verified import.
 
 **Four mechanics this depends on, each verified:**
 
