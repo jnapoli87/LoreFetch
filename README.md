@@ -40,6 +40,26 @@ That approach isn't novel here: it's a port of [CardSpotter](https://github.com/
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
 
+## Working on it
+
+```sh
+scripts/lorefetch.sh setup     # FIRST, in any fresh clone — see below
+scripts/lorefetch.sh doctor    # environment + guard check; fails if not set up
+scripts/lorefetch.sh build
+scripts/lorefetch.sh test
+```
+
+> **Run `setup` before your first commit in a new clone.** `hooks/pre-commit` is tracked, so the
+> file arrives with the clone — but `core.hooksPath` is *local config*, and config does not clone.
+> Until you wire it, the hook does not run, and `user.email` falls back to your global identity.
+> `setup` sets the repo-local identity, the hooks path and the SSH key pin, and touches nothing
+> global. `doctor` exits non-zero while the guards are not live, so it is safe to trust in a script.
+
+> **If you have a clone from before 2026-09-21**, its history no longer matches: the repo's history
+> was rewritten that day and every commit hash changed. Use
+> `git fetch && git reset --hard origin/main` — **not** `git pull`, which would merge the old
+> history back in. Prefer that over re-cloning, because of the point above.
+
 ## Stream A — UI
 
 Filled in by Stream A as the Avalonia app, auto-capture trigger and capture/cohort UI land.

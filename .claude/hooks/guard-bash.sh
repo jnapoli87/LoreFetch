@@ -38,6 +38,47 @@ warn() {
 }
 
 # ---------------------------------------------------------------------------
+# Committing with the git hook unwired: blocked
+# ---------------------------------------------------------------------------
+# This closes a hole that is invisible until it has already happened.
+# `hooks/pre-commit` is TRACKED, so the file arrives in a fresh clone — but
+# `core.hooksPath` is CONFIG, and config does not clone. With `user.email`
+# also unset, git falls back to the global identity, which on these machines
+# is a work address. So a fresh clone commits under the wrong identity into a
+# PUBLIC repo with the hook that exists to refuse exactly that not running at
+# all. Verified on a real clone, 2026-09-21.
+#
+# This file lives under .claude/, which DOES clone, so it is here rather than
+# in the git hook: it is the only guard that can still speak when the git
+# hook is switched off. It covers Claude-driven commits in any clone. A human
+# committing by hand is covered by the README and by
+# `scripts/lorefetch.sh doctor`, which exits non-zero when the guards are
+# not live.
+#
+# Checked in the same segment as `commit` (see the force-push note below for
+# why segment-scoping matters). In a correctly wired checkout this never
+# fires, so the cost in the normal case is one `git config` read.
+if printf '%s' "$cmd" | grep -Eq '\bgit\b[^;&|]*\bcommit\b'; then
+  hp=$(git config core.hooksPath 2>/dev/null || true)
+  if [ "$hp" != "hooks" ]; then
+    deny "This checkout's commit guards are NOT wired, so committing is blocked.
+
+core.hooksPath is '${hp:-unset}', expected 'hooks'. hooks/pre-commit is
+tracked so the FILE is here, but core.hooksPath is local config and config
+does not clone — so the hook is not running, and with user.email unset git
+falls back to the global identity, which is a work address. This repo is
+public.
+
+Fix it, repo-locally, without touching your global config:
+
+    scripts/lorefetch.sh setup
+
+Then 'scripts/lorefetch.sh doctor' will confirm. It exits non-zero while the
+guards are not live, so it is safe to trust."
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Force-push: blocked outright
 # ---------------------------------------------------------------------------
 # DETECTING the push is deliberately loose: `git ... push` anywhere in the

@@ -237,6 +237,7 @@ Only **derived** data is committed: the ~8.2 MiB hash index and the accuracy tab
 |---|---|---|
 | `guard-write.sh` | Project state stays in the repo | **Denies** writes outside the repo. Claude's scratchpad and `/tmp` are exempt — temp files are legitimate, they just are not project state. |
 | `guard-write.sh` | Frozen contract surface | **Denies** edits to `Core/Abstractions/**`, `Core/Scanning/**`, `Core/Fakes/**`, `Tests/Integration/**`, `*.csproj`, `*.slnx`, `Directory.Build.props`, `Directory.Packages.props` and `global.json` when **the target file** sits inside a linked worktree, so Stream 0 can still author them on `main`. Detected via `--git-dir` ≠ `--git-common-dir`, resolved from the **target's own directory** — never from `$PWD`, because the Agent tool launches every subagent from the main checkout, so a cwd-based test would let a stream implementer write straight into `.claude/worktrees/stream-x/…/Core/Abstractions`. |
+| `guard-bash.sh` | Guards must be wired before committing | **Denies** `git … commit` when `core.hooksPath` is not `hooks`, naming `scripts/lorefetch.sh setup` as the fix. This is the one guard that can still speak when the *git* hook is switched off — see *Two things that bite a fresh clone* below. It lives here rather than in `hooks/pre-commit` for exactly that reason, and in a wired checkout it costs one `git config` read and never fires. |
 | `guard-bash.sh` | No force-push | **Denies** `--force`, `-f`, `--force-with-lease` on any `git … push`. The repo is public; rewriting history is unrecoverable for anyone who cloned it, and history is the audit trail for authorship and the imagery rule. |
 | `guard-bash.sh` | Publishing needs prior review | **Warns** (does not block) on plain `git push`, `gh pr create`, `gh repo create`, `gh release create`. Deliberately a tripwire rather than a wall — explicit go-aheads do happen, and a block would make pushing impossible. |
 
@@ -255,6 +256,18 @@ Second, found 2026-09-21 by hitting it on a routine push: **the deny was loose t
 **`guard-write.sh` on the Windows PC** needed two further fixes, both found by testing there rather than on the Mac. The repo root was hardcoded to the Mac path, so once `jq` was on `PATH` every write on Windows would have been denied as "outside the repo" — it is now derived from `git rev-parse --git-common-dir`, with `cygpath` normalising `C:\…` paths. And git 2.28 on the PC predates `--path-format=absolute`, which it echoes back as a literal line; that made the main checkout look like a linked worktree and froze the very surface Stream 0 must author. Both directories are now resolved by the shell. **Without `jq` on `PATH` the hook fails open** — winget installs it outside `PATH` until a new session starts.
 
 **After changing these, run `/hooks` or restart the session** — the settings watcher only watches directories that already had a settings file at session start, so a newly created `.claude/settings.json` is not live until then.
+
+### Two things that bite a fresh clone
+
+**1. A fresh clone has NO guards, and nothing about it looks wrong.** `hooks/pre-commit` is tracked, so the file arrives — but **`core.hooksPath` is config, and config does not clone.** With `user.email` also unset, git falls back to the global identity, which on these machines is a work address. So a clone commits under the wrong identity, into a **public** repo, with the hook that exists to refuse precisely that not running at all. Verified on a real clone, 2026-09-21; it is not theoretical.
+
+`PLAN.md` says the hook is tracked "so it survives a fresh clone" — the *file* survives, the *wiring* does not, and that gap is the whole bug.
+
+Enforced in two places rather than documented in one, because the failure is silent:
+- **`scripts/lorefetch.sh setup`** wires identity, `core.hooksPath` and the SSH key pin, repo-locally, touching nothing global. **`doctor` exits non-zero** while the guards are not live, so it is a check rather than a report.
+- **`.claude/hooks/guard-bash.sh` denies `git commit`** when `core.hooksPath` is unwired. `.claude/` *does* clone, which is why the guard lives there: it is the only one that still works when the git hook is off. It covers Claude-driven commits in any clone; a human committing by hand is covered by the README and by `doctor`.
+
+**2. History was rewritten on 2026-09-21, so every commit hash changed.** A clone predating that must `git fetch && git reset --hard origin/main`. **Not `git pull`** — a merge would drag the old history back in and undo the rewrite. Prefer the reset over re-cloning, because of point 1. The rewrite was verified by cloning from GitHub afterwards and grepping every commit's content, messages and trees.
 
 ### Other standing rules
 
