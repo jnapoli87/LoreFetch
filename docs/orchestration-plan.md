@@ -59,7 +59,11 @@ Regression tests: chaos-test each one (docs/TESTING.md §Standing practice) and 
 STOP and report instead of continuing if: you need to edit Core/Abstractions, Core/Scanning,
 Core/Fakes, Tests/Integration, any .csproj/.slnx/Directory.*.props/global.json; a contract looks
 wrong or insufficient; you need a package that isn't referenced; acceptance cannot pass without
-weakening a test; the package is growing past ~400 lines of production code.
+weakening a test.
+Mention in your report, but do NOT stop or cut scope for: production code going past ~400 lines.
+That number is a scope-drift tripwire, not a budget — it asks "is this package doing more than one
+package's job?", and well-factored code with house-style doc comments passes it honestly. Never
+delete a class, a guard, a doc comment or a test to get under it. Finish the package as specified.
 Finish: one or more commits on <branch> (repo identity is preconfigured; never bypass the
 pre-commit hook), no push. Reply with: files changed, test results, anything deferred, any stop reason.
 ```
@@ -267,7 +271,17 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - `SourceFailed` is raised before `RunAsync` faults.
   - Thresholds come from `ScanSettings` and are passed into each tile.
 - [ ] **S0.4b** `ScanPipelineFactory.Create(...)`, plus the thresholds loader `ThresholdsFile.Load(path) → ThresholdsFile`. Schema v1 is JSON with these fields: `formatVersion`, `goodDistance`, `okDistance`, `referenceFloor`, `indexArtworkCount`, `indexSha256`, `measuredAt`, `notes`. Unknown `formatVersion`, a missing file or a missing field throws `InvalidDataException` or `FileNotFoundException`. Also `DataFiles.IndexPath` and `DataFiles.ThresholdsPath`, relative to `AppContext.BaseDirectory`. Accept: loader unit tests for a valid file, a missing file, a bad version and a missing field.
-- [ ] **S0.5a** ∥ Fakes in `src/LoreFetch.Core/Fakes/`: `FolderFrameSource` plus `FolderFrameSourceFactory` (V20), `StubCardDetector` (1/3/9 layouts) and `StubRectifier`. Accept: unit tests. `FolderFrameSource` disposes every frame it drops.
+- [x] **S0.5a** ∥ Fakes in `src/LoreFetch.Core/Fakes/`: `FolderFrameSource` plus `FolderFrameSourceFactory` (V20), `StubCardDetector` (1/3/9 layouts) and `StubRectifier`. Accept: unit tests. `FolderFrameSource` disposes every frame it drops.
+
+  *Done 2026-09-21, verified independently.* 452 lines across four files, clean Release build at 0 warnings, **`Passed! Failed: 0, Passed: 52, Total: 52`** (28 inherited + 24 new).
+  - **The drop path disposes through `Channel.CreateBounded<CameraFrame>(options, itemDropped)`** — capacity 1, `DropOldest`, callback disposing the evicted frame. That overload is the *only* correct answer here and the contract says so: a plain bounded channel does not dispose what it evicts. `DisposeAsync` additionally drains any frame still sitting in the channel, covering the case where `ReadAsync` was never called at all.
+  - `ArrayPool<byte>.Shared` throughout; `grep` for `ArrayPool.Create` over `src/` is empty.
+  - `StubRectifier` is genuinely managed-only — no `using OpenCvSharp`, no `Cv2.`, no `Mat`. `FolderFrameSource` is the single fake that uses OpenCvSharp, for `ImRead`, which is correct. `Core/Abstractions` remains CV-free.
+  - **The orchestrator re-ran the leak chaos independently:** dropping the `itemDropped` argument fails 2 tests, leaking **35 and 11 pooled buffers** respectively. That is real leak detection on rent/return counts, not an incidental assertion. Reverted, 52/52 green.
+  - Rectifier clamp chaos: unclamped bounding boxes **throw** `ArgumentOutOfRangeException` at the `Span.Slice` rather than silently misreading — worth knowing, because a throw is the recoverable failure and a silent misread would have been a corrupt thumbnail nobody notices.
+  - 452 lines, against what the brief template called a ~400-line **stop** threshold. The implementer flagged it and finished rather than cutting scope to fit — the right call, and four real classes justify it: `FolderFrameSource` is the shipping demo path rather than a test double, plus row-by-row `Marshal.Copy` for stride safety and house-style doc comments.
+
+    **The threshold itself was miscast, and §0's template is corrected as a result** (user's call, 2026-09-21): it is a **scope-drift tripwire, not a line budget**, and it now says *mention it and keep going* rather than *stop*. Phrased as a STOP condition it invited the one response nobody wants — an implementer deleting a guard, a doc comment or a test to get under a number, or abandoning a package mid-way over its size. The question it should ask is "is this package doing more than one package's job?", which 452 lines of four cohesive fakes answers no.
 - [ ] **S0.5b** ∥ `StubCardIdentifier` (configurable distances), `StubOracleCatalog` and the two collection stubs:
   - `StubOracleCatalog` defaults to 33,000 synthetic entries. It always includes the hostile names: `Kongming, "Sleeping Dragon"`, `"Rumors of My Death . . ."`, `Lim-Dûl's Vault`, `Borrowing 100,000 Arrows` and `+2 Mace`.
   - `StubCollectionStore` has real dedup semantics and a switch to throw on the next commit.
