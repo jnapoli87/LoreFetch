@@ -286,12 +286,21 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - 452 lines, against what the brief template called a ~400-line **stop** threshold. The implementer flagged it and finished rather than cutting scope to fit — the right call, and four real classes justify it: `FolderFrameSource` is the shipping demo path rather than a test double, plus row-by-row `Marshal.Copy` for stride safety and house-style doc comments.
 
     **The threshold itself was miscast, and §0's template is corrected as a result** (user's call, 2026-09-21): it is a **scope-drift tripwire, not a line budget**, and it now says *mention it and keep going* rather than *stop*. Phrased as a STOP condition it invited the one response nobody wants — an implementer deleting a guard, a doc comment or a test to get under a number, or abandoning a package mid-way over its size. The question it should ask is "is this package doing more than one package's job?", which 452 lines of four cohesive fakes answers no.
-- [ ] **S0.5b** ∥ `StubCardIdentifier` (configurable distances), `StubOracleCatalog` and the two collection stubs:
+- [x] **S0.5b** ∥ `StubCardIdentifier` (configurable distances), `StubOracleCatalog` and the two collection stubs:
   - `StubOracleCatalog` defaults to 33,000 synthetic entries. It always includes the hostile names: `Kongming, "Sleeping Dragon"`, `"Rumors of My Death . . ."`, `Lim-Dûl's Vault`, `Borrowing 100,000 Arrows` and `+2 Mace`.
   - `StubCollectionStore` has real dedup semantics and a switch to throw on the next commit.
   - `StubCollectionExporter` takes a configurable `ExportFormat`.
 
   Accept: unit tests.
+
+  *Done 2026-09-21, verified independently.* 302 lines across four files, clean Release build at 0 warnings, **`Passed! Failed: 0, Passed: 80, Total: 80`** (52 inherited + 28 new).
+  - The orchestrator checked the five hostile names **at runtime, by exact string equality, rather than by reading the source** — all five present verbatim including `Lim-Dûl`'s non-ASCII `û`, and `All.Count` is exactly 33,000. If the count is configured below five the hostile handful still lands, which is the right precedence.
+  - The null-vs-`""` Condition chaos was **re-run by the orchestrator**: injecting `(r.Condition ?? "") == (key.Condition ?? "")` fails exactly one test, the new one, `Expected: 2, Actual: 1`. Reverted, 80/80 green.
+
+  🔎 **The finding that matters here is for stream D, not for the stub.** Asked to chaos-test the null-vs-`""` dedup bug, the implementer reported plainly that **the existing 79 tests did not catch it at all**, and added one — rather than reporting a pass. The reason is structural and it applies to the real store just as much: **`CommitCohortAsync` can never produce a non-null `Condition`**, because `CohortTile` carries none and v1 never assesses condition. So the `Condition` half of the `OracleId` + `Condition` dedup key is **unreachable through the commit path**, and a bug that conflates `null` with `""` is invisible there — while being exactly the bug CONTRACTS.md warns "would silently split one card into two rows".
+
+  Consequences to carry into **D1 and D3**: the condition half of dedup is only reachable through the **reader**, on a file that already contains conditions. So D's tests for it must go through a written file, not through a commit, and must include the `null` vs `""` pair explicitly. A D3 suite that only exercises `CommitCohortAsync` will pass with that bug present.
+  - `StubCollectionStore` gains a `Seed(CollectionRow)` method outside `ICollectionStore`, which is what made the case reachable at all. Accepted, and it is more than a test seam: stream A needs a populated collection to render its `DataGrid`, its sort and its empty-state boundary, and seeding beats committing synthetic cohorts to get there.
 - [ ] **S0.6a** `Tests/Integration` harness:
   - an `IImplementationSet` provider with `Fakes` and a skipping `Real` stub (V8)
   - the `LOREFETCH_REQUIRE_REAL` switch (V7)
@@ -526,6 +535,8 @@ Global overrides for every D brief:
   - duplicate merge with a log line
 
   Accept: all 5 vectors from stream-d §D3 round-trip; the BOM is not taken as data; an empty collection produces a header-only file.
+
+  **Override, from S0.5b's finding — do not skip this, it is a bug that hides by construction:** the `Condition` half of the `OracleId` + `Condition` dedup key is **unreachable through `CommitCohortAsync`**, because `CohortTile` carries no condition and v1 never assesses one. It is reachable **only through the reader**, on a file that already has conditions in it. So the duplicate-merge tests must be driven from a **written file**, and must cover `null` vs `""` as distinct keys explicitly. Proven on the stub: with the merge key conflating them, 79 unrelated tests passed and nothing failed. CONTRACTS.md calls this the case that "would silently split one card into two rows"; a suite built only around commits will not see it.
 - [ ] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export.
 - [ ] **D3** `CsvCollectionStore`:
   - commits `Included` and `ManuallySet` tiles, folding duplicates within a cohort
