@@ -97,7 +97,7 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
 - [ ] **G0.3** 👤 Confirm Mac access for S0.0 and an attached C920 for H6. If no Mac is available, record that S0.0 is waived and that Risk 7 is accepted.
 - [x] **G0.4** 🧭 `.gitignore`: add `.claude/worktrees/`, `.idea/` and `.claude/skills/` (or commit skills deliberately), and fix the size comment. Accept: `git status` on `main` is clean. — *Partly done 2026-09-21: `.claude/worktrees/`, `.idea/` and the size comment are fixed, and `test-images/` was added as the local imagery folder. Still open: decide whether to ignore or commit `.claude/skills/`, then confirm on `main` after the merge.*
   *Finished 2026-09-21: `.claude/skills/` is **ignored** — no project state lives in a skill, and `.claude/hooks/` plus `.claude/settings.json` are the only things that must come from git because they have to apply inside every worktree. `.DS_Store` added too; it was the one thing still dirtying `git status`. `git status --porcelain` on `main` is now empty.*
-- [ ] **G0.5** 🧭 Doc fixes, docs only:
+- [x] **G0.5** 🧭 Doc fixes, docs only:
   - Drop `OpenCvSharp5.AvaloniaExtensions` from PLAN's package table and CLAUDE's stack table (V4).
   - Add the test and logging packages (V5).
   - Correct TESTING.md's hash-invariant paragraph (V6).
@@ -106,6 +106,8 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
   - Mark RECONCILIATION's "branches not merged" as done.
 
   Accept: `grep -rn "OpenCvSharp5.AvaloniaExtensions\|both CI legs" docs CLAUDE.md` finds only historical or record text.
+
+  *Done 2026-09-21.* The grep's surviving hits are all deliberate: CLAUDE's stack table keeps `OpenCvSharp5.AvaloniaExtensions` as a **do-not-use** entry (dropping the warning would invite it back); stream-a's research bullet now states the 12.1.x pin on its own footing and notes the package it used to hang off is gone; RECONCILIATION keeps both original decisions with an inline **Superseded 2026-09-21** note rather than being rewritten, because it is the decision record; and "both CI legs must be green at every push" plus TESTING's merge-gate row are about the *build*, which does run on both legs. Also folded in, as the same class of stale text: CLAUDE.md's frozen-surface list in the header and the standing rules named only `Abstractions`, `Scanning` and `.csproj`, understating what G1 and `guard-write.sh` actually freeze.
 - [x] **G0.6** 🧭 Hook fixes, with each case chaos-tested using synthetic payloads:
   - `guard-write.sh` resolves the git dir **of the target file's directory** (`git -C "$(dirname "$abs")" rev-parse …`), not `$PWD` (V3).
   - Exempt the Windows scratchpad path.

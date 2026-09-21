@@ -31,9 +31,11 @@ if (!File.Exists(indexPath))
 
 This makes the integration milestone mechanical rather than a judgement call:
 
-> **Integration is done when the skip count reaches zero.**
+> **Integration is done when `LOREFETCH_REQUIRE_REAL=1 dotnet test` reports zero skips on the local `win-x64` machine with every artifact present.**
 
-Its corollary matters too: a skip that survives past its checkpoint is a bug, not a convenience. At the integration checkpoint, flip the gate so a skipped test **fails** — otherwise skips quietly become permanent and the suite silently stops testing anything real.
+Not "zero skips in CI", which is unreachable by construction: the real-implementation cases need the hash index, Scryfall renders and the fixture corpus, and **card imagery can never be committed**. CI skips are therefore expected and permanent, and each one must still state its reason. The environment switch is what makes the milestone mechanical — with `LOREFETCH_REQUIRE_REAL=1` set, every artifact-gated skip becomes a **failure**, so the machine that does have the artifacts cannot quietly pass with the real path untested.
+
+Its corollary matters too: a skip that survives past its checkpoint is a bug, not a convenience. Flipping that switch at the integration checkpoint is what stops skips becoming permanent and the suite silently stopping testing anything real.
 
 ### What blocks a stream merging into `main`
 
@@ -76,7 +78,9 @@ Level 2 needs no card imagery at all (frames are generated at setup). Level 3 do
 
 **`CohortTile` transitions** (Stream 0) — `ToggleExcluded` round-trips from both `Included` and `ManuallySet` back to where it started; `SetManually` nulls `ChosenDistance`; `Clear` returns to `Included` or `Unresolved` according to the best candidate, and is a no-op unless `ManuallySet`.
 
-**Hash invariants** (stream B) — assert properties, not golden byte values: scale invariance, stability under global brightness/gamma shift, and that an inverted image does *not* match.
+**Hash invariants** (stream B) — assert **bounds, not invariants, and golden byte values as well**. Two input scales stay *within a bound* of each other rather than producing the same hash: step 3's downsample is lossy, so scale is not an invariance the hash has. Global brightness and gamma shifts stay within a bound. An inverted image lands at ≈1024. Then the per-cell upper order statistic and its tie-break get their own tests.
+
+The golden hashes are the point, not a fallback: they are what catches an unintended change to either transform after the index is built, which is the failure mode that degrades matching silently instead of failing. They are generated and committed **on `win-x64`** and carry `[Trait("Category","WindowsOnly")]`, because `INTER_AREA` is not bit-exact across x86-64 and ARM64 — so the macOS leg filters them out rather than reporting a divergence it cannot avoid.
 
 **CSV store** (stream D) — upsert increments quantity; `OracleId` + condition is the identity, with a blank condition treated as a value; blank condition is written as an empty field, never `null`; the atomic temp-then-rename leaves no partial file; a malformed line is reported rather than silently dropped.
 
@@ -84,7 +88,7 @@ Level 2 needs no card imagery at all (frames are generated at setup). Level 3 do
 
 Generated frame at a known simulated height → the full query path → the expected oracle name. Includes **the round-trip gate**: a Scryfall render must retrieve **its own artwork** — asserted on `ArtworkId`, not `OracleId`, or the gate passes on a different art of the same card — **through the same code the scanner calls**, not a test-only shortcut.
 
-The gate asserts a **bound, not equality**: the reference side blurs and downsamples where the query side does not, so a small distance floor is expected and demanding ≈ 0 would mean deleting the mechanism that makes the algorithm work. Record the measured floor and assert against it. Paired with **committed golden hashes run on both CI legs**, because `INTER_AREA` is not bit-exact across x86-64 and ARM64. Together these are what catch reference/query transform divergence, which otherwise degrades matching silently rather than failing.
+The gate asserts a **bound, not equality**: the reference side blurs and downsamples where the query side does not, so a small distance floor is expected and demanding ≈ 0 would mean deleting the mechanism that makes the algorithm work. Record the measured floor and assert against it. Paired with **committed golden hashes, which run on the Windows leg only** — `INTER_AREA` is not bit-exact across x86-64 and ARM64, and `macos-latest` is ARM64, so a shared golden could only ever be red there. The index is built on `win-x64` and the goldens are pinned to the same architecture; the macOS leg filters them out by trait and keeps its real job, which is proving `Core` has no Windows-only dependency. Together these are what catch reference/query transform divergence, which otherwise degrades matching silently rather than failing.
 
 ### Integration (fakes, then real) — written in Stream 0, live from the end of Stream 0
 
@@ -117,7 +121,7 @@ Negotiated 1080p30 MJPG proven from the device's own characteristics; flat memor
 
 `windows-latest` **and** `macos-latest`. The macOS leg is not about shipping macOS — it's what mechanically enforces that `Core` stays free of Windows-only dependencies. If it goes red because someone reached for a Windows API, that's the leg doing its job.
 
-Both legs run Unit + Integration(synthetic) + Integration(end-to-end). Neither runs Accuracy or Hardware.
+Both legs run Unit + Integration(synthetic) + Integration(end-to-end), and both filter out `Category=Hardware`. The macOS leg additionally filters out `Category=WindowsOnly`, which is how the golden hashes stay on one architecture. Neither runs Accuracy or Hardware.
 
 ---
 

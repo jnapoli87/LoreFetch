@@ -77,8 +77,11 @@ Remaining — **~4h**, up from the original ~2h: the architecture review moved t
    | `OpenCvSharp4` | 4.13.0.20260627 | B, C, Core |
    | `OpenCvSharp4.runtime.win` / `.runtime.osx.arm64` | matching | B, C, Core |
    | `FlashCap` | 1.12.0 | C |
-   | `Microsoft.Extensions.Logging.Abstractions` | current | **the logging seam** — C's done-when criteria are phrased "the log shows…" |
-   | `CsvHelper` | current (Apache-2.0 option) | D — insurance only; `TextFieldParser` is in-box and no library gives the unknown-column guard |
+   | `Microsoft.Extensions.Logging.Abstractions` | exact, pinned in S0.1 | **the logging seam** — C's done-when criteria are phrased "the log shows…" |
+   | `Microsoft.Extensions.Logging` + `.Console` | exact, pinned in S0.1 | the implementation and a sink. Without a sink nothing is ever *visible*, so "the log shows 1080p MJPG at 30 fps" is unverifiable — `.Abstractions` alone only gives the seam |
+   | `CsvHelper` | exact, pinned in S0.1 (Apache-2.0 option) | D — insurance only; `TextFieldParser` is in-box and no library gives the unknown-column guard |
+
+   "current" is not a pin. Every row above resolves to one exact version in `Directory.Packages.props`, including the three that were previously left as "current".
 
    **`net10.0`** — the longer-lived LTS; `net8.0` leaves support in Nov 2026, and "wider compatibility" is a non-argument here because a self-contained single-file publish bundles the runtime, so the user's machine never sees the TFM.
 
@@ -136,7 +139,9 @@ This is where the bugs live, and they will be **lifetime and threading bugs**, n
 3. **Real thresholds replace placeholders.** `GoodDistance` / `OkDistance` come from stream B's committed thresholds file. Grep for any hardcoded distance anywhere outside `Core/Scanning`.
 4. **Flip the skip gate.** The end-to-end suite already exists and has been green since the end of Stream 0 against the fakes ([`TESTING.md`](TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
 
-**Done when: the skip count reaches zero.** That's the whole definition — the end-to-end suite runs against real implementations throughout, with nothing gated out. Mechanical rather than a judgement call.
+**Done when `LOREFETCH_REQUIRE_REAL=1 dotnet test` reports zero skips on the local `win-x64` machine**, with the index, the Scryfall cache and the fixture corpus all present. That's the whole definition — the end-to-end suite runs against real implementations throughout, with nothing gated out.
+
+It is deliberately *not* "zero skips in CI". Card imagery can never be committed, so the real-implementation cases can never have their artifacts on a CI runner; those skips are permanent and each must state its reason. The environment switch turns every artifact-gated skip into a failure on the one machine that does have the artifacts, which keeps the milestone mechanical rather than a judgement call.
 
 ---
 
@@ -185,7 +190,7 @@ Stream-specific risks live in each stream doc. These span the whole build:
 Per-stream criteria are in the stream docs; test levels in [`TESTING.md`](TESTING.md). The cross-cutting bar:
 
 - `dotnet test` green on Mac **and** `windows-latest` CI.
-- Stream B's round-trip gate passes: a Scryfall render retrieves **its own artwork** through the full query path at or below the recorded distance floor (not ≈ 0 — the two sides are asymmetric by design; see [`RECONCILIATION.md`](RECONCILIATION.md)), and the committed golden hashes match on **both** CI legs.
+- Stream B's round-trip gate passes: a Scryfall render retrieves **its own artwork** through the full query path at or below the recorded distance floor (not ≈ 0 — the two sides are asymmetric by design; see [`RECONCILIATION.md`](RECONCILIATION.md)), and the committed golden hashes match on the **Windows** leg. They are traited `WindowsOnly` and filtered out on `macos-latest`, because `INTER_AREA` is not bit-exact on ARM64 and the index is built on `win-x64`.
 - The accuracy × height table is committed, measured on **normal cards** (not lands), with both thresholds and the distance-margin data behind them.
 - **`wrong@1` ≈ 0.** Failures must be no-match, not confident-wrong — a silent miss is recoverable, a confident wrong answer is permanent bad inventory.
 - The whole loop is achievable keyboard-only: space → enter → space → enter, no mouse.

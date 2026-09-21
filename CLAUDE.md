@@ -20,7 +20,7 @@ Private personal project, **GPLv3**, unrelated to any employer or day job. Built
 | [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) | Every stream-review ruling and why — the record behind the current contract surface |
 | [`docs/orchestration-plan.md`](docs/orchestration-plan.md) | **Execution control:** validation findings, the gated master checklist (G0 → Stream 0 → fork → A–D → integration → endgame), and Sonnet-sized work packages for the orchestrating agent |
 
-Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
+Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
 
 ⚠ **That freeze is mechanically enforced, which makes it a sequencing constraint.** `.claude/hooks/guard-write.sh` refuses those edits from inside a linked worktree, so a missing package reference or an incomplete contract **cannot be fixed from a stream** — fork with a gap and all four streams stall until someone returns to `main`. Finish and review the contracts and project files *before* creating any worktree, and over-reference packages rather than under-reference: an unused `PackageReference` costs nothing.
 
@@ -192,18 +192,18 @@ Repo-local, **no global config touched** (the global default on these machines i
 
 **A Scryfall render must retrieve its own artwork through the full query path, at a small, recorded, stable Hamming distance.** Not ≈ 0 — the reference side blurs and downsamples where the query side does not, so a floor is *expected*, and demanding zero would mean deleting the mechanism that makes a webcam frame match a print render.
 
-The invariant is therefore not "both sides identical" but: **each side's transform exists exactly once in the codebase, the shared steps are bit-identical, and neither side changes without rebuilding the index.** Guard it with committed golden hashes plus a round-trip test that asserts the measured floor as a bound, before building anything on top.
+The invariant is therefore not "both sides identical" but: **each side's transform exists exactly once in the codebase, the shared steps are bit-identical, and neither side changes without rebuilding the index.** Guard it with committed golden hashes (Windows leg only — see below) plus a round-trip test that asserts the measured floor as a bound, before building anything on top.
 
 Two ways this still fails silently, both guarded rather than assumed:
 
 - **Artwork granularity.** `unique_artwork` holds 54,963 arts over 37,926 oracle ids, so a gate asserting only `OracleId` passes while matching a *different art of the same card*. Assert on `ArtworkId`.
-- **Architecture.** `INTER_AREA` is **not** bit-exact across x86-64 and ARM64 (carotene's NEON HAL; OpenCV #24163 confirmed, #22477 closed won't-fix). So **the index is built and committed on `win-x64`**, the ship target, and the golden-hash test runs on *both* CI legs — a Mac/Windows divergence then fails loudly instead of quietly inflating every distance.
+- **Architecture.** `INTER_AREA` is **not** bit-exact across x86-64 and ARM64 (carotene's NEON HAL; OpenCV #24163 confirmed, #22477 closed won't-fix). So **the index is built and committed on `win-x64`**, the ship target, and **the golden-hash test is pinned to the same architecture: `[Trait("Category","WindowsOnly")]`, filtered out on the `macos-latest` leg.** Running one set of goldens on both legs was the earlier call and it was wrong — since `macos-latest` is ARM64, a shared golden cannot pass there, so the leg would be permanently red and the guard would be turned off rather than obeyed. The thing worth guarding is an *unintended* change to either transform, and one architecture proves that. What the macOS leg still proves, which is its actual job, is that `Core` carries no Windows-only dependency.
 
 ## Real risks, in order
 
 1. **Glare, focus and tilt — not resolution.** These are the top four items in Wizards' own SpellTable troubleshooting list, and they destroy the local-median bit pattern. Mitigation is physical: diffuse off-axis lighting (a SAD lamp works; position it at a shallow angle, not beside the camera, and check for PWM flicker banding against the 30 fps shutter). Colour temperature is irrelevant — we grayscale before hashing.
 2. **Reference/query transform divergence.** Not "the two sides differ" — they differ *by design*. The risk is an **unintended** change to either side, or to the shared steps, after the index is built. Guarded by golden hashes, one transform function per side, and a rebuild-on-change rule. See the gate above.
-   **New, found in review: `INTER_AREA` is not bit-exact across x86-64 and ARM64.** An index built on the Mac may not match queries hashed on Windows, presenting exactly as "degrades silently". Mitigated by building the index on `win-x64` and running the golden-hash test on both CI legs.
+   **New, found in review: `INTER_AREA` is not bit-exact across x86-64 and ARM64.** An index built on the Mac may not match queries hashed on Windows, presenting exactly as "degrades silently". Mitigated by building the index on `win-x64` and pinning the golden-hash test to `win-x64` too, traited `WindowsOnly` so the macOS leg filters it out instead of going permanently red on a divergence it cannot avoid.
 3. **False card detections** — filter on aspect *and* area, log every rejection.
 4. **Mat contrast.** Detection depends on finding the card's edge, and modern cards are black-bordered, so a *dark* mat is the worst case — which is what the original plan recommended four times. Settle it by measurement.
 5. **Same-art printings are permanently indistinguishable** by hash. Accepted (oracle name only), but say so in the README rather than letting users discover it.
@@ -252,5 +252,5 @@ Both were tested by piping synthetic payloads (16 cases). One defect surfaced: t
 
 - **The README is written incrementally**, one section per stream as each earns it — not as a lump at the end.
 - **Nothing lands on GitHub without review first.** Draft, show the content, wait for explicit approval, *then* push. Local commits on a branch are fine; anything that becomes visible to other people is not.
-- **`Core/Abstractions`, `Core/Scanning` and every `.csproj` are frozen** once the streams fork. If a stream needs a contract change it stops and asks — a unilateral edit there is a four-way merge conflict.
+- **The contract surface is frozen** once the streams fork: `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, `Directory.Build.props`, `Directory.Packages.props` and `global.json`. If a stream needs a change there it stops and asks — a unilateral edit is a four-way merge conflict, and a stream editing `Tests/Integration` can weaken the one suite that would have caught it.
 - **Chaos-test every regression test:** re-apply the bug, run only the new test, confirm it fails *for the right reason*, then revert. A test that merely passes may be vacuous. See `docs/TESTING.md`.

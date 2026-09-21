@@ -138,7 +138,8 @@ Stream B's corrections were not contract changes but several invalidated settled
 - **Step 3 is `INTER_AREA` by choice, not by fidelity.** Upstream passes `cv::INTER_AREA` as `resize`'s 4th positional argument — which is `double fx` — so it silently runs `INTER_LINEAR`. That is an upstream bug. We build our own index, so what matters is that our two sides agree, not that they match CardSpotter's binaries. A port that "faithfully" copies the call inherits the bug.
 - **`warpPerspective` cannot use `INTER_AREA`** — OpenCV documents it as unsupported there. The warp pins `INTER_LINEAR`; "`INTER_AREA` on both sides" is true of every *resize*, not of the warp.
 - **Counts re-measured** against the live bulk file: 54,963 arts over 37,926 oracle ids; 48,713 over 33,578 after the scope filter. Index payload 6.0 MiB, ~8.2 MiB with the name table — the old "~8.6 MB from ~67k arts" was arithmetic on a count that was never real.
-- **New risk, and it needed an owner: `INTER_AREA` is not bit-exact across x86-64 and ARM64** (carotene's NEON HAL; OpenCV #24163 confirmed, #22477 closed won't-fix). An index built on the Mac may not match queries hashed on Windows — presenting exactly as "degrades silently", the project's stated top risk. **Decision: the index is built and committed on `win-x64`, the ship target, and the golden-hash test runs on both CI legs** so a divergence fails loudly instead of quietly inflating every distance. `GaussianBlur` 3×3 σ=1 on 8-bit is safe — passing σ explicitly forces OpenCV's bit-exact fixed-point path. → [Your calls](#your-calls).
+- **New risk, and it needed an owner: `INTER_AREA` is not bit-exact across x86-64 and ARM64** (carotene's NEON HAL; OpenCV #24163 confirmed, #22477 closed won't-fix). An index built on the Mac may not match queries hashed on Windows — presenting exactly as "degrades silently", the project's stated top risk. **Decision: the index is built and committed on `win-x64`, the ship target, and the golden-hash test runs on both CI legs**  
+  > **Superseded 2026-09-21 (orchestration V6):** goldens run on the **Windows leg only**, traited `WindowsOnly`. `macos-latest` is ARM64, so a shared golden could never pass there — "fails loudly" would have meant permanently red, which gets a guard switched off rather than obeyed. The rest of the decision stands. so a divergence fails loudly instead of quietly inflating every distance. `GaussianBlur` 3×3 σ=1 on 8-bit is safe — passing σ explicitly forces OpenCV's bit-exact fixed-point path. → [Your calls](#your-calls).
 
 ---
 
@@ -234,7 +235,7 @@ Both are low-stakes and reversible up to the freeze; flag either if you disagree
 
 | # | Decision | The consequence to know |
 |---|---|---|
-| 5 | **Index built and committed on `win-x64` only** | The Mac cannot regenerate a *matching* index, because `INTER_AREA` is not bit-exact across architectures. Development on the Mac is unaffected — only index generation is pinned, and the golden-hash test on both CI legs is what makes a divergence loud. |
+| 5 | **Index built and committed on `win-x64` only** | The Mac cannot regenerate a *matching* index, because `INTER_AREA` is not bit-exact across architectures. Development on the Mac is unaffected — only index generation is pinned. *(The "golden-hash test on both CI legs" half was superseded 2026-09-21: goldens are `WindowsOnly`. See the note above.)* |
 | 6 | **`AvaloniaUI.DiagnosticsSupport` pinned** | Primary sources genuinely conflict on whether Avalonia 12's DevTools needs a paid tier. Pinning costs nothing; if it turns out to be paid, stream A ships without DevTools and loses no licence obligation, since nothing is redistributed. |
 
 ---
@@ -251,6 +252,6 @@ Both are low-stakes and reversible up to the freeze; flag either if you disagree
 
 ## Not done here
 
-- **The four review branches are not merged.** Each touches only its own stream doc, so the merge is conflict-free whenever you want it.
+- ~~**The four review branches are not merged.**~~ **Merged 2026-09-21** (`9b57ed5`), as expected conflict-free: each touched only its own stream doc.
 - **Nothing is pushed.** `git branch -r` shows only `origin/main`.
 - **No code.** Stream 0 starts on your say-so.
