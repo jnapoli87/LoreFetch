@@ -7,6 +7,18 @@ Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), t
 Implements: `ICardDetector`, `IRectifier`, `ICardIdentifier`, `IOracleCatalog`
 Must not touch: `LoreFetch.App`, `LoreFetch.Capture`, `Core/Trigger`, `Core/Collection`, `Core/Export`, `Core/Scanning`, the fakes, any `.csproj`, `LoreFetch.slnx`
 
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+>
+> - **Both proposed contract changes accepted.** `CardCandidate` gained `string? ArtworkId`, so the round-trip gate asserts artwork identity through the public seam rather than via the concrete type. `Identify`'s `maxCandidates` now means nearest **distinct `OracleId`**.
+> - **The asymmetry is confirmed and `CLAUDE.md` moved, not this doc.** Steps 2–3 are reference-side only; steps 4–6 are shared and must be bit-identical.
+> - **The gate asserts a measured distance floor as a bound, not ≈ 0.** Record the floor; assert against it.
+> - **Pull `normal` (~6.0 GB), not `small`** — confirmed by the user. `border_crop` is the fallback; never `small`.
+> - **Index by kind, not by frame:** drop no-`image_uris`, `art_series`, `token` and non-English; keep all frames. Report accuracy on modern-frame fixtures only.
+> - **Do not port the early rejection.** Threshold-keyed, inadmissible, and 0.243 ms brute force removes any argument for it.
+> - **The index is built and committed on `win-x64`**, because `INTER_AREA` is not bit-exact across architectures; golden hashes run on both CI legs.
+> - **`THIRD-PARTY-NOTICES` is fixed** — cited files corrected and the copyright verification completed. Nothing left for this stream to do there.
+
 Needs no camera and no UI. Runs entirely on images on disk, on the Mac.
 
 ---

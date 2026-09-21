@@ -5,7 +5,19 @@
 ⚠ The original **~100–150 lines** estimate was written before this review found that FlashCap hands over undecoded JPEG and reports device loss only by falling silent. With a decode stage (C2a), a first-frame timeout and a frame watchdog (C5), it is realistically **250–350 lines** plus tests. Still the smallest stream — but not a single-sitting one.
 
 Owns (exclusive write access): `LoreFetch.Capture/**`, `Tests/StreamC/**`, the stream C section of `README.md`
-Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), including `ScanSettings` and the public `CameraFrame` constructor that takes a pooled buffer
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+>
+> - **All 6 proposed contract changes accepted.** The `.csproj` package set is pinned in Stream 0 — FlashCap 1.12.0, OpenCvSharp4 + both runtimes — so the MJPEG decode stage has what it needs.
+> - **The logging seam is `Microsoft.Extensions.Logging.Abstractions`**, injected as `ILoggerFactory`. The "the log shows…" criteria are now satisfiable.
+> - **Implement `IFrameSourceFactory`**, so `Description` and `Geometry` report negotiated values and a missing device fails at startup rather than from inside the enumerator.
+> - **Throw `FrameSourceException`**; the pipeline raises `SourceFailed` before faulting, so device loss reaches the user.
+> - `ScanSettings` gained **`FirstFrameTimeoutMs` (10 000)** and **`FrameWatchdogMs` (2 000)** — generous first-frame budget precisely because this review measured MSMF at 5.71 s.
+> - **Backend order is fixed, not discovered: DirectShow → Media Foundation, Video for Windows ignored.** `PreferredDeviceId` is backend-prefixed.
+> - **OpenCvSharp is an allowed dependency of this project.** No OpenCvSharp type crosses the seam.
+> - macOS status unchanged (`win-x64` only, no device-opening test on the macOS leg) — but `CLAUDE.md`'s stale reason was corrected. Rotation cost dropped as a planned risk.
+
+Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), including `ScanSettings`, **`IFrameSourceFactory`**, **`FrameSourceException`**, `ILoggerFactory`, and the public `CameraFrame` constructor that takes a pooled buffer
 Must not touch: `LoreFetch.App`, anything else in `LoreFetch.Core`, any `.csproj`, `LoreFetch.slnx`
 
 Its only consumer is the scan pipeline, which reads exactly one `IFrameSource`.

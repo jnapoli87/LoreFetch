@@ -3,8 +3,20 @@
 **Largest surface, lowest risk.** Builds entirely against fakes and is never blocked by another stream — not at the start, not at the end.
 
 Owns (exclusive write access): `LoreFetch.App/**`, `LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, the stream A section of `README.md`
-Consumes: `Core/Abstractions` and `Core/Scanning` (both frozen — see [`CONTRACTS.md`](CONTRACTS.md)), the five fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`), and every registered `ICollectionExporter`
+Consumes: `Core/Abstractions` and `Core/Scanning` (both frozen — see [`CONTRACTS.md`](CONTRACTS.md)), the **seven** fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`, `StubCollectionStore`, `StubCollectionExporter`), `ScanPipelineFactory`, and every registered `ICollectionExporter`
 Must not touch: `Core/Identification`, `Core/Imaging`, `Core/Collection`, `Core/Export`, `LoreFetch.Capture`, the fakes, any `.csproj`, `LoreFetch.slnx`
+
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+>
+> - **All 8 proposed contract changes accepted.** `StubCollectionStore` and `StubCollectionExporter` now exist, so A7/A8 are no longer blocked.
+> - **`Capture()` is now `Task<Cohort?> CaptureAsync(CancellationToken)`** — thread-safe, and awaited off the UI thread. This was upgraded beyond what the review asked for: documenting the old shape would have frozen a race.
+> - `IScanPipeline` gained **`SourceFailed`** and **`SourceDescription`**; render device loss, and read the status line from the pipeline rather than an `IFrameSource`.
+> - `ScanSettings` gained `AutoCaptureEnabled` (default **false**) and `MovementTolerancePixels` (default **4**).
+> - `CohortTile` is constructed with both thresholds, so `Clear()` re-applies the pipeline's numbers.
+> - **Stream 0 owns composition and the thresholds loader.** Call `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`; do not implement stream B's file format.
+> - **TFM is `net10.0`**, not the `net8.0` recommended below — the user's call.
+> - `FrameGeometry.Width`/`Height` are **post-rotation**; `RotationDegrees` is informational, never re-applied.
 
 Avalonia **12.1.2**, CommunityToolkit.Mvvm, `Avalonia.Controls.DataGrid`. Runs on the Mac throughout — no camera, and no CV code of its own (OpenCvSharp is present only transitively, through `Core`).
 
@@ -14,7 +26,7 @@ All three are published and mutually compatible, verified on the NuGet v3 API: `
 - **`Avalonia.Headless.XUnit` 12.1.2 exists and is the only way to test A6's keyboard map automatically.** It is not in the package list above. Name it now or the keyboard map is hand-tested forever.
 - **`Avalonia.Diagnostics` has no 12.x release at all** (it stops at 11.3.22). DevTools moved out of the repo: `this.AttachDevTools()` is now `this.AttachDeveloperTools()` from the `AvaloniaUI.DiagnosticsSupport` package, plus an out-of-process `AvaloniaUI.DeveloperTools` dotnet tool. See *Open questions* — there is an unresolved question about whether it is free.
 
-**The UI talks to the scan pipeline, not to the parts.** `IScanPipeline` owns the frame source, detection, capture, thresholds and trigger calls; the UI subscribes to its events and calls `Capture()`. It never reads an `IFrameSource` or compares a distance itself.
+**The UI talks to the scan pipeline, not to the parts.** `IScanPipeline` owns the frame source, detection, capture, thresholds and trigger calls; the UI subscribes to its events and awaits `CaptureAsync`. It never reads an `IFrameSource` — the status line comes from `IScanPipeline.SourceDescription` — and it never compares a distance itself.
 
 ---
 
@@ -103,12 +115,12 @@ But the specifics the warning states are wrong in both directions, and the real 
 - ⚠ **The actual trap.** On Win32, `_ignoreWmChar = e.Handled` after `WM_KEYDOWN` ([`WindowImpl.AppWndProc.cs` L983](https://github.com/AvaloniaUI/Avalonia/blob/12.1.2/src/Windows/Avalonia.Win32/WindowImpl.AppWndProc.cs#L983)), so a window-level tunnel handler that marks **Space** `Handled` suppresses the following `WM_CHAR` — and the focused type-ahead box never receives the space character. *"Black Lotus"* becomes untypeable. The global handler **must bail out when focus is in a text-entry control** (`FocusManager.GetFocusedElement() is TextBox`), returning without setting `Handled`. **And it reproduces on the Mac**, so it is testable where this stream actually develops: `AvnView.mm`'s `-keyDown:` returns early when user code handled the event, skipping both `[[self inputContext] handleEvent:]` and `RawTextInputEvent` ([L795](https://github.com/AvaloniaUI/Avalonia/blob/12.1.2/native/Avalonia.Native/src/OSX/AvnView.mm#L795), whose comment cites the Win32 parity directly). Different mechanism, same symptom — which is why A6's "verify after the type-ahead box has had focus" is the right instinct but doesn't need a PC to act on.
 - **`KeyBindings` beat even the tunnel phase** — `KeyboardDevice` walks the focused element's ancestors invoking matching `KeyBindings` before raising the routed event at all. Don't mix a `KeyBinding` for Space/Enter with the tunnel handler; pick one.
 
-Space calls `IScanPipeline.Capture()`; auto captures arrive via `AutoCaptured`. Both replace any pending cohort. The pipeline calls `NotifyCaptured()` on every capture, so the UI has nothing to remember there.
+Space awaits `IScanPipeline.CaptureAsync`; auto captures arrive via `AutoCaptured`, **raised on the pipeline's background thread — marshal before touching a control**. Both replace any pending cohort. The pipeline calls `NotifyCaptured()` on every capture, so the UI has nothing to remember there.
 
 Two threading facts the contract leaves unstated, both of which land on this task:
 
-- **`Capture()` gets called from a key handler on the UI thread, while the pipeline thread is replacing and disposing the very frame it reads.** `CONTRACTS.md` says the pipeline "holds exactly one frame … and disposes it when the next one replaces it", but never says `Capture()` is safe to call concurrently with that. As specified, Space can rectify a buffer that has just gone back to the pool. *Proposed contract changes.*
-- **`Capture()` is synchronous and does the rectify-and-identify work inline** — up to nine `warpPerspective`s plus nine index lookups. On the UI thread that is a visible freeze on every Space, which is the opposite of "getting this to feel instant". The fix is to run it off the UI thread, which needs the same thread-safety answer.
+- ✅ *Resolved: `CaptureAsync` is documented thread-safe and takes ownership of the frame under a lock.* **`Capture()` gets called from a key handler on the UI thread, while the pipeline thread is replacing and disposing the very frame it reads.** `CONTRACTS.md` says the pipeline "holds exactly one frame … and disposes it when the next one replaces it", but never says `Capture()` is safe to call concurrently with that. As specified, Space can rectify a buffer that has just gone back to the pool. *Proposed contract changes.*
+- ✅ *Resolved: it is now `Task<Cohort?> CaptureAsync(CancellationToken)`.* **`Capture()` is synchronous and does the rectify-and-identify work inline** — up to nine `warpPerspective`s plus nine index lookups. On the UI thread that is a visible freeze on every Space, which is the opposite of "getting this to feel instant". The fix is to run it off the UI thread, which needs the same thread-safety answer.
 - `AutoCaptured` is not documented as raised on the UI thread (only `FrameProcessed` says which thread it uses), so **assume background and marshal before touching the grid.**
 
 ### A7 — Collection view and export
@@ -118,7 +130,7 @@ Two threading facts the contract leaves unstated, both of which land on this tas
 `<StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />`.
 Reach for `TableView` only if column sorting gets cut, in which case it virtualizes rows for free (it derives from `ListBox`).
 
-🚧 **This is the one task in the stream that is genuinely blocked, and the blockage contradicts the premise.** `CONTRACTS.md` promises "stream A never needs anything real from B, C or D — not at the start, not at the end", but the five fakes cover only the scan path: **there is no fake `ICollectionStore` and no fake `ICollectionExporter`.** `Core/Collection` and `Core/Export` are stream D's, and this stream must not touch them. So A7 and A8's empty-collection state have nothing to run against, and nothing can be added after the fork. See *Proposed contract changes* — this is the highest-priority item in this review.
+✅ **Resolved in reconciliation — `StubCollectionStore` and `StubCollectionExporter` were added to Stream 0, so this task is no longer blocked.** The analysis below is kept because it is why they exist. 🚧 *Original finding:* **this is the one task in the stream that is genuinely blocked, and the blockage contradicts the premise.** `CONTRACTS.md` promises "stream A never needs anything real from B, C or D — not at the start, not at the end", but the five fakes cover only the scan path: **there is no fake `ICollectionStore` and no fake `ICollectionExporter`.** `Core/Collection` and `Core/Export` are stream D's, and this stream must not touch them. So A7 and A8's empty-collection state have nothing to run against, and nothing can be added after the fork. See *Proposed contract changes* — this is the highest-priority item in this review.
 
 ### A8 — States that aren't the happy path
 Empty collection, no frame source available, and failure. **No stack traces in the UI.** An unresolved tile needs an obvious route to *Set card manually…* or users will assume the app is broken.
@@ -175,7 +187,7 @@ For the pre-build stream review (see [`stream-review-directions.md`](stream-revi
 1. **Avalonia 12.1.2 preview path.** Does `WriteableBitmap.Lock()` + `RowBytes` + `InvalidateVisual()` still work as described in 12.x? Is the "60 fps @ 1080p" ceiling measured on 12, or on 11?
 2. **Keyboard handling.** Confirm the tunnelling-handler approach for Space/Enter in Avalonia 12, and whether a focused `Button`/`TextBox` still swallows them.
 3. **Package set.** Are `CommunityToolkit.Mvvm` and `Avalonia.Controls.DataGrid` published at versions compatible with 12.1.2? Stream 0 pins every package before the fork, and nothing can be added afterwards — name any package this stream would need that isn't listed.
-4. **The pipeline seam.** Can every task here be done with only `IScanPipeline`'s two events and `Capture()`? In particular: is `FrameProcessed` on a background thread workable for a 15 fps throttled preview, and does the UI need anything the pipeline doesn't expose (source `Description` for the status line, pipeline faults)?
+4. **The pipeline seam.** Can every task here be done with only `IScanPipeline`'s events and `CaptureAsync`? In particular: is `FrameProcessed` on a background thread workable for a 15 fps throttled preview? *(The two gaps this asked about were real and are now closed: `SourceDescription` for the status line and `SourceFailed` for pipeline faults.)*
 5. **The trigger.** Is "movement beyond ε" specifiable with only `CardQuad`s and a timestamp? Propose ε, or propose the contract change needed.
 
 ---
@@ -245,3 +257,4 @@ Package facts come from the NuGet v3 flat-container API; Avalonia behaviour from
 - **Who loads the thresholds file into `ScanSettings` at startup?** `CONTRACTS.md` says stream B commits it next to the hash index and that it is "loaded into `ScanSettings` at startup", but startup code lives in `LoreFetch.App`, which is this stream's. **Recommendation:** assign the loader to Stream 0 next to the pipeline, so stream A neither implements nor owns a file format defined by stream B; stream A then only renders the failure when it's missing (A8).
 - **Should the pipeline supply a monotonic `now` to the trigger?** `IAutoCaptureTrigger.Evaluate` takes a `DateTimeOffset`, which is wall-clock and can step backwards on an NTP correction or DST change. A backwards step stalls a 500 ms settle; a forward jump can satisfy it instantly. **Recommendation:** the pipeline derives `now` from a `Stopwatch` baseline rather than `DateTimeOffset.UtcNow`. No signature change, an implementation note for whoever writes the pipeline — but worth deciding before the trigger's unit tests bake in an assumption.
 - **`net8.0` or `net10.0`?** Avalonia 12 dropped everything below `net8.0`, so the App's TFM is a Stream 0 choice affecting every project. **Recommendation:** `net8.0` unless another stream's dependency requires `net10.0` — it is the wider-compatibility option for a single-file `win-x64` publish, and nothing in this stream needs `net10.0`.
+  **→ Resolved: `net10.0`.** The user chose the longer-lived LTS. The "wider compatibility" argument does not apply — a self-contained single-file publish bundles the runtime, so the target machine never sees the TFM. This stream's own research is what de-risks it: Avalonia 12.1.2's nuspec targets `net8.0` **and `net10.0`**.

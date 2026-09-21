@@ -3,9 +3,21 @@
 **Short, fully isolated, and the stream that owns the user's data.** It stores the collection and projects it into other tools' shapes. No camera, no UI, no hash, no image processing.
 
 Owns (exclusive write access): `LoreFetch.Core/Collection/**`, `LoreFetch.Core/Export/**`, `Tests/StreamD/**`, the stream D section of `README.md`
-Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat` (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
+Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, **`CollectionStoreException`** (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
 Implements: `ICollectionStore`, and every `ICollectionExporter`
 Must not touch: `LoreFetch.App`, `Core/Identification`, `Core/Imaging`, `Core/Trigger`, `Core/Scanning`, `LoreFetch.Capture`, the fakes, any `.csproj`, `LoreFetch.slnx`
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+>
+> - **All 4 proposed contract changes accepted.** The three missing types are on the *Consumes* line above.
+> - **v1 ships the native SOT plus ONE adapter: Moxfield.** The user's call — one export beyond the SOT is enough. Deckbox is *not* in v1; document ManaBox, Archidekt, Deckbox and Dragon Shield in the README as unsupported-by-design.
+> - **`Condition`: `null` is the only representation of "unassessed".** It serialises to a blank field and a blank field parses back to `null`, never `""`.
+> - **`CommitCohortAsync` returns cards committed** (sum of quantity increments), not rows touched. Fold within-cohort duplicates first.
+> - **Throw `CollectionStoreException`** when the file cannot be replaced; the caller keeps its cohort and retries. Never discard it, never fall back to a non-atomic in-place write.
+> - **Duplicate `OracleId` + `Condition` rows merge on read** — sum `Quantity`, keep the latest `LastScannedAt`, log it. Justified by **import robustness**, not by hand-editing: the user explicitly rejected hand-editing CSV as a requirement.
+> - **Temp file in the target's own directory**, `Flush(true)`, then `File.Move(overwrite: true)`. `%TEMP%` silently degrades the rename to copy+delete.
+> - **`CsvHelper` is pinned** in Stream 0 as insurance. Native keeps the BOM; Moxfield writes none.
+
 
 Can start the moment Stream 0 lands, and can finish long before the others. The store is file-in/file-out and every adapter is a pure function over a row list, so this is the most testable stream in the project.
 
@@ -84,7 +96,9 @@ Note the asymmetry this creates: the native export is lossless, and **every thir
 ### D2 — Two adapters, verified
 ~~Pick **two** targets and get them genuinely working: **Moxfield** and **ManaBox** are the highest-value pair (largest user bases, both accept name-keyed CSV import).~~
 
-**Corrected: ManaBox does not accept name-keyed import, so the pair must change.** Recommended pair is **Moxfield + Deckbox** — the only two of the five tools researched with attested acceptance of name-only rows. See the *Open questions* section; this is a call for the user, not for the reviewer.
+**Corrected: ManaBox does not accept name-keyed import, so the pair must change.** Recommended pair was **Moxfield + Deckbox** — the only two of the five tools researched with attested acceptance of name-only rows.
+
+**→ Resolved: Moxfield only.** The user's call: one export format beyond the native SOT is enough for v1. That makes this the "ship Moxfield only, verified, plus the native format" option this review itself called defensible — two formats, both verified, instead of one verified and one resting on community folklore. Deckbox remains the strongest candidate if a second is ever added.
 
 - **Moxfield — confirmed viable.** Header is `Count`, `Name`, `Edition`, `Condition`, `Language`, `Foil`, `Collector Number`, `Alter`, `Playtest Card`, `Purchase Price`; spelling and **case** must match exactly, no leading or trailing space in a header, and **column order is explicitly irrelevant**. Only `Name` is strictly required. `Edition` is a Scryfall **set code**, not a set name. Conditions are `M`/`NM`/`LP`/`MP`/`HP`/`D`|`DM`. ([Moxfield, *Importing a Collection*](https://moxfield.com/help/help-articles/importing-collection))
 - **Deckbox — viable, with a caveat.** Quantity is `Count`, the header row is mandatory, and column order matters: `Count,Tradelist Count,Name,Edition,Card Number,Condition,Language,Foil,Signed,Artist Proof,Altered Art,Misprint,Promo,Textless,My Price`. `Count` and `Name` are the documented minimum, from the importer's own error text. Omitting `Edition` imports every row with no edition set — exactly the behaviour this stream wants. ([Deckbox importer error text](https://deckbox.org/forum/viewtopic.php?id=30026), [column set](https://deckbox.org/forum/viewtopic.php?id=30992), [conditions](https://deckbox.org/help/card_conditions)) **Caveat: the column list is community folklore** — Deckbox's only first-party import page covers encoding and nothing else, so cite it as community-documented and expect drift.
