@@ -19,6 +19,7 @@ The spine: sequencing, streams, integration, endgame. **Decisions live in [`../C
 | [`TESTING.md`](TESTING.md) | Five test levels and what each must assert | architecture review |
 | [`stream-review-directions.md`](stream-review-directions.md) | How the four stream reviews are launched, run and handed back | the orchestrating session |
 | [`RECONCILIATION.md`](RECONCILIATION.md) | Every ruling on the four reviews' 20 contract changes and 20 open questions | reconciliation |
+| [`orchestration-plan.md`](orchestration-plan.md) | Validation findings, the gated master checklist, and Sonnet-sized work packages for every stream | the orchestrating agent |
 
 Each stream doc is deliberately **self-contained enough to review in isolation** — it names what it owns, what it consumes, its done-when, its fallbacks, a *"what a reviewer should scrutinise"* section for code review, and a *"Plan review: research targets"* section for the pre-build review.
 

@@ -18,6 +18,7 @@ Private personal project, **GPLv3**, unrelated to any employer or day job. Built
 | [`docs/TESTING.md`](docs/TESTING.md) | Five test levels and what each must assert |
 | [`docs/stream-review-directions.md`](docs/stream-review-directions.md) | How the pre-build stream reviews run |
 | [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) | Every stream-review ruling and why — the record behind the current contract surface |
+| [`docs/orchestration-plan.md`](docs/orchestration-plan.md) | **Execution control:** validation findings, the gated master checklist (G0 → Stream 0 → fork → A–D → integration → endgame), and Sonnet-sized work packages for the orchestrating agent |
 
 Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
 
