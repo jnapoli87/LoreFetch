@@ -147,8 +147,13 @@ if [ -f "$NOTICES" ]; then
     done
   done
   if [ -n "$unlisted" ]; then
+    # Deduplicated: the same package is referenced from many .csproj files, so
+    # the raw list repeated most entries five or six times and ran to ~50 lines
+    # on every commit. An advisory nobody reads is not an advisory, and this one
+    # has a real job at I5 — it is what tells us the notices file is complete.
+    unlisted=$(printf '%s\n' $unlisted | sort -u)
     printf '\033[33m%s\033[0m\n' "pre-commit: note — packages not yet in $NOTICES:" >&2
-    for p in $unlisted; do note "$p"; done
+    printf '%s\n' "$unlisted" | while IFS= read -r p; do note "$p"; done
     note "(advisory, not blocking — add them before cutting a release)"
   fi
 fi
