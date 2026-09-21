@@ -143,7 +143,22 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
 ### Stream 0 — Foundation (serial, on `main`, one implementer at a time)
 Write scope for S0 is the whole repo, except for other streams' future directories.
 
-- [ ] **S0.0** 🧭 On the Mac: a throwaway console app on `net10.0` loads `OpenCvSharp4` and `runtime.osx.arm64`, calls `Cv2.GaussianBlur`, and prints `Cv2.GetBuildInformation()`. Record the **"Used HAL"** line here. ~~Waivable per G0.3~~ — **no longer waivable.** The Mac is where every build and test now runs, so this package failing blocks the build instead of costing local convenience (Risk 7, promoted). Built outside the repo tree so it never becomes project state.
+- [x] **S0.0** 🧭 On the Mac: a throwaway console app on `net10.0` loads `OpenCvSharp4` and `runtime.osx.arm64`, calls `Cv2.GaussianBlur`, and prints `Cv2.GetBuildInformation()`. Record the **"Used HAL"** line here. ~~Waivable per G0.3~~ — **no longer waivable.** The Mac is where every build and test now runs, so this package failing blocks the build instead of costing local convenience (Risk 7, promoted). Built outside the repo tree so it never becomes project state.
+
+  *Done 2026-09-21. **Risk 7 clears.*** `net10.0` restored against `OpenCvSharp4` + `OpenCvSharp4.runtime.osx.arm64` `4.13.0.20260627` in 2.9 s, ran on .NET 10.0.5 / `osx-arm64` / Arm64. `GaussianBlur` 3×3 with σX = σY = 1 passed explicitly returned a symmetric kernel (centre 52, edge 32, corner 19), and `INTER_AREA` 480→96 ran clean. Build info:
+
+  | | |
+  |---|---|
+  | OpenCV | 4.13.0, vcs `fe38fc6`, contrib `d99ad2a`, built 2026-06-27T02:25:09Z |
+  | Host | Darwin 25.4.0 arm64, CMake 4.3.4 |
+  | **Custom HAL** | **`YES (carotene (ver 0.0.1) KleidiCV (ver 0.7.0))`** |
+  | CPU baseline | `NEON FP16 NEON_DOTPROD NEON_FP16`; dispatched `NEON_BF16` |
+  | Parallel framework | GCD |
+  | 3rdparty | `tegra_hal kleidicv_hal kleidicv kleidicv_thread` … |
+
+  **The "Used HAL" line the item asks for does not exist in 4.13's output; `Custom HAL` is its successor, and the answer it gives is the one that mattered.** `carotene` is *precisely* the NEON HAL that CLAUDE.md's Risk 2 and OpenCV #24163 name as the reason `INTER_AREA` is not bit-exact on ARM64 — so this macOS build routes through it, and the ruling that golden hashes are `win-x64`-only is now **measured rather than inferred**. It also means a Mac-built index could never match Windows queries, which is why B4d stays on the PC.
+
+  Worth doing at B1b: have the Windows golden generator print the same procedural fixture's hash, and record the ARM64 value beside it. If they differ, the number is the concrete size of this divergence; if they agree, `INTER_AREA` is not being reached by carotene for our specific call and the trait could later be relaxed. Either answer is cheap and currently unknown.
 - [ ] **S0.1** Solution skeleton, the item most sensitive to the freeze:
   - `global.json` (SDK 10.0.x, `rollForward: latestFeature`).
   - `Directory.Build.props`: `net10.0`, `Nullable` enable, `ImplicitUsings`, `TreatWarningsAsErrors` for `src/`.
@@ -171,7 +186,16 @@ Write scope for S0 is the whole repo, except for other streams' future directori
   - `InternalsVisibleTo` from Capture to Tests.StreamC, for C's internal stage.
 
   Accept: `dotnet restore` and `dotnet build -c Release` are clean. **If any pin fails on `net10.0`, stop and ask** about falling back to `net8.0`, which is PLAN's stated fallback.
+
+  **Overrides, all measured on this Mac 2026-09-21 — take them as given rather than rediscovering them:**
+  - **`global.json` pins `10.0.201`, not the PC's `10.0.401`.** `rollForward: latestFeature` rolls a lower feature band up, never down. Proven to restore and build on both `net10.0` probe projects.
+  - **`xunit.runner.visualstudio` is not optional and not insurance.** With `xunit.v3` + `Microsoft.NET.Test.Sdk` but *without* it, `dotnet test` discovered **0 of 3 tests, printed "No test is available", and exited 0**. Every one of the five test projects needs it, or the whole suite silently stops testing and every signal stays green. Versions proven together: `xunit.v3` **3.2.2**, `xunit.runner.visualstudio` **3.1.5**, `Microsoft.NET.Test.Sdk` **18.0.0**.
+  - **Do not set `<OutputType>Exe</OutputType>` on the test projects.** `xunit.v3` already sets it (verified with `dotnet msbuild -getProperty:OutputType`), so V18's "test projects are executables" needs no action.
+  - **`.slnx` works** with SDK 10.0.201 for `restore`, `build` and `test`. No `.sln` fallback needed.
+  - `OpenCvSharp4` + `OpenCvSharp4.runtime.osx.arm64` `4.13.0.20260627` both exist and restore on `net10.0` (S0.0).
 - [ ] **S0.2** CI at `.github/workflows/ci.yml`: `windows-latest` and `macos-latest` each run restore, build and `dotnet test`. The macOS leg adds `--filter "Category!=WindowsOnly"`. Both legs add `Category!=Hardware`. Accept: the YAML lints, and it runs at the P1 push.
+
+  **Overrides:** the combined filter `Category!=Hardware&Category!=WindowsOnly` is **proven to work** on SDK 10.0.201 — 3 tests in, 1 out, with the traited pair excluded. **Quote it in the YAML:** the `&` is a shell metacharacter and an unquoted filter backgrounds the command. Mirror `scripts/lorefetch.sh`'s `default_filter()` exactly; a local run that disagrees with CI is worse than no local run.
 - [ ] **S0.3a** `Core/Abstractions`, types and interfaces, **verbatim from CONTRACTS.md**:
   - frames, `FrameGeometry`, `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`
   - `PointF2`, `CardQuad` (computed `AreaPx` and `AspectRatio`), `ICardDetector`, `RectifiedCard`, `IRectifier`
@@ -218,6 +242,13 @@ Write scope for S0 is the whole repo, except for other streams' future directori
   - one placeholder test per `Tests/StreamX` project, so each builds and runs
   - README: add a `## Stream A — UI` … `## Stream D — Collection & export` section skeleton, and keep the existing content
   - `THIRD-PARTY-NOTICES` untouched (entries are added at integration)
+- [x] **S0.9** 🧭 `scripts/lorefetch.sh` and the `lorefetch-run` skill — **one entry point to pull, build, test and run, on either machine.** Written 2026-09-21 at the user's request, deliberately **out of order** (before S0.1) because the platform switch means the PC now consumes what the Mac pushes and needs a single command to do it. It is therefore **shape-agnostic**: it discovers the solution and the app project instead of hardcoding them, and when neither exists it says so and exits 0 rather than emitting a confusing MSBuild error. Commands `doctor | pull | build | test | run | all`, plus `--no-pull --debug --verbose --all-tests --hardware --filter <expr> -- <app args>`.
+
+  POSIX `sh`, matching the prior art in `hooks/` and `.claude/hooks/` — it runs under Git Bash on the PC, which those already require. The skill is a thin pointer to the script and is **the one committed skill**, so `.gitignore` negates it out of the `.claude/skills/*` ignore.
+
+  Verified against a throwaway `.slnx` solution in the scratchpad (an exe project plus an xunit v3 test project with one plain, one `WindowsOnly` and one `Hardware` test): build, `.slnx` handling, per-platform filtering, app arg passthrough, the dirty-tree pull refusal, and every argument-error path. **Two findings came out of that and are carried as overrides below — see S0.1 and S0.2.**
+
+  *Re-verify after S0.1 lands, when there is a real solution to point it at.*
 - [ ] **S0.8** 🧭 **Freeze review.**
   - Diff `Core/Abstractions` against CONTRACTS.md member by member.
   - Confirm the identity guard with a refused commit (`GIT_AUTHOR_EMAIL=someone@example.com`).

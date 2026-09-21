@@ -105,9 +105,15 @@ test-images/*
 # .claude/hooks/ and .claude/settings.json ARE tracked, deliberately: they have
 # to apply inside every worktree, which means they have to come from git.
 # .claude/skills/ is not — skills are the operator's own tooling, and none of
-# this project's state lives in one. Committing one later is a deliberate act.
+# this project's state lives in one. Committing one IS a deliberate act, and
+# lorefetch-run is the one we made deliberately: the PC needs it from git,
+# because its whole job is to point at scripts/lorefetch.sh on both machines.
+# Note the `/*` rather than `/`: a trailing-slash ignore excludes the directory
+# itself, git never descends into it, and a negation for anything inside is
+# silently dead. Same shape as test-images/* above.
 .claude/worktrees/
-.claude/skills/
+.claude/skills/*
+!.claude/skills/lorefetch-run/
 .idea/
 
 # macOS directory metadata.
