@@ -389,7 +389,18 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - Confirm the identity guard with a refused commit (`GIT_AUTHOR_EMAIL=someone@example.com`).
   - Run `dotnet test` on the whole solution.
   - Commit `Stream 0: foundation`.
-- [ ] **P1** 👤 Push checkpoint. Show the summary and wait for approval, then push `main`. Both CI legs must be green, and a red leg sends the work back to S0.
+- [x] **P1** 👤 Push checkpoint. Show the summary and wait for approval, then push `main`. Both CI legs must be green, and a red leg sends the work back to S0.
+
+  *Done 2026-09-21. **Both legs green on the first run**, CI run `35658194631` at `96b04b1`:*
+
+  | leg | result |
+  |---|---|
+  | `windows-latest` (ship target) | success |
+  | `macos-latest` (portability guard) | success |
+
+  **The Windows leg is the one that mattered**, because it is the first thing in this project verified on the ship target rather than on the Mac. It proves three claims that were until now only argued: `net10.0` plus the entire pinned package set restores and builds on `win-x64`; `scripts/lorefetch.sh` runs under Git Bash on `windows-latest`, which is what lets one script own the test filter for both legs; and `Core` carries nothing that breaks on either platform. The macOS leg proves the converse — no Windows-only dependency crept into `Core` — which is its entire job.
+
+  ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
 ### Handoff — written at S0.8, 2026-09-21
 
