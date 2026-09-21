@@ -2,16 +2,39 @@
 
 The execution control document for the build. It tells the orchestrating agent what to do, in what order, and when it may proceed. **Decisions live in [`../CLAUDE.md`](../CLAUDE.md), contracts in [`CONTRACTS.md`](CONTRACTS.md), and stream detail in the stream docs.** This file sequences and slices that material. It does not restate it, except where a Sonnet implementer would otherwise act on stale text.
 
-> **User decisions recorded here (2026-09-21), pending propagation by G0.5:**
-> - The golden-hash test runs on **Windows only**. The macOS leg filters it out by trait, because `INTER_AREA` is not bit-exact on ARM64. This supersedes "both CI legs" wherever it appears.
-> - **Merge gate:** each stream merges once `dotnet build` and `dotnet test` are green locally on the Windows PC. After that come fixed push checkpoints (§3), and each one needs the user's approval. Both CI legs must be green at every push.
+> **User decisions recorded here (2026-09-21):**
+> - The golden-hash test runs on **Windows only**. The macOS leg filters it out by trait, because `INTER_AREA` is not bit-exact on ARM64. This supersedes "both CI legs" wherever it appears. *Propagated by G0.5.*
+> - **Merge gate:** each stream merges once `dotnet build` and `dotnet test` are green locally. After that come fixed push checkpoints (§3), and each one needs the user's approval. Both CI legs must be green at every push.
+> - **The orchestrator runs on the Mac, not the Windows PC.** See *Platform switch* below.
+
+### Platform switch — recorded 2026-09-21, after G0.6
+
+This file was written assuming the orchestrator sat at `C:\Repos\LoreFetch` on the Windows PC. **It does not: it runs in the main checkout on the Apple Silicon Mac,** `/Users/jnapoli/Repos/LoreFetch`. The user's ruling: build and test here, **commit and push**, and the user validates after each push, with parallel work continuing while a validation is outstanding.
+
+Read every remaining **"this PC"** in this file as **the Mac**, except in the items below, which are win-x64 by their nature and become 👤 asks routed to the Windows PC:
+
+| Item | Why it stays on win-x64 |
+|---|---|
+| **B4d** | The index must be built and committed on the ship target — `INTER_AREA` is not bit-exact on ARM64, so a Mac-built index would not match Windows queries. Non-negotiable. |
+| **B1b** | Goldens are generated on `win-x64` for the same reason, and traited `WindowsOnly`. |
+| **C4** | The C920 is on the PC. **Confirmed attached (G0.3/H6).** |
+| **A10** | "All three layouts, keyboard-only, flat memory" is the shipping platform's run. A Mac pass is useful but not the criterion. |
+| **I6** | `LOREFETCH_REQUIRE_REAL=1` with every artifact present, which includes the committed index and the Scryfall cache. |
+| **E1, E2** | Live calibration and the single-file publish check. |
+
+Four consequences that are not just bookkeeping:
+
+1. **`global.json` pins `10.0.201`, the Mac's SDK — not the PC's `10.0.401`.** `rollForward: latestFeature` rolls a lower feature band *up* and never down, so pinning 10.0.401 would make the Mac unable to build at all, while pinning 10.0.201 satisfies both machines. S0.1 carries this as an override.
+2. **Risk 7 is promoted from dev-only to primary.** `OpenCvSharp4.runtime.osx.arm64` has exactly one release, and PLAN's stated worst case — *"local CV testing is lost and we lean on the PC beside us"* — was written when the Mac was the secondary machine. It is now where every build and test runs, so that package failing blocks the build rather than costing convenience. This is why **S0.0 runs first, before S0.1**, exactly as PLAN item 0 insists.
+3. **S0.0 is no longer 👤.** It was marked so only because the orchestrator was assumed to be on the PC and a human would have to walk to the Mac. The orchestrator is on the Mac, so it runs S0.0 itself (🧭). G0.3's Mac-access question is answered by construction.
+4. **Stream B's Scryfall cache path** is Windows-shaped (`C:\LoreFetchData\scryfall-cache`). B4b/B4c/B2 run on whichever machine holds the cache; the path becomes a parameter rather than a constant, and B4d's run uses the Windows one.
 
 ## 0. How the orchestrator uses this file
 
 **Roles**
-- **Orchestrator.** Runs one long-lived session on `main` in the main checkout, `C:\Repos\LoreFetch`. It owns this file, dispatches packages, verifies them, merges, and ticks checkboxes. It never implements a package itself unless the package is marked 🧭 (orchestrator-only).
+- **Orchestrator.** Runs one long-lived session on `main` in the main checkout, `/Users/jnapoli/Repos/LoreFetch` (see *Platform switch*). It owns this file, dispatches packages, verifies them, merges, and ticks checkboxes. It never implements a package itself unless the package is marked 🧭 (orchestrator-only).
 - **Implementer.** One Sonnet subagent per package. It works only in its stream's worktree and returns a report. Implementers never push, merge, or edit this file.
-- **Human.** Packages marked 👤 need the user: hardware, a Mac, accounts, approving a push, recording the video. The orchestrator asks and waits. It never simulates them.
+- **Human.** Packages marked 👤 need the user: hardware, **the Windows PC**, accounts, approving a push, recording the video. The orchestrator asks and waits. It never simulates them.
 
 **Status tracking**
 - Checkboxes in this file on `main` are the single source of progress. Tick an item only after its **Accept** step passes. Commit each tick as `Orchestration: <ID> done`. Stream branches never touch this file.
@@ -49,7 +72,7 @@ pre-commit hook), no push. Reply with: files changed, test results, anything def
 5. On failure, send the implementer the specific defect. After two failed rounds, stop and ask the user.
 
 **Merge gate (per stream, user decision)**
-- Local `dotnet build` and `dotnet test` are green on this Windows PC.
+- Local `dotnet build` and `dotnet test` are green on the Mac.
 - The stream's automatable done-when items are ticked.
 - `git merge --no-ff stream/<x>` into `main`, then rerun the full local suite on `main`.
 - Then the push checkpoint for that merge (§3). Every push needs the user's explicit approval, with the diff summary shown first, and both CI legs must pass.
@@ -94,7 +117,7 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
 ### ⛩ G0 — Preconditions (on `main`)
 - [x] **G0.1** 👤 Install the .NET 10 SDK. Accept: `dotnet --list-sdks` shows 10.0.x. — *done 2026-09-21: 10.0.401.*
 - [x] **G0.2** 👤 Put `jq` on `PATH`, then restart the session. Accept: `jq --version`, and the guard denies a synthetic write to `Core/Abstractions/X.cs` from inside a test worktree. — *done 2026-09-21: jq-1.8.2; guard denied the synthetic write from a linked worktree. The cwd hole (V3) remains for G0.6.*
-- [ ] **G0.3** 👤 Confirm Mac access for S0.0 and an attached C920 for H6. If no Mac is available, record that S0.0 is waived and that Risk 7 is accepted.
+- [x] **G0.3** 👤 Confirm Mac access for S0.0 and an attached C920 for H6. If no Mac is available, record that S0.0 is waived and that Risk 7 is accepted. — *done 2026-09-21: Mac access is answered by construction, because the orchestrator now runs on the Mac (see Platform switch) — S0.0 becomes 🧭 and runs first. **C920 confirmed attached to the Windows PC**, so H6 is satisfied and C4 can run as written.*
 - [x] **G0.4** 🧭 `.gitignore`: add `.claude/worktrees/`, `.idea/` and `.claude/skills/` (or commit skills deliberately), and fix the size comment. Accept: `git status` on `main` is clean. — *Partly done 2026-09-21: `.claude/worktrees/`, `.idea/` and the size comment are fixed, and `test-images/` was added as the local imagery folder. Still open: decide whether to ignore or commit `.claude/skills/`, then confirm on `main` after the merge.*
   *Finished 2026-09-21: `.claude/skills/` is **ignored** — no project state lives in a skill, and `.claude/hooks/` plus `.claude/settings.json` are the only things that must come from git because they have to apply inside every worktree. `.DS_Store` added too; it was the one thing still dirtying `git status`. `git status --porcelain` on `main` is now empty.*
 - [x] **G0.5** 🧭 Doc fixes, docs only:
@@ -120,7 +143,7 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
 ### Stream 0 — Foundation (serial, on `main`, one implementer at a time)
 Write scope for S0 is the whole repo, except for other streams' future directories.
 
-- [ ] **S0.0** 👤 On the Mac: a throwaway console app on `net10.0` loads `OpenCvSharp4` and `runtime.osx.arm64`, calls `Cv2.GaussianBlur`, and prints `Cv2.GetBuildInformation()`. Record the **"Used HAL"** line here. Waivable per G0.3.
+- [ ] **S0.0** 🧭 On the Mac: a throwaway console app on `net10.0` loads `OpenCvSharp4` and `runtime.osx.arm64`, calls `Cv2.GaussianBlur`, and prints `Cv2.GetBuildInformation()`. Record the **"Used HAL"** line here. ~~Waivable per G0.3~~ — **no longer waivable.** The Mac is where every build and test now runs, so this package failing blocks the build instead of costing local convenience (Risk 7, promoted). Built outside the repo tree so it never becomes project state.
 - [ ] **S0.1** Solution skeleton, the item most sensitive to the freeze:
   - `global.json` (SDK 10.0.x, `rollForward: latestFeature`).
   - `Directory.Build.props`: `net10.0`, `Nullable` enable, `ImplicitUsings`, `TreatWarningsAsErrors` for `src/`.
@@ -221,7 +244,7 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
   Gates B6.
 - [ ] **H4** 👤 A Moxfield account. Gates D5.
-- [ ] **H6** 👤 A C920 attached to this PC. Gates C4.
+- [x] **H6** 👤 A C920 attached to the Windows PC. Gates C4. — *confirmed attached 2026-09-21 (G0.3).*
 
 ### Stream A — UI · worktree `stream-a` · scope `src/LoreFetch.App/**`, `src/LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, README §A
 Global overrides for every A brief:
@@ -282,7 +305,7 @@ Global overrides for every A brief:
   - a missing index or thresholds file
 
   No stack traces in the UI.
-- [ ] **A10** 🧭👤 Done-when run on this PC:
+- [ ] **A10** 🧭👤 Done-when run on the Windows PC:
   - all three layouts work
   - a keyboard-only loop works
   - all four tile states are reached (two through configured distances, two through user action)
@@ -299,7 +322,7 @@ Global overrides for every B brief:
 - Results are top-N **distinct `OracleId`**.
 - **No early rejection.**
 - Pull `normal` images, never `small`.
-- The Scryfall image cache lives **outside the repo**, at `C:\LoreFetchData\scryfall-cache`.
+- The Scryfall image cache lives **outside the repo**: `C:\LoreFetchData\scryfall-cache` on the PC, `~/LoreFetchData/scryfall-cache` on the Mac. Take it as a parameter, never a constant.
 - Golden tests carry `[Trait("Category","WindowsOnly")]`.
 
 - [ ] **B1a** Hash core in `Core/Imaging`:
@@ -332,7 +355,7 @@ Global overrides for every B brief:
   Accept: a unit test over a small committed JSONL sample (text only) reproduces the filter decisions.
 - [ ] **B4b** Lab `images` command: download `image_uris.normal` into the external cache. It resumes, runs with polite concurrency, respects HTTP 429, and skips files already present.
 - [ ] **B4c** Lab `build-index` command: `ReferenceTransform` → `CardHasher` → `cards.lfidx`. It supports a `--subset N` fallback that labels the index size.
-- [ ] **B4d** 🧭👤 Run B4a–B4c in full on **this win-x64 PC** (about 6 GB, hours). Commit `data/index/cards.lfidx` and record its artwork count and SHA-256 here. If it stalls, use a labelled 5k subset.
+- [ ] **B4d** 🧭👤 Run B4a–B4c in full on **the win-x64 PC** (a 👤 ask: the orchestrator is on the Mac) (about 6 GB, hours). Commit `data/index/cards.lfidx` and record its artwork count and SHA-256 here. If it stalls, use a labelled 5k subset.
 - [ ] **B5a** ∥ `ContourCardDetector` in `Core/Imaging`:
   - Canny → morphological close → `findContours` External → `approxPolyDP` to 4 points → order corners TL, TR, BR, BL
   - aspect 1.397 ±15% (the ±25% widening is configurable) and a minimum area
@@ -383,7 +406,7 @@ Global overrides for every C brief:
 
   Accept: unit tests of the selection logic over plain descriptor data objects.
 - [ ] **C3** ∥ README §C (including the macOS compile-only note).
-- [ ] **C4** 👤🧭 Hardware run on this PC, gated on H6. The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+- [ ] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
 
 ### Stream D — Collection & export · worktree `stream-d` · scope `src/LoreFetch.Core/Collection/**`, `src/LoreFetch.Core/Export/**`, `Tests/StreamD/**`, README §D
 Global overrides for every D brief:
@@ -423,7 +446,7 @@ Global overrides for every D brief:
 - [ ] **I3** After C merges: `WebcamFrameSourceFactory` goes into `AppComposition`, with a switch between the demo folder and the camera.
 - [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none.
 - [ ] **I5** `THIRD-PARTY-NOTICES`: an entry for every package, so the hook's advisory list is empty. Chase down the FFmpeg notices in the OpenCvSharp runtimes (PLAN risk 7).
-- [ ] **I6** 🧭 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on this PC with every artifact present gives **0 skipped**. Then P6.
+- [ ] **I6** 🧭👤 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on the **Windows PC** with every artifact present gives **0 skipped**. Then P6.
 
 ### Endgame E
 - [ ] **E1** 👤🧭 Live calibration at the locked height, all three layouts, the full ladder. Record "predicted X, measured Y" and the difference in `docs/accuracy.md`.
