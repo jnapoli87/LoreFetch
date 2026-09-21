@@ -106,7 +106,7 @@ v1 stores one flat table of card rows (full column list below). Nothing relation
 
 Why CSV wins here:
 - **The storage format *is* the export format**, so there is no export code path and no class of bug where storage and export disagree. The whole deliverable is "export your collection."
-- **Users can hand-fix a bad row in Excel.** This matters: identification is opt-out, so some wrong matches will slip through, and being able to correct the file is a feature.
+- **The file stays readable and repairable by ordinary tools** — a consequence of the format, not a goal anyone asked for. The remedy for a wrong match is the opt-out grid at capture time, and after the fact the `BestMatchDistance` + `Source` query; *not* expecting users to hand-edit CSV. What this does buy is that the store must survive reading back a file it did not write byte-for-byte, which is a robustness requirement on the reader rather than a feature.
 - Zero dependencies, no EF ceremony, and integration tests are write-file / read-file / assert.
 
 Accepted costs: full-file rewrite per commit (~300 KB at 10k rows, microseconds), no indexing (linear scan of 10k rows is nothing), no transactions (covered by write-temp-then-rename — documented atomic on APFS, undocumented on NTFS, and only ever a guarantee that a reader sees no *truncated* file, never that the write survived power loss; the `.bak` covers the rest). UTF-8 **with BOM** or Excel mangles non-ASCII card names.

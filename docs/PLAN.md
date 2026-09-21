@@ -64,7 +64,7 @@ The only strictly serial work. Everything downstream forks from this commit, so 
 Remaining — **~4h**, up from the original ~2h: the architecture review moved the scan pipeline and two more fakes here, and reconciliation added two further fakes, the pipeline factory and the thresholds loader. They can't move into a stream: the end-to-end suite proves the pipeline, so it must exist before the fork.
 
 0. **Prove `OpenCvSharp4.runtime.osx.arm64` on the Mac, first.** `Core` references OpenCvSharp (for `Core/Imaging` and `FolderFrameSource`), so stream A's demo path depends on a package with exactly one release. Load it and run one `Cv2` call before anything else. If it fails, you find out before the fork, not after.
-1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`, all on **`net8.0`**. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`. The reconciled set, every item of which a stream review named as un-addable after the fork:
+1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`, all on **`net10.0`**. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`. The reconciled set, every item of which a stream review named as un-addable after the fork:
 
    | Package | Version | For |
    |---|---|---|
@@ -79,7 +79,9 @@ Remaining — **~4h**, up from the original ~2h: the architecture review moved t
    | `Microsoft.Extensions.Logging.Abstractions` | current | **the logging seam** — C's done-when criteria are phrased "the log shows…" |
    | `CsvHelper` | current (Apache-2.0 option) | D — insurance only; `TextFieldParser` is in-box and no library gives the unknown-column guard |
 
-   `net8.0` because Avalonia 12 dropped everything below it and every pin above is verified against it; nothing needs `net10.0`, and self-contained publish means the user's machine never sees the TFM.
+   **`net10.0`** — the longer-lived LTS; `net8.0` leaves support in Nov 2026, and "wider compatibility" is a non-argument here because a self-contained single-file publish bundles the runtime, so the user's machine never sees the TFM.
+
+   > ⚠ **No pin above was verified against `net10.0` during the stream reviews** — they were checked against `net8.0`. So this item is not done until **every project restores and builds clean on `net10.0`**. If any pin fails, fall back to `net8.0` **here, before the freeze**. After the fork `.csproj` files are hook-enforced frozen, which makes this the last cheap moment to find out.
 2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
 3. **`Core/Scanning`** — the scan pipeline: detection loop, capture from the latest snapshot's frame, threshold application, trigger calls. Then **frozen**.
 4. **The seven fakes** — `FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier` (configurable distances so the UI can reach all four `TileState` values), `StubOracleCatalog` (**~33k entries, configurable** — a few hundred cannot reproduce the type-ahead's only performance problem), plus **`StubCollectionStore` and `StubCollectionExporter`**, added in reconciliation. Stream A's collection view, empty state and export picker are all built against `ICollectionStore` and `ICollectionExporter`, which belong to stream D — without those two the claim that "stream A never needs anything real from B, C or D" was simply false. These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.

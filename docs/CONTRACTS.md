@@ -419,7 +419,9 @@ Atomic rename buys exactly one thing: **a reader never sees a truncated file.** 
 
 **BOM is a per-format decision, not a global one.** The **native** format is UTF-8 **with BOM**, because it is the file users open in Excel and Excel mangles non-ASCII card names without it. Adapters choose for themselves: a BOM that fixes Excel can break an importer's header match. The Moxfield adapter writes **no BOM**, and D4's real import verifies that.
 
-**Duplicate keys on read are merged, not rejected.** Two rows with the same `OracleId` + `Condition` are folded — sum `Quantity`, keep the latest `LastScannedAt` — and the merge is logged. This is a deliberate exception to the fail-loudly rule below, which governs *columns*: hand-editing in Excel is an advertised feature, so a pasted or re-sorted row must not lock a user out of their own collection.
+**Duplicate keys on read are merged, not rejected.** Two rows with the same `OracleId` + `Condition` are folded — sum `Quantity`, keep the latest `LastScannedAt` — and the merge is logged. This is a deliberate exception to the fail-loudly rule below, which governs *columns*.
+
+The reason is **import robustness, not hand-editing**: the reader must cope with a well-formed file it did not write itself, and duplicate keys are the one malformation that carries an unambiguous correct answer. A shifted or unknown *column* does not — which is why that case still fails loudly. Refusing to load over a duplicate row would lock a user out of their own collection to protect them from a condition the format can resolve.
 
 **Oracle names are written verbatim, never sanitised.** `+2 Mace` is a real in-scope card and the only oracle name beginning with a character Excel treats as a formula. Excel will try to evaluate that cell; that is documented in the README as a display artefact. Prefixing a `'` or a tab would corrupt the source of truth for every machine reader in order to fix one program's rendering.
 
