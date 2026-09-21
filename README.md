@@ -40,6 +40,22 @@ That approach isn't novel here: it's a port of [CardSpotter](https://github.com/
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
 
+## Stream A — UI
+
+Filled in by Stream A as the Avalonia app, auto-capture trigger and capture/cohort UI land.
+
+## Stream B — Identification
+
+Filled in by Stream B as the hash port, index build and detection/accuracy work land.
+
+## Stream C — Capture
+
+Filled in by Stream C as the webcam capture pipeline lands.
+
+## Stream D — Collection & export
+
+Filled in by Stream D as the collection store, native format and export adapters land.
+
 ## Licence
 
 [GPLv3](LICENSE). Deliberately copyleft: fork it, sell it, do as you like — but ship your source too. The point is that a free option stays free.
