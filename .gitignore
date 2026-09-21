@@ -55,3 +55,40 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# ---------------------------------------------------------------------------
+# LoreFetch
+# ---------------------------------------------------------------------------
+
+# Card imagery must NEVER be committed. The artwork is Wizards of the Coast IP
+# regardless of who photographed it, so this covers both Scryfall renders and
+# our own captures. Only DERIVED data belongs in git: the hash index, the
+# accuracy tables. See docs/CONTRACTS.md and CLAUDE.md.
+fixtures/
+corpus/
+captures/
+scryfall-cache/
+*.card.png
+*.card.jpg
+
+# Belt-and-braces: no bare raster files anywhere in the tree. UI assets are
+# added with an explicit negation below so a slip can't sneak a card through.
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.tif
+*.tiff
+
+# UI/doc assets, opted in deliberately and individually.
+!src/LoreFetch.App/Assets/**
+!docs/img/**
+
+# The local collection file and its backup are user data, not source.
+collection.csv
+collection.csv.bak
+
+# Generated hash index is committed on purpose (derived fingerprints, ~8.6 MB,
+# no imagery) — but the raw downloads that built it are not.
+scryfall-bulk/
