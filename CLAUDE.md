@@ -8,15 +8,17 @@ Private personal project, **GPLv3**, unrelated to any employer or day job. Built
 
 | Document | Job |
 |---|---|
-| [`docs/PLAN.md`](docs/PLAN.md) | The spine: Stream 0, the four streams, integration, endgame |
-| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The frozen seam that makes parallel streams possible |
-| [`docs/stream-a-ui.md`](docs/stream-a-ui.md) | Avalonia app, built against fakes |
+| [`CONTEXT.md`](CONTEXT.md) | The domain glossary — use its terms, avoid the ones it lists under *Avoid* |
+| [`docs/PLAN.md`](docs/PLAN.md) | The spine: review sequence, Stream 0, the four streams, integration, endgame |
+| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The frozen seam that makes parallel streams possible, and who owns what |
+| [`docs/stream-a-ui.md`](docs/stream-a-ui.md) | Avalonia app and auto-capture trigger, built against fakes |
 | [`docs/stream-b-identification.md`](docs/stream-b-identification.md) | Hash port, index, detection, accuracy ← *the risky one* |
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | FlashCap → `IFrameSource` |
-| [`docs/stream-d-export.md`](docs/stream-d-export.md) | Native SOT format + third-party adapters |
+| [`docs/stream-d-export.md`](docs/stream-d-export.md) | Collection store, native format, third-party adapters |
 | [`docs/TESTING.md`](docs/TESTING.md) | Five test levels and what each must assert |
+| [`docs/stream-review-directions.md`](docs/stream-review-directions.md) | How the pre-build stream reviews run |
 
-Work happens in **four parallel git worktrees** after a serial ~2h foundation pass. `Core/Abstractions` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
+Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
 
 ⚠ **That freeze is mechanically enforced, which makes it a sequencing constraint.** `.claude/hooks/guard-write.sh` refuses those edits from inside a linked worktree, so a missing package reference or an incomplete contract **cannot be fixed from a stream** — fork with a gap and all four streams stall until someone returns to `main`. Finish and review the contracts and project files *before* creating any worktree, and over-reference packages rather than under-reference: an unused `PackageReference` costs nothing.
 
@@ -83,7 +85,7 @@ Getting the axis wrong costs 38% linear resolution: a 3×3 of portrait cards is 
 | **Enter** | Accept the cohort — commit every non-X'd tile, clear, re-arm. |
 | **Escape** | Discard the cohort; DB untouched. |
 | **Left-click tile** | Toggle an **X** (opt-out). No X = included. |
-| **Right-click tile** | *Set card manually…* (type-ahead over the oracle names in the hash DB) / *Clear*. |
+| **Right-click tile** | *Set card manually…* (type-ahead over the oracle catalog) / *Clear* — reverts a manual choice to the hash's own proposal. |
 
 Happy path is **space, enter, space, enter** — no mouse. Auto mode fires on a **count-gated settle**: exact expected count (1/3/9) held stable for ≥500 ms, resetting on any count change or movement, and **requiring the scene to break before re-arming** — without that re-arm rule a static tableau re-fires forever. Hash-set dedupe sits behind it.
 
@@ -93,7 +95,7 @@ Match distance drives **emphasis, not gating**: low-confidence tiles are highlig
 
 ### Storage — CSV, not a database
 
-v1 stores **three columns**: oracle name, quantity, condition. Nothing relational is happening, so there is no database. The old plan specified EF Core + SQLite; that was inherited and never re-justified against this data model.
+v1 stores one flat table of card rows (full column list below). Nothing relational is happening, so there is no database. The old plan specified EF Core + SQLite; that was inherited and never re-justified against this data model.
 
 Why CSV wins here:
 - **The storage format *is* the export format**, so there is no export code path and no class of bug where storage and export disagree. The whole deliverable is "export your collection."
@@ -106,7 +108,7 @@ Accepted costs: full-file rewrite per commit (~300 KB at 10k rows, microseconds)
 
 `BestMatchDistance` + `Source` together make *"show me everything the machine set at distance > 200"* answerable — and since identification is opt-out, that query is the remedy for wrong matches that slipped past the grid.
 
-Dedup identity is **oracle name + condition** → increment quantity. The header row's exact column set is the format version; a reader seeing unknown or missing columns must **fail loudly rather than mis-parse**. Keep a `.bak` of the previous write.
+Dedup identity is **`OracleId` + condition** → increment quantity; the name is display only, because keying on it breaks the first time Scryfall renames a card. **Condition is blank in v1** — the camera can't grade a card and nothing in the scan loop asks, and a column that always says "NM" would be false precision. Blank is a value like any other for dedup. The header row's exact column set is the format version; a reader seeing unknown or missing columns must **fail loudly rather than mis-parse**. Keep a `.bak` of the previous write.
 
 **Revisit when v2 adds printings, prices or scan history** — at that point SQLite earns its place. `ICollectionStore` is the seam, so that swap stays contained. That containment is the argument for starting simple, not a reason to pre-build for v2.
 
@@ -216,11 +218,13 @@ Only **derived** data is committed: the ~8.6 MB hash index and the accuracy tabl
 | Guard | Rule | Behaviour |
 |---|---|---|
 | `guard-write.sh` | Project state stays in the repo | **Denies** writes outside the repo. Claude's scratchpad and `/tmp` are exempt — temp files are legitimate, they just are not project state. |
-| `guard-write.sh` | Frozen contract surface | **Denies** edits to `Core/Abstractions/**`, `*.csproj`, `*.slnx` **only inside a linked worktree**, so Stream 0 can still author them on `main`. Detected via `--absolute-git-dir` ≠ `--git-common-dir`. |
+| `guard-write.sh` | Frozen contract surface | **Denies** edits to `Core/Abstractions/**`, `Core/Scanning/**`, `*.csproj`, `*.slnx` **only inside a linked worktree**, so Stream 0 can still author them on `main`. Detected via `--absolute-git-dir` ≠ `--git-common-dir`. |
 | `guard-bash.sh` | No force-push | **Denies** `--force`, `-f`, `--force-with-lease` on any `git … push`. The repo is public; rewriting history is unrecoverable for anyone who cloned it, and history is the audit trail for authorship and the imagery rule. |
 | `guard-bash.sh` | Publishing needs prior review | **Warns** (does not block) on plain `git push`, `gh pr create`, `gh repo create`, `gh release create`. Deliberately a tripwire rather than a wall — explicit go-aheads do happen, and a block would make pushing impossible. |
 
 Both were tested by piping synthetic payloads (16 cases). One defect surfaced: the force-push pattern originally matched only flag *names* between `git` and `push`, so `git -C /repo push --force` slipped through — a flag *value* broke it. The pattern is now deliberately loose, which is the safe direction, because the deny additionally requires a force flag.
+
+**`guard-write.sh` on the Windows PC** needed two fixes, both found by testing there rather than on the Mac. The repo root was hardcoded to the Mac path, so once `jq` was on `PATH` every write on Windows would have been denied as "outside the repo" — it is now derived from `git rev-parse --git-common-dir`, with `cygpath` normalising `C:\…` paths. And git 2.28 on the PC predates `--path-format=absolute`, which it echoes back as a literal line; that made the main checkout look like a linked worktree and froze the very surface Stream 0 must author. Both directories are now resolved by the shell. **Without `jq` on `PATH` the hook fails open** — winget installs it outside `PATH` until a new session starts.
 
 **After changing these, run `/hooks` or restart the session** — the settings watcher only watches directories that already had a settings file at session start, so a newly created `.claude/settings.json` is not live until then.
 
@@ -228,5 +232,5 @@ Both were tested by piping synthetic payloads (16 cases). One defect surfaced: t
 
 - **The README is written incrementally**, one section per stream as each earns it — not as a lump at the end.
 - **Nothing lands on GitHub without review first.** Draft, show the content, wait for explicit approval, *then* push. Local commits on a branch are fine; anything that becomes visible to other people is not.
-- **`Core/Abstractions` and every `.csproj` are frozen** once the streams fork. If a stream needs a contract change it stops and asks — a unilateral edit there is a four-way merge conflict.
+- **`Core/Abstractions`, `Core/Scanning` and every `.csproj` are frozen** once the streams fork. If a stream needs a contract change it stops and asks — a unilateral edit there is a four-way merge conflict.
 - **Chaos-test every regression test:** re-apply the bug, run only the new test, confirm it fails *for the right reason*, then revert. A test that merely passes may be vacuous. See `docs/TESTING.md`.

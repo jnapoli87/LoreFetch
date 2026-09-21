@@ -1,18 +1,19 @@
-# Stream D — Export adapters
+# Stream D — Collection & export
 
-**Short, fully isolated, and the stream that makes LoreFetch useful to people who already use something else.** Pure data transformation: read our rows, write somebody else's shape. No camera, no UI, no hash, no image processing.
+**Short, fully isolated, and the stream that owns the user's data.** It stores the collection and projects it into other tools' shapes. No camera, no UI, no hash, no image processing.
 
-Owns (exclusive write access): `LoreFetch.Core/Export/**`
-Consumes: `Core/Abstractions` — `CollectionRow`, `ICollectionExporter`, `ExportFormat` (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
-Must not touch: `LoreFetch.App`, `Core/Identification`, `Core/Imaging`, `LoreFetch.Capture`, any `.csproj`, `LoreFetch.slnx`
+Owns (exclusive write access): `LoreFetch.Core/Collection/**`, `LoreFetch.Core/Export/**`, `Tests/StreamD/**`, the stream D section of `README.md`
+Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat` (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
+Implements: `ICollectionStore`, and every `ICollectionExporter`
+Must not touch: `LoreFetch.App`, `Core/Identification`, `Core/Imaging`, `Core/Trigger`, `Core/Scanning`, `LoreFetch.Capture`, the fakes, any `.csproj`, `LoreFetch.slnx`
 
-Can start the moment Stream 0 lands, and can finish long before the others. Every adapter is a pure function over a row list, so this is the most testable stream in the project.
+Can start the moment Stream 0 lands, and can finish long before the others. The store is file-in/file-out and every adapter is a pure function over a row list, so this is the most testable stream in the project.
 
 ---
 
 ## The limitation to design around, not paper over
 
-v1 identifies the **oracle card only — no set, no collector number** (D7). The hash physically cannot distinguish printings that share art, so this isn't a gap to fill later in v1; it's inherent.
+v1 identifies the **oracle card only — no set, no collector number.** The hash physically cannot distinguish printings that share art, so this isn't a gap to fill later in v1; it's inherent.
 
 Most target formats key on exactly what we don't have:
 
@@ -29,9 +30,18 @@ The tempting alternative — the index knows an oracle id, so pick the most rece
 
 This limitation goes in the README, not just here.
 
+**Condition is the same shape of problem.** v1 never assesses a card's physical condition, so `CollectionRow.Condition` is always blank. Emit it as an empty field and let the target tool apply its own default — don't write "NM" to satisfy a parser.
+
 ---
 
 ## Tasks, in order
+
+### D0 — The collection store (`Core/Collection`)
+Implement `ICollectionStore` over the native CSV:
+- **Commit** every tile whose `State` is `Included` or `ManuallySet`. Tile → row: `Chosen` gives `OracleId`/`OracleName`; `ManuallySet` → `Source = Manual`, `BestMatchDistance` null; `Included` → `Source = Hash`, `BestMatchDistance = ChosenDistance`.
+- **Dedup on `OracleId` + `Condition`** → increment `Quantity`, update `LastScannedAt`. A blank condition is a value like any other.
+- **Write via temp-file + atomic rename**, keeping a `.bak` of the previous file. UTF-8 with BOM.
+- **Read through the native format's own parser**, which fails loudly on unknown or missing columns rather than mis-parsing.
 
 ### D1 — The native format, through the same seam
 Our own CSV store format **is the source of truth**, and every adapter projects *down* from it. It carries the full `CollectionRow` — `OracleId`, `OracleName`, `Quantity`, `Condition`, `LastScannedAt`, `BestMatchDistance`, `Source` — deliberately richer than any v1 adapter consumes, so the SOT never becomes the lossy bottleneck.
@@ -50,12 +60,13 @@ Pure-function tests, no I/O fixtures needed beyond in-memory streams:
 - names with `,` `"` `'` and non-ASCII survive a write→parse round trip
 - an empty collection produces a valid header-only file, not an empty file
 - quantity aggregation is preserved
-- blank printing columns are emitted as empty fields, not the literal `null`
+- blank printing and condition columns are emitted as empty fields, not the literal `null`
+- the store: commit increments rather than duplicates; an `Excluded` tile writes nothing; a `ManuallySet` tile writes `Source = Manual` with no distance; a crash between temp-write and rename leaves the previous file intact
 
 ### D4 — Manual import verification ⚠️ the part that actually matters
 **Import at least one generated file into the real tool and confirm it lands correctly.** An adapter that has never been imported is a guess with a test suite around it.
 
-This needs an account on the target and is a manual step — it cannot be automated or CI'd. Record the result (tool, date, row count, what it resolved printings to) in the README, so users know what's verified and what isn't.
+This needs an account on the target and is a manual step — it cannot be automated or CI'd. Record the result (tool, date, row count, what it resolved printings **and blank conditions** to) in the README, so users know what's verified and what isn't.
 
 ### D5 — Additional formats, if time allows
 Archidekt, Deckbox, Dragon Shield. Each is ~30 lines once the seam exists.
@@ -66,6 +77,7 @@ Archidekt, Deckbox, Dragon Shield. Each is ~30 lines once the seam exists.
 
 ## Done when
 
+- `ICollectionStore` commits cohorts with `OracleId` + condition dedup, atomic writes and a `.bak`.
 - The native CSV format is implemented as an `ICollectionExporter`, and the store uses it.
 - **Two** adapters implemented with exact headers and correct escaping.
 - **At least one** verified by a real import into the live tool, with the result recorded in the README.
@@ -98,3 +110,16 @@ Archidekt, Deckbox, Dragon Shield. Each is ~30 lines once the seam exists.
 2. **Format drift.** Community-documented shapes change without notice. Mitigated by keeping adapters tiny and citing sources, so a fix is minutes.
 3. **The printing gap is inherent, not temporary.** Users importing into a price-tracking tool will get default printings and therefore wrong valuations. This is a documentation problem, and under-documenting it is how the project gets a reputation for bad data.
 4. **CSV escaping is deceptively easy to get wrong**, and MTG card names are unusually hostile to naive writers — commas, quotes, apostrophes, em-dashes, accented characters and Unicode all appear in real card names.
+5. **The store is the one place user data can be silently corrupted.** A bad dedup key or a non-atomic write loses someone's collection. Everything else in the app can fail loudly; this can't.
+
+---
+
+## Plan review: research targets
+
+For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). Check each against primary sources — each tool's own import documentation, not blog posts — and record what you found, citing the source.
+
+1. **Moxfield and ManaBox import specs.** Exact headers, column order, required vs optional columns, quoting rules. Does each accept **name-only** rows (no set, no collector number)?
+2. **Blank condition.** What does each tool do on import when the condition column is empty — default to NM, reject the row, or reject the file?
+3. **Atomic rename on Windows.** Is `File.Move(temp, target, overwrite: true)` (or `File.Replace`) actually atomic on NTFS? This doc and `CONTRACTS.md` assert it; confirm or correct.
+4. **UTF-8 BOM.** Does each target tool's importer tolerate a BOM? A BOM that fixes Excel but breaks an importer is a per-adapter decision, not a global one.
+5. **The seam.** Can the store do everything in D0 with only `Cohort`, `CohortTile` and `CollectionRow` as the contract defines them?

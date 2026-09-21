@@ -2,9 +2,11 @@
 
 **Smallest stream, ~100–150 lines, and the only one that needs hardware.** Its whole job is to turn a C920 into `CameraFrame`s that satisfy `IFrameSource`.
 
-Owns (exclusive write access): `LoreFetch.Capture/**`
-Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
-Must not touch: `LoreFetch.App`, `LoreFetch.Core`, any `.csproj`, `LoreFetch.slnx`
+Owns (exclusive write access): `LoreFetch.Capture/**`, `Tests/StreamC/**`, the stream C section of `README.md`
+Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), including `ScanSettings` and the public `CameraFrame` constructor that takes a pooled buffer
+Must not touch: `LoreFetch.App`, anything else in `LoreFetch.Core`, any `.csproj`, `LoreFetch.slnx`
+
+Its only consumer is the scan pipeline, which reads exactly one `IFrameSource`.
 
 Library: **FlashCap 1.12.0** (Apache-2.0, actively maintained). Chosen over OpenCvSharp's `VideoCapture` for one specific reason — see below.
 
@@ -84,3 +86,16 @@ The C920 does MJPEG on-camera, so the host pays **zero encode** — but the app 
 2. **Frame buffer lifetime across the thread boundary.** Pooled buffers make ownership explicit, but a frame disposed while the UI is still reading it produces corruption that only appears under load. The contract says one owner at a time — verify the handoff honours it.
 3. **JPEG decode cost is unmeasured.** Could quietly consume a core.
 4. **This is the only stream that cannot be verified on the Mac**, so it leans on the Windows PC and the `windows-latest` CI leg. Keep it small and keep the interface boundary clean — that's the mitigation.
+
+---
+
+## Plan review: research targets
+
+For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). Check each against primary sources — FlashCap's repository and docs, Logitech's specs — and record what you found.
+
+1. **FlashCap 1.12.0 API.** Do `CaptureDevices().EnumerateDescriptors()`, `PixelFormats.JPEG` and the characteristic list exist as this doc describes? What does FlashCap hand the callback for an MJPEG stream — raw JPEG bytes, or decoded pixels?
+2. **Who decodes MJPEG to BGR, with what?** If FlashCap hands over JPEG, this stream must decode — with which library, and is it already among the packages Stream 0 will pin? Nothing can be added after the fork.
+3. **FlashCap on macOS.** `CLAUDE.md` says its macOS backend doesn't work. Does `LoreFetch.Capture` still *build* on the `macos-latest` CI leg? If not, CI needs a plan before Stream 0 writes it.
+4. **The C920 claims** — USB 2.0, YUYV capped at 5 fps at 1080p, MJPG at 30 — against Logitech's published characteristics.
+5. **Rotation cost.** `CameraRotationDegrees` defaults to 90, applied in the source. Is a 90° rotate of a 1080p frame at 30 fps cheap enough in managed code, or does it need a native call?
+6. **The seam.** Can every task here be done with only `IFrameSource`, `CameraFrame` and `ScanSettings`? In particular, how does a device-loss error reach the user through `ReadAsync`?

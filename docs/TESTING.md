@@ -1,6 +1,6 @@
 # Testing strategy
 
-Spans all three streams, so it belongs to the spine rather than to any one of them. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
+Spans all four streams, so it belongs to the spine rather than to any one of them. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
 
 ---
 
@@ -12,11 +12,11 @@ Neither is necessary, because **the contracts are frozen**. Two mechanisms avoid
 
 ### 1. The fakes make an end-to-end test possible on day zero
 
-Stream 0 ships `FolderFrameSource`, `StubCardDetector` and `StubCardIdentifier`. So the full path — frame source → detect → rectify → identify → cohort → commit → CSV — is **testable and green from H2**, long before the hash or the camera exist.
+Stream 0 ships the scan pipeline and five fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`). So the full path — frame source → detect → rectify → identify → cohort → commit → CSV — is **testable and green from the end of Stream 0**, long before the hash or the camera exist.
 
-It tests none of the hash's correctness. It tests the *wiring*: that the contracts compose, that cohort lifecycle and disposal behave, that exclude/discard semantics hold, that commit is idempotent, that the CSV shape is right. **That is where integration bugs actually live** — and across four worktrees, a test that fails the instant someone breaks a contract is the single highest-value guard available.
+It tests none of the hash's correctness. It tests the *wiring*: that the contracts compose, that frame ownership holds, that exclude/discard/clear semantics hold, that commit is idempotent, that the CSV shape is right. **That is where integration bugs actually live** — and across four worktrees, a test that fails the instant someone breaks a contract is the single highest-value guard available.
 
-It would, for instance, catch the `RectifiedCard`-lifetime footgun: commit a cohort, then read a tile's thumbnail.
+**Its frames are generated at test setup**, not committed: plain fills with a drawn rectangle, written to a temp folder that `FolderFrameSource` then reads. The stub detector ignores pixel content, so this exercises the real demo-path code with zero rasters in git. For the real-implementation cases, stream B's synthetic generator (B7) fills the same folder slot.
 
 ### 2. Real implementations reuse the same tests, gated by skip
 
@@ -44,21 +44,21 @@ Its corollary matters too: a skip that survives past its checkpoint is a bug, no
 | The fakes end-to-end test | Other streams' unfinished work |
 | That stream's own tests | Tests skipped for a missing artifact |
 
-Streams own disjoint directories, so their tests can't interfere with each other — which is what makes "green at every merge" achievable with four concurrent streams.
+Streams own disjoint directories — including `Tests/StreamA|B|C|D/`, with the end-to-end suite in `Tests/Integration/` owned by Stream 0 — so their tests can't interfere with each other — which is what makes "green at every merge" achievable with four concurrent streams.
 
 ## The five levels
 
 | Level | What it covers | Where it lives | Live from | Runs in CI? |
 |---|---|---|---|---|
-| **Unit** | Pure logic: trigger state machine, hash invariants, CSV store, quad filtering, escaping | each stream | as written | ✅ |
-| **Integration (fakes)** | Frame source → detect → rectify → identify → cohort → commit → CSV, all through stubs | Stream 0 | **H2** | ✅ |
+| **Unit** | Pure logic: trigger state machine, tile state transitions, hash invariants, CSV store, quad filtering, escaping | `Tests/Stream<X>/`, plus Stream 0 for the pipeline | as written | ✅ |
+| **Integration (fakes)** | Frame source → detect → rectify → identify → cohort → commit → CSV, all through stubs | Stream 0 | **end of Stream 0** | ✅ |
 | **Integration (real)** | The *same* tests with real implementations injected | Stream 0, impls swapped in | skips until the artifact exists | ✅ (skips, never red) |
 | **Accuracy** | Real fixture corpus: correct@1 / wrong@1 / no-match × height × difficulty | stream B, **local only** | when fixtures captured | ❌ images can't be committed |
 | **Hardware** | Live C920: negotiated format, sustained memory, live accuracy | manual on the Windows PC | stream C | ❌ |
 
 Note rows 2 and 3 are one test suite, not two. That is the whole point: parameterise over the implementation rather than duplicating the scenario.
 
-The synthetic frame generator (stream B, task B7) is what makes levels 2 and 3 possible at all. It is not a convenience — it's the only committable substitute for real captures.
+Level 2 needs no card imagery at all (frames are generated at setup). Level 3 does, which is where the synthetic frame generator (stream B, task B7) comes in: it is not a convenience — it's the only committable substitute for real captures.
 
 ---
 
@@ -74,24 +74,29 @@ The synthetic frame generator (stream B, task B7) is what makes levels 2 and 3 p
 - never fires on a count mismatch
 - `NotifyCaptured()` from the **manual** path suppresses an immediate auto-fire
 
+**`CohortTile` transitions** (Stream 0) — `ToggleExcluded` round-trips from both `Included` and `ManuallySet` back to where it started; `SetManually` nulls `ChosenDistance`; `Clear` returns to `Included` or `Unresolved` according to the best candidate, and is a no-op unless `ManuallySet`.
+
 **Hash invariants** (stream B) — assert properties, not golden byte values: scale invariance, stability under global brightness/gamma shift, and that an inverted image does *not* match.
 
-**CSV store** — upsert increments quantity; oracle-name + condition is the identity; the atomic temp-then-rename leaves no partial file; a malformed line is reported rather than silently dropped.
+**CSV store** (stream D) — upsert increments quantity; `OracleId` + condition is the identity, with a blank condition treated as a value; blank condition is written as an empty field, never `null`; the atomic temp-then-rename leaves no partial file; a malformed line is reported rather than silently dropped.
 
 ### Integration (synthetic) — stream B
 
 Generated frame at a known simulated height → the full query path → the expected oracle name. Includes **the round-trip gate**: a Scryfall render must retrieve *itself* at Hamming distance ≈ 0 **through the same code the scanner calls**, not a test-only shortcut. This is the test that catches reference/query transform divergence, which otherwise degrades matching silently rather than failing.
 
-### Integration (fakes, then real) — written in Stream 0, live from H2
+### Integration (fakes, then real) — written in Stream 0, live from the end of Stream 0
 
-One suite, parameterised over the implementation set: `[fakes]` from H2, `[real]` skipping until each artifact exists. `FolderFrameSource` → detector → rectifier → identifier → `Cohort` → `CommitCohortAsync` → assert the CSV on disk. Must cover:
+One suite in `Tests/Integration/`, parameterised over the implementation set: `[fakes]` from the start, `[real]` skipping until each artifact exists. `FolderFrameSource` → detector → rectifier → identifier → `Cohort` → `CommitCohortAsync` → assert the CSV on disk. Must cover:
 
 - an X'd tile is **absent** from the file
 - Escape (discard) writes nothing at all
-- a `ManuallySet` tile commits the corrected name, not the machine guess
+- a `ManuallySet` tile commits the corrected card with `Source = Manual` and no distance, not the machine guess
+- a *Cleared* tile commits the machine's proposal again
 - re-committing the same card increments quantity rather than adding a row
 - a partial cohort (7 cards where 9 were expected) commits 7
-- **a tile's thumbnail is still readable after the cohort commits** ← catches the `RectifiedCard` disposal footgun flagged in `CONTRACTS.md`, which otherwise surfaces as corrupt images during a demo
+- `Capture()` rectifies the frame its latest snapshot came from, not a newer one
+- every pooled `CameraFrame` is disposed exactly once over a sustained run
+- **a tile's thumbnail is still readable after the cohort commits** ← a regression guard: the old `RectifiedCard` disposal footgun was removed by construction, and this keeps it removed
 
 ### Accuracy — local only
 

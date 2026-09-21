@@ -8,7 +8,7 @@
 #      Claude's scratchpad is exempt — temp files are legitimate, they just
 #      are not project state.
 #
-#   2. Core/Abstractions and the project files are FROZEN once the four
+#   2. Core/Abstractions, Core/Scanning and the project files are FROZEN once the four
 #      streams fork. A unilateral edit there is a four-way merge conflict,
 #      and the contracts are the only reason the streams are independent.
 #      Enforced only inside linked worktrees, so Stream 0 on main can still
@@ -18,13 +18,21 @@
 
 set -eu
 
-REPO="/Users/jnapoli/Repos/LoreFetch"
+# The main checkout: the parent of the shared git dir, so every linked
+# worktree (which lives under .claude/worktrees/) resolves to the same root.
+# Derived rather than hardcoded so the guard works on the Windows PC too.
+REPO=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd -P || echo "/Users/jnapoli/Repos/LoreFetch")
 
 input=$(cat)
 path=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
 
 # Nothing to inspect (some tools omit file_path) — stay out of the way.
 [ -z "$path" ] && exit 0
+
+# Windows: tools pass C:\Repos\..., while pwd -P under Git Bash says /c/Repos/...
+case "$path" in
+  [A-Za-z]:\\*|[A-Za-z]:/*) command -v cygpath >/dev/null 2>&1 && path=$(cygpath -u "$path") ;;
+esac
 
 case "$path" in
   /*) abs="$path" ;;
@@ -48,7 +56,7 @@ deny() {
 case "$abs" in
   "$REPO"/*|"$REPO")
     ;;                                    # inside the repo — fine
-  /private/tmp/claude-*|/tmp/claude-*|/private/var/folders/*)
+  /private/tmp/claude-*|/tmp/claude-*|/private/var/folders/*|/tmp/claude/*)
     ;;                                    # scratchpad / temp — fine
   *)
     deny "LoreFetch keeps all project state in the repository. '$abs' is outside $REPO.
@@ -68,8 +76,11 @@ esac
 # In the main checkout, --absolute-git-dir == --git-common-dir. In a linked
 # worktree the former is <common>/worktrees/<name>, so they differ. $PWD
 # decides which worktree we are in, so these are resolved relative to it.
-wt_gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null || echo "")
-wt_common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "")
+# Both are resolved by the shell rather than with --path-format=absolute,
+# which git < 2.31 echoes back as a literal line — making the main checkout
+# look like a linked worktree and freezing the surface Stream 0 must author.
+wt_gitdir=$(cd "$(git rev-parse --git-dir 2>/dev/null)" 2>/dev/null && pwd -P || echo "")
+wt_common=$(cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P || echo "")
 
 in_linked_worktree=0
 if [ -n "$wt_gitdir" ] && [ -n "$wt_common" ] && [ "$wt_gitdir" != "$wt_common" ]; then
@@ -86,6 +97,15 @@ unilateral change here is a four-way merge conflict.
 
 If a contract genuinely needs to change: stop, say what and why, and change
 it once on main so every stream rebases onto the same surface."
+      ;;
+    */Core/Scanning/*|*/LoreFetch.Core/Scanning/*)
+      deny "Core/Scanning is FROZEN once the streams fork, and this is a linked worktree.
+
+The scan pipeline is contract surface: it is what composes every stream's
+implementation, and the end-to-end suite that guards the fork tests it.
+
+If the pipeline genuinely needs to change: stop, say what and why, and
+change it once on main so every stream rebases onto the same surface."
       ;;
     *.csproj|*.slnx|*.sln)
       deny "Project files are FROZEN once the streams fork, and this is a linked worktree.

@@ -9,15 +9,29 @@ The spine: sequencing, streams, integration, endgame. **Decisions live in [`../C
 | Document | Job | Who reviews it |
 |---|---|---|
 | [`../CLAUDE.md`](../CLAUDE.md) | Every settled decision, and why each rejected path stays rejected. Auto-loads for any session in this repo. | everyone, first |
-| [`CONTRACTS.md`](CONTRACTS.md) | The frozen seam that makes parallel streams possible | reviewed **before** streams fork |
-| **this file** | Sequencing, Stream 0, integration, endgame, cross-stream risks | spine reviewer |
-| [`stream-a-ui.md`](stream-a-ui.md) | Avalonia app, built against fakes | UI reviewer |
-| [`stream-b-identification.md`](stream-b-identification.md) | Hash port, index, detection, accuracy | identification reviewer ← *the risky one* |
-| [`stream-c-capture.md`](stream-c-capture.md) | FlashCap → `IFrameSource` | capture reviewer |
-| [`stream-d-export.md`](stream-d-export.md) | Native SOT format + third-party adapters | export reviewer |
-| [`TESTING.md`](TESTING.md) | Five test levels and what each must assert | spine reviewer |
+| [`../CONTEXT.md`](../CONTEXT.md) | The domain glossary — one word per concept | everyone |
+| [`CONTRACTS.md`](CONTRACTS.md) | The frozen seam that makes parallel streams possible | architecture review, then reconciliation |
+| **this file** | Sequencing, Stream 0, integration, endgame, cross-stream risks | architecture review |
+| [`stream-a-ui.md`](stream-a-ui.md) | Avalonia app, built against fakes | stream A reviewer |
+| [`stream-b-identification.md`](stream-b-identification.md) | Hash port, index, detection, accuracy | stream B reviewer ← *the risky one* |
+| [`stream-c-capture.md`](stream-c-capture.md) | FlashCap → `IFrameSource` | stream C reviewer |
+| [`stream-d-export.md`](stream-d-export.md) | Collection store, native format, third-party adapters | stream D reviewer |
+| [`TESTING.md`](TESTING.md) | Five test levels and what each must assert | architecture review |
+| [`stream-review-directions.md`](stream-review-directions.md) | How the four stream reviews are launched, run and handed back | the orchestrating session |
 
-Each stream doc is deliberately **self-contained enough to review in isolation** — it names what it owns, what it consumes, its done-when, its fallbacks, and a *"what a reviewer should scrutinise"* section.
+Each stream doc is deliberately **self-contained enough to review in isolation** — it names what it owns, what it consumes, its done-when, its fallbacks, a *"what a reviewer should scrutinise"* section for code review, and a *"Plan review: research targets"* section for the pre-build review.
+
+---
+
+## Review sequence — before any code
+
+Stream reviewers may propose contract changes, and Stream 0 freezes the contracts, so the reviews land **before** Stream 0 writes code:
+
+1. **Architecture review** — one full-context session. Settles boundaries, ownership and the contract surface, so each stream reviewer inherits a correct seam instead of reviewing a moving target. *Done 2026-09-21; merged to `main`.*
+2. **Four stream reviews, in parallel** — each in its own worktree forked from `main`, reading only its stream doc, `CONTRACTS.md` and `CONTEXT.md` (plus `CLAUDE.md`, which auto-loads). Isolation is the point: no cross-stream context muddying the research. See [`stream-review-directions.md`](stream-review-directions.md).
+3. **Reconciliation** — one full-context session reads all four "Proposed contract changes" sections *against each other* and applies the accepted ones to `CONTRACTS.md` once. Skipping this means four proposals get applied on their own terms.
+4. **Stream 0** builds and freezes.
+5. **Streams A–D fork.**
 
 ---
 
@@ -31,7 +45,7 @@ The replacement is a **ported perceptual hash** — CardSpotter, BSD-3-Clause, t
 
 ---
 
-## Stream 0 — Foundation · H0–H2 · serial, on `main`
+## Stream 0 — Foundation · H0–~H3.5 · serial, on `main`
 
 The only strictly serial work. Everything downstream forks from this commit, so **its job is to make the four streams independent**, not to build features.
 
@@ -46,21 +60,23 @@ The only strictly serial work. Everything downstream forks from this commit, so 
 - **Claude Code hooks** in `.claude/` — two `PreToolUse` guards, tested against 16 synthetic payloads. They mechanise the two rules that were previously discipline only: project state stays in the repo, and the **frozen contract surface** is unwritable from inside a linked worktree (detected via `--absolute-git-dir` ≠ `--git-common-dir`, so `main` can still author it). Plus a hard block on force-push and a tripwire warning on plain `git push` / `gh pr create`. See `../CLAUDE.md`.
 - All planning documents.
 
-Remaining:
+Remaining — **~3.5h**, up from the original ~2h because the architecture review moved the scan pipeline and two more fakes here. They can't move into a stream: the end-to-end suite proves the pipeline, so it must exist before the fork.
 
+0. **Prove `OpenCvSharp4.runtime.osx.arm64` on the Mac, first.** `Core` references OpenCvSharp (for `Core/Imaging` and `FolderFrameSource`), so stream A's demo path depends on a package with exactly one release. Load it and run one `Cv2` call before anything else. If it fails, you find out before the fork, not after.
 1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`. Pin Avalonia 12.1.2 and OpenCvSharp 4.13.0.20260627 now. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`.
 2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
-3. **The three fakes** — `FolderFrameSource`, `StubCardDetector`, `StubCardIdentifier` (with configurable distances so the UI can reach all four `TileState` values). These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
-4. **The end-to-end integration suite, green from H2.** Written here, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, cohort lifecycle and disposal, exclude/discard semantics, commit idempotency, CSV shape. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
-5. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
-6. **README skeleton** — title, description, GPLv3 note, WotC Fan Content disclaimer.
-7. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
+3. **`Core/Scanning`** — the scan pipeline: detection loop, capture from the latest snapshot's frame, threshold application, trigger calls. Then **frozen**.
+4. **The five fakes** — `FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier` (configurable distances so the UI can reach all four `TileState` values), `StubOracleCatalog`. These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
+5. **The end-to-end integration suite, green from the end of Stream 0.** Written here in `Tests/Integration/`, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, frame ownership, exclude/discard/clear semantics, commit idempotency, CSV shape. Its frames are **generated at test setup** into a temp folder (plain fills with a drawn rectangle — the stub detector ignores content), so no raster is ever committed. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
+6. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
+7. **Shared-write scaffolding** — `Tests/StreamA|B|C|D/` folders, and a **README skeleton** (title, description, GPLv3 note, WotC Fan Content disclaimer) with **one headed section per stream**. Each stream edits only its own folder and its own section, so parallel edits merge cleanly.
+8. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
    - Lighting and mat first: SAD lamp off-axis at a shallow angle, check for PWM banding on a blank frame, and test light/mid/dark mat since black-bordered cards on a dark mat is the worst case for edge detection.
    - **Never commit these images** — gitignored, and backed up outside git.
 
 **Done when:** all four streams can be forked into worktrees and each builds green with nothing stubbed out beyond the intended fakes. The identity guard is proven by a refused commit.
 
-> ⚠ **Items 1 and 2 are hard blockers on forking, not nice-to-haves.** `.claude/hooks/guard-write.sh` **refuses** edits to `Core/Abstractions/**`, `*.csproj` and `*.slnx` from inside a linked worktree. That is the intended design — it is what makes the frozen contract surface real rather than aspirational — but the consequence is that **a missing package reference or an incomplete contract cannot be fixed from a stream.** Fork four worktrees with a `.csproj` gap and all four are blocked until someone goes back to `main`.
+> ⚠ **Items 1, 2 and 3 are hard blockers on forking, not nice-to-haves.** `.claude/hooks/guard-write.sh` **refuses** edits to `Core/Abstractions/**`, `Core/Scanning/**`, `*.csproj` and `*.slnx` from inside a linked worktree. That is the intended design — it is what makes the frozen contract surface real rather than aspirational — but the consequence is that **a missing package reference or an incomplete contract cannot be fixed from a stream.** Fork four worktrees with a `.csproj` gap and all four are blocked until someone goes back to `main`.
 >
 > So before creating any worktree: every project exists, every package a stream could plausibly need is already referenced, and `Core/Abstractions` compiles and is reviewed. Over-reference rather than under-reference — an unused `PackageReference` costs nothing, a missing one costs a fork-wide stall.
 
@@ -68,18 +84,20 @@ Remaining:
 
 ---
 
-## Streams A–D · fork at H2 · four git worktrees
+## Streams A–D · fork at ~H3.5 · four git worktrees
 
 Sized, not clock-boxed. **It is fine for one to finish long before another** — no stream blocks another by construction.
 
 | Stream | Owns (exclusive write) | Size | Needs hardware? | Risk |
 |---|---|---|---|---|
-| [**A — UI**](stream-a-ui.md) | `App/**` | ~10h | no | low |
+| [**A — UI**](stream-a-ui.md) | `App/**`, `Core/Trigger/**` | ~10h | no | low |
 | [**B — Identification**](stream-b-identification.md) | `Core/Identification/**`, `Core/Imaging/**`, `Lab/**` | ~10h | no (fixtures only) | **highest** |
 | [**C — Capture**](stream-c-capture.md) | `Capture/**` | ~4h | **yes** | medium |
-| [**D — Export**](stream-d-export.md) | `Core/Export/**` | ~3h | no | low |
+| [**D — Collection & export**](stream-d-export.md) | `Core/Collection/**`, `Core/Export/**` | ~4h | no | low |
 
-**Shared and frozen:** `Core/Abstractions/**`, every `.csproj`, `LoreFetch.slnx`.
+Each stream also owns `Tests/Stream<X>/**` and its own README section. Full table, including what each consumes and must not touch: [`CONTRACTS.md`](CONTRACTS.md#stream-boundaries).
+
+**Shared and frozen:** `Core/Abstractions/**`, `Core/Scanning/**`, every `.csproj`, `LoreFetch.slnx`.
 
 > **The rule that makes this work:** if a stream needs a contract change, **it stops and asks.** It does not edit `Abstractions` unilaterally. Every unilateral change there is a four-way merge conflict, and the contracts are the entire reason the streams are independent.
 
@@ -93,10 +111,10 @@ Swap fakes for real implementations: `StubCardIdentifier` → the hash, `StubCar
 
 This is where the bugs live, and they will be **lifetime and threading bugs**, not logic bugs — because that's what the seams hide:
 
-1. **`RectifiedCard` lifetime versus the cohort grid.** `Cohort` is `IDisposable` and owns its tiles' buffers. If the UI bound them into a long-lived list, the thumbnails are reading freed memory — which looks fine in dev and fails during a demo. Flagged as an open question in [`CONTRACTS.md`](CONTRACTS.md); resolve it here at the latest.
-2. **Frame buffer handoff across the capture thread boundary.** Pooled buffers make ownership explicit; verify one owner, one `Dispose`.
-3. **Real thresholds replace placeholders.** `GoodDistance` / `OkDistance` come from stream B's calibration. Grep for any hardcoded distance anywhere in A, C or D.
-4. **Flip the skip gate.** The end-to-end suite already exists and has been green since H2 against the fakes ([`TESTING.md`](TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
+1. **Frame retention across the pipeline callback.** `FrameProcessed` hands the UI a frame that is valid only for the callback. If the preview kept a reference instead of copying, it reads a recycled pooled buffer — fine in dev, torn frames under load. (The old `RectifiedCard`-lifetime hazard is gone by construction: rectified cards are unpooled.)
+2. **Frame buffer handoff across the capture thread boundary.** Pooled buffers make ownership explicit; verify one owner, one `Dispose`, from `WebcamFrameSource` through the pipeline.
+3. **Real thresholds replace placeholders.** `GoodDistance` / `OkDistance` come from stream B's committed thresholds file. Grep for any hardcoded distance anywhere outside `Core/Scanning`.
+4. **Flip the skip gate.** The end-to-end suite already exists and has been green since the end of Stream 0 against the fakes ([`TESTING.md`](TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
 
 **Done when: the skip count reaches zero.** That's the whole definition — the end-to-end suite runs against real implementations throughout, with nothing gated out. Mechanical rather than a judgement call.
 
@@ -134,7 +152,7 @@ Stream-specific risks live in each stream doc. These span the whole build:
 
 1. **Glare, focus and tilt — not resolution.** The top items in Wizards' own SpellTable troubleshooting list, and they destroy the local-median bit pattern. Physical mitigation, settled during Stream 0's fixture capture. **This is the most likely reason the project underperforms**, and no amount of code fixes it.
 2. **Reference/query transform divergence** (stream B). Degrades matching *silently* rather than failing. Guarded by the round-trip gate; structurally mitigated by the index builder and the scanner sharing one transform function rather than two that agree.
-3. **Contract churn after the fork.** The failure mode of the whole parallel structure. Mitigated by freezing `Abstractions` and the stop-and-ask rule — but it depends on discipline, so it's a real risk.
+3. **Contract churn after the fork.** The failure mode of the whole parallel structure. Mitigated by freezing `Abstractions` and `Scanning` (hook-enforced), by reviewing the contracts per stream *before* the freeze, and by the stop-and-ask rule.
 4. **Four streams, one reviewer.** Parallelism shifts load from writing to reviewing and integrating. The per-stream reviewer agents are the mitigation; the integration budget is the honest cost.
 5. **`OpenCvSharp4.runtime.osx.arm64` has exactly one release** (2026-06-27, ~6k downloads). No bug reports, which may mean "works" or "unused." Dev-only — worst case, local CV testing is lost and we lean on the PC beside us.
 6. **The fixture corpus can't be committed**, so CI accuracy runs on synthetic frames while real numbers live locally. Accept the divergence; back the corpus up outside git.
