@@ -373,7 +373,7 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   `Restore` and `Build` stay as separate steps even though `lorefetch.sh test` builds too, so a build failure reads as a build failure in the CI UI instead of being buried in a test step. The duplicate work is seconds of incremental build.
 
   The file itself documents what is deliberately *not* run: Accuracy (a committed measurement, and it needs the uncommittable fixture corpus), Hardware (needs the C920), and the `Real` cases, which skip by construction because they need the index and the Scryfall cache — which is exactly why "integration is done" is V7's local `LOREFETCH_REQUIRE_REAL=1` run and not zero skips in CI.
-- [ ] **S0.7** Scaffolding:
+- [x] **S0.7** Scaffolding:
   - one placeholder test per `Tests/StreamX` project, so each builds and runs
   - README: add a `## Stream A — UI` … `## Stream D — Collection & export` section skeleton, and keep the existing content
   - `THIRD-PARTY-NOTICES` untouched (entries are added at integration)
@@ -384,12 +384,53 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   Verified against a throwaway `.slnx` solution in the scratchpad (an exe project plus an xunit v3 test project with one plain, one `WindowsOnly` and one `Hardware` test): build, `.slnx` handling, per-platform filtering, app arg passthrough, the dirty-tree pull refusal, and every argument-error path. **Two findings came out of that and are carried as overrides below — see S0.1 and S0.2.**
 
   *Re-verify after S0.1 lands, when there is a real solution to point it at.*
-- [ ] **S0.8** 🧭 **Freeze review.**
+- [x] **S0.8** 🧭 **Freeze review.**
   - Diff `Core/Abstractions` against CONTRACTS.md member by member.
   - Confirm the identity guard with a refused commit (`GIT_AUTHOR_EMAIL=someone@example.com`).
   - Run `dotnet test` on the whole solution.
   - Commit `Stream 0: foundation`.
 - [ ] **P1** 👤 Push checkpoint. Show the summary and wait for approval, then push `main`. Both CI legs must be green, and a red leg sends the work back to S0.
+
+### Handoff — written at S0.8, 2026-09-21
+
+**Stream 0 is complete. G1 is the next gate, and P1 (the push + both CI legs green) is the only thing between here and forking.** This section exists because the orchestrating session that built Stream 0 ended here deliberately, and four things it learned live nowhere else. Everything else is already recorded against its own item — that was the point of writing findings down as they landed rather than saving them for a summary.
+
+**Read this file first. The checkboxes are the truth**, not any summary, including this one.
+
+#### 1. What every brief carried beyond §0's template
+
+The template is necessary and not sufficient. These additions are why packages came back with real findings instead of clean-looking passes, and a brief without them will get worse work:
+
+- **"Do NOT trust exit code 0 from `dotnet test`."** State the measurement: it exits 0 while running **zero** tests, both when no adapter is registered and when a filter matches nothing. Require the implementer to read the `Passed:`/`Total:` counts and **quote the summary line verbatim** in its report. Without this, several packages would have reported success having run nothing.
+- **Per-package chaos cases, named explicitly, with an escape valve.** Do not just cite the standing practice — say *which* invariant to break and what failure to expect. And always add: *"if nothing fails, say so plainly — that means the test is too weak, and it needs strengthening rather than a passing grade."* That clause produced the single most valuable result in Stream 0 (S0.5b's null-vs-`""` coverage hole, which 79 tests missed) and it is what stops an implementer reporting a vacuous pass.
+- **"Mention but do NOT stop or cut scope for ~400 lines."** The template originally had this as a STOP condition, which invites deleting a guard or a test to get under a number. It is a scope-drift tripwire.
+- **Read-the-existing-code-first, with counts.** Tell the implementer how many tests currently pass and that every one must stay green. Then, where a package's nominal case list overlaps earlier work, **require it to justify what it adds and name the test that already covers what it skips.** S0.6b correctly declined three of five cases on that instruction — and found a real gap in the fourth.
+- **Name the write scope as globs and say "anything else is out of scope."** Every package respected it; the one deviation worth having (`StubCollectionStore.Seed`) was reported rather than smuggled.
+
+#### 2. Verify packages; do not accept reports
+
+§0's five verification steps are the floor. What actually caught things: **independently re-running one chaos case per package** rather than trusting the implementer's account of it. Twice that changed the outcome — a boundary off-by-one in S0.3b that the implementer had not tested (flipping `<=` to `<` fails 3 tests), and confirmation that breaking the pipeline's ownership transfer yields **114 silent torn-frame reads** rather than a throw. Once it corrected *me*: my prediction that a `SetManually` regression would fail the store-level test was wrong, for a structural reason now recorded against S0.6b.
+
+Also: after any commit that was supposed to tick a checkbox, **re-read the checkbox.** A plan-edit script silently no-op'd twice while the commit went ahead anyway.
+
+#### 3. A fresh clone has NO guards. Run `scripts/lorefetch.sh setup`.
+
+`hooks/pre-commit` is tracked so the *file* survives a clone, but **`core.hooksPath` is config and config does not clone** — and with `user.email` unset, git falls back to the global identity, which on these machines is a work address. So a fresh clone commits under the wrong identity into a public repo **with the hook that exists to refuse that not running at all.** Verified on a real clone. `scripts/lorefetch.sh setup` wires identity, `hooksPath` and the SSH key pin, repo-locally; `doctor` now **exits non-zero** when the guards are not live rather than mentioning it among other notes.
+
+#### 4. History was rewritten on 2026-09-21. Every SHA changed.
+
+Any clone predating that must `git fetch && git reset --hard origin/main` — **not** merge, which would resurrect the old history. Prefer the in-place reset over re-cloning precisely because of §3. A bundle of the pre-rewrite state was left in that session's scratchpad and is gone now; the rewrite was verified by cloning from GitHub and grepping every commit's content, messages and trees.
+
+#### 5. Open threads deliberately left
+
+| Thread | Where |
+|---|---|
+| The single-printing fraction, deferred from the `ArtworkId` ruling | open question on **B4a** |
+| Whether the real `CsvCollectionStore` re-derives or trusts the tile for `Manual` rows | finding under **S0.6b**, decided by **D3** |
+| `null` vs `""` and the `ArtworkId` fold must be tested through a written **file**, not a commit | overrides on **D1/D3** |
+| `indexSha256`/`notes` defaulting to `""` is not covered | noted under **S0.4b** |
+| `InternalsVisibleTo` Capture → Tests.StreamC is declared but unprovable — `Capture` has no code yet | **C1a** should replace StreamC's placeholder with a real internal-touching test |
+| `THIRD-PARTY-NOTICES` advisory is non-empty by design until **I5** | the hook prints it, deduplicated, on every commit |
 
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
