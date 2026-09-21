@@ -63,8 +63,8 @@ These came from checking the merged plan against itself, the environment on this
 | V1 | **The .NET 10 SDK is not installed on this PC.** `dotnet --list-sdks` shows 7.0.x and 8.0.x only, so Stream 0's `net10.0` pin cannot even be attempted. | G0.1 (👤 install) |
 | V2 | **`jq` is not on `PATH`.** `guard-write.sh` fails open without it, so the frozen-surface guard is currently doing nothing. | G0.2 |
 | V3 | **`guard-write.sh` decides "linked worktree" from the session's working directory, not from the target file.** A subagent started from `main` (which is how the Agent tool launches them) can write into `.claude/worktrees/stream-x/…/Core/Abstractions` unchallenged. The Windows scratchpad (`/c/Users/*/AppData/Local/Temp/claude/*`) is also not exempt, and neither are the CPM files, `Core/Fakes/` or `Tests/Integration/`. | G0.6 |
-| V4 | **Drop `OpenCvSharp5.AvaloniaExtensions`.** Its latest release (5.0.0.20260905) depends on **`OpenCvSharp5`** and on Avalonia **12.1.1**. That is a second, different-major OpenCvSharp binding next to `OpenCvSharp4` 4.13. It is not needed either: frames cross the seam as `byte[]`, and the App blits them into its own `WriteableBitmap`. Its version was also left unpinned ("—"). | G0.5; S0.1 does not reference it |
-| V5 | **The test stack is unpinned.** `Avalonia.Headless.XUnit` 12.1.2 depends on `xunit.v3.extensibility.core` 3.2.2, so the suite must use **xunit v3** (TESTING.md's `Assert.Skip` is also a v3 API). Pin `xunit.v3`, `xunit.runner.visualstudio` 3.x and `Microsoft.NET.Test.Sdk`. Also add `Microsoft.Extensions.Logging` plus a sink (`.Console`), or stream C's "the log shows…" criteria are never visible. "current" is not a pin: pin `CsvHelper` and `M.E.Logging.Abstractions` exactly. | G0.5, S0.1 |
+| V4 | **Drop `OpenCvSharp5.AvaloniaExtensions`.** Its latest release (5.0.0.20260905) depends on **`OpenCvSharp5`** and on Avalonia **12.1.1**. That is a second, different-major OpenCvSharp binding next to `OpenCvSharp4` 4.13. It is not needed either: frames cross the seam as `byte[]`, and the App blits them into its own `WriteableBitmap`. Its version was also left unpinned ("—"). | **Fixed 2026-09-21** in CLAUDE.md's stack table and PLAN's package table. S0.1 does not reference it. |
+| V5 | **The test stack is unpinned.** `Avalonia.Headless.XUnit` 12.1.2 depends on `xunit.v3.extensibility.core` 3.2.2, so the suite must use **xunit v3** (TESTING.md's `Assert.Skip` is also a v3 API). Pin `xunit.v3`, `xunit.runner.visualstudio` 3.x and `Microsoft.NET.Test.Sdk`. Also add `Microsoft.Extensions.Logging` plus a sink (`.Console`), or stream C's "the log shows…" criteria are never visible. "current" is not a pin: pin `CsvHelper` and `M.E.Logging.Abstractions` exactly. | The xunit v3 half was **fixed 2026-09-21** in PLAN's package table and CLAUDE.md. S0.1 still pins exact versions and adds the logging sink. |
 | V6 | **TESTING.md is stale on hashing.** It says to assert "properties, not golden byte values" and lists scale invariance. Stream B requires committed golden hashes and says scale is a *bound*, not an invariant. The user has also ruled that goldens run on **Windows only** (INTER_AREA is not bit-exact on ARM64, and `macos-latest` is ARM64). | G0.5 propagates to CLAUDE.md, TESTING.md, stream-b and PLAN.md |
 | V7 | **"Integration is done when the skip count reaches zero" cannot be met in CI.** The real-implementation cases need the index, Scryfall renders and fixtures, and imagery can never be committed. **Redefined:** zero artifact-gated skips on the orchestrator's **local win-x64 run** with `LOREFETCH_REQUIRE_REAL=1`, which turns every such skip into a failure. CI skips are allowed and must each state a reason. | S0.6a, I6 |
 | V8 | **Stream 0 cannot write `[real]` integration cases.** They reference types that will not exist until B, C and D land, and code that does not compile cannot be skipped. **Resolved:** the suite is parameterised over an `IImplementationSet` provider. `Fakes` exists from S0. `Real` is a stub that skips with a reason until integration fills it in. The concrete type names are fixed now (§4) so wiring them is mechanical. | S0.6a, I1–I3 |
@@ -92,10 +92,10 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
 ```
 
 ### ⛩ G0 — Preconditions (on `main`)
-- [ ] **G0.1** 👤 Install the .NET 10 SDK. Accept: `dotnet --list-sdks` shows 10.0.x.
-- [ ] **G0.2** 👤 Put `jq` on `PATH`, then restart the session. Accept: `jq --version`, and the guard denies a synthetic write to `Core/Abstractions/X.cs` from inside a test worktree.
+- [x] **G0.1** 👤 Install the .NET 10 SDK. Accept: `dotnet --list-sdks` shows 10.0.x. — *done 2026-09-21: 10.0.401.*
+- [x] **G0.2** 👤 Put `jq` on `PATH`, then restart the session. Accept: `jq --version`, and the guard denies a synthetic write to `Core/Abstractions/X.cs` from inside a test worktree. — *done 2026-09-21: jq-1.8.2; guard denied the synthetic write from a linked worktree. The cwd hole (V3) remains for G0.6.*
 - [ ] **G0.3** 👤 Confirm Mac access for S0.0 and an attached C920 for H6. If no Mac is available, record that S0.0 is waived and that Risk 7 is accepted.
-- [ ] **G0.4** 🧭 `.gitignore`: add `.claude/worktrees/`, `.idea/` and `.claude/skills/` (or commit skills deliberately), and fix the size comment. Accept: `git status` on `main` is clean.
+- [ ] **G0.4** 🧭 `.gitignore`: add `.claude/worktrees/`, `.idea/` and `.claude/skills/` (or commit skills deliberately), and fix the size comment. Accept: `git status` on `main` is clean. — *Partly done 2026-09-21: `.claude/worktrees/`, `.idea/` and the size comment are fixed, and `test-images/` was added as the local imagery folder. Still open: decide whether to ignore or commit `.claude/skills/`, then confirm on `main` after the merge.*
 - [ ] **G0.5** 🧭 Doc fixes, docs only:
   - Drop `OpenCvSharp5.AvaloniaExtensions` from PLAN's package table and CLAUDE's stack table (V4).
   - Add the test and logging packages (V5).
@@ -210,8 +210,8 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
   - heights 8, 10, 12, 14 and 20″
   - 1, 3 and 9 layouts, some rotated
   - lands, normal cards and stretch cards
-  - store them in the gitignored `fixtures/<height>in/<layout>/…jpg`
-  - ground truth goes in `fixtures/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
+  - store them in the gitignored `test-images/fixtures/<height>in/<layout>/…jpg` (same relative path on the Mac and the PC; see `test-images/README.md`)
+  - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
 
   Gates B6.

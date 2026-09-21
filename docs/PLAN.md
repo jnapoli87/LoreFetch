@@ -70,12 +70,12 @@ Remaining — **~4h**, up from the original ~2h: the architecture review moved t
    | Package | Version | For |
    |---|---|---|
    | `Avalonia`, `.Desktop`, `.Themes.Fluent`, `.Controls.DataGrid` | 12.1.2 | A |
-   | `Avalonia.Headless.XUnit` | 12.1.2 | A — the only way to test the keyboard map automatically |
+   | `Avalonia.Headless.XUnit` | 12.1.2 | A — the only way to test the keyboard map automatically. **Depends on `xunit.v3.extensibility.core` 3.2.2, so the whole suite is xunit v3** |
+   | `xunit.v3`, `xunit.runner.visualstudio` (3.x), `Microsoft.NET.Test.Sdk` | exact, pinned in S0.1 | every test project — v3 is forced by the row above, and `Assert.Skip` is a v3 API |
    | `AvaloniaUI.DiagnosticsSupport` | 2.2.3 | A — DevTools; **may require a paid tier**, see `RECONCILIATION.md` |
    | `CommunityToolkit.Mvvm` | 8.4.2 | A |
    | `OpenCvSharp4` | 4.13.0.20260627 | B, C, Core |
    | `OpenCvSharp4.runtime.win` / `.runtime.osx.arm64` | matching | B, C, Core |
-   | `OpenCvSharp5.AvaloniaExtensions` | — | A, Mat→screen |
    | `FlashCap` | 1.12.0 | C |
    | `Microsoft.Extensions.Logging.Abstractions` | current | **the logging seam** — C's done-when criteria are phrased "the log shows…" |
    | `CsvHelper` | current (Apache-2.0 option) | D — insurance only; `TextFieldParser` is in-box and no library gives the unknown-column guard |

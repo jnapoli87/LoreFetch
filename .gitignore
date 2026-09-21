@@ -89,6 +89,17 @@ scryfall-cache/
 collection.csv
 collection.csv.bak
 
-# Generated hash index is committed on purpose (derived fingerprints, ~8.6 MB,
+# Generated hash index is committed on purpose (derived fingerprints, ~8.2 MiB,
 # no imagery) — but the raw downloads that built it are not.
 scryfall-bulk/
+
+# Local test imagery: same relative path on the Mac and the PC, never pushed.
+# Everything inside is ignored (not just rasters — ground-truth CSVs name real
+# cards next to real photos); only the README that explains the folder is tracked.
+test-images/*
+!test-images/README.md
+
+# Local tooling and linked worktrees — a `git add -A` on main must never pick
+# up a worktree as an embedded repository.
+.claude/worktrees/
+.idea/
