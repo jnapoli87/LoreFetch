@@ -1,17 +1,5 @@
 namespace LoreFetch.Core.Abstractions;
 
-// NOTE (package S0.3a): `ICollectionStore` is specified in docs/CONTRACTS.md
-// immediately alongside these types, but its `CommitCohortAsync(Cohort, ...)`
-// member takes `Cohort`, which is owned by package S0.3b and does not exist
-// anywhere in this codebase yet. S0.3a's write scope explicitly excludes
-// creating `Cohort`/`CohortTile`/`TileState`/`CaptureReason`. Adding
-// `ICollectionStore` here without `Cohort` would fail the whole solution's
-// build (an undefined-type compile error), and inventing a stand-in `Cohort`
-// would be exactly the kind of unilateral change to a frozen contract member
-// this package is told not to make. `ICollectionStore` is therefore deferred
-// to land in the same file once S0.3b has added `Cohort` — see the STOP
-// report for the verbatim interface to add at that point.
-
 public enum RowSource
 {
     Hash,
@@ -32,6 +20,23 @@ public readonly record struct CollectionRow(
     DateTimeOffset LastScannedAt,
     int? BestMatchDistance, // null when Source is Manual
     RowSource Source);
+
+public interface ICollectionStore
+{
+    /// Commits every tile whose State is Included or ManuallySet.
+    /// Tile → row: Chosen gives OracleId/OracleName; ManuallySet → Source.Manual
+    /// with BestMatchDistance null; Included → Source.Hash with ChosenDistance.
+    /// Returns the number of CARDS committed — the sum of the quantity
+    /// increments, not the number of rows touched. Committing nine basic
+    /// lands returns 9, which is the number a UI shows the user; the rows
+    /// affected would be 1 and would read as a bug.
+    /// Duplicate tiles within one cohort are folded before writing.
+    /// Throws CollectionStoreException when the file cannot be replaced —
+    /// the caller keeps its cohort and can retry.
+    Task<int> CommitCohortAsync(Cohort cohort, CancellationToken ct);
+
+    Task<IReadOnlyList<CollectionRow>> ListAsync(CancellationToken ct);
+}
 
 /// The collection file could not be read or replaced — most often because
 /// Excel holds it open on Windows. Recoverable by construction: the caller
