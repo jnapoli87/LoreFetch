@@ -228,7 +228,7 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   Expect this leg to be **red until S0.7** adds the placeholder tests, because five test projects with zero tests is itself a zero-test run. That is the guard working, not a defect.
 > **Where Stream 0's own unit tests go.** S0.3a, S0.3b, S0.4b, S0.5a and S0.5b all say *"Accept: unit tests"*, but Stream 0 owns exactly one test project: **`Tests/Integration`** (CONTRACTS.md §Stream boundaries — *"Owned by Stream 0, not edited by streams: the fakes, `Tests/Integration/**`"*; TESTING.md tags the `CohortTile` unit cases *"(Stream 0)"*). So they go there, in their own files, alongside the end-to-end suite. They must **not** go in `Tests/StreamA|B|C|D`, which the streams own and may edit — a stream could then weaken or delete a foundation test. The project name is a wart, and a sixth `Tests/Foundation` project was considered and rejected: V18 fixed the count at five and S0.1 has already created and proven them, so adding one now is a plan change for a naming preference. Revisit before G1 if the wart is worth a project.
 
-- [ ] **S0.3a** `Core/Abstractions`, types and interfaces, **verbatim from CONTRACTS.md**:
+- [x] **S0.3a** `Core/Abstractions`, types and interfaces, **verbatim from CONTRACTS.md**:
   - frames, `FrameGeometry`, `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`
   - `PointF2`, `CardQuad` (computed `AreaPx` and `AspectRatio`), `ICardDetector`, `RectifiedCard`, `IRectifier`
   - `CardCandidate` (with `ArtworkId`), `ICardIdentifier`, `OracleEntry`, `IOracleCatalog`
@@ -236,9 +236,19 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - `ScanSettings`, whose rotation setter throws on anything other than 0, 90, 180 or 270
 
   `CameraFrame` returns its buffer to the pool exactly once, and `Dispose` is idempotent. There are no OpenCvSharp types anywhere in the contract surface. Accept: unit tests for `CameraFrame` (disposing twice returns the buffer once, counted with a test pool), for `CardQuad` maths, and for the `ScanSettings` rotation guard.
-- [ ] **S0.3b** `Cohort`, `CohortTile` and `TileState` with public constructors (V10). Accept: every `CohortTile` case in TESTING.md §Unit passes, plus these:
-  - the initial state follows the table at ≤good, ≤ok and >ok, and with no candidates
+
+  *Done 2026-09-21 (`aad179c`), verified independently.* 6 source files + 3 test files, every path in scope, faithful to CONTRACTS.md member by member with the doc comments carried across. Clean Release build at 0 warnings; **`grep -rn OpenCvSharp` over the directory is empty**, so the no-CV-on-the-seam invariant holds. `Passed! Failed: 0, Passed: 14, Total: 14`.
+  - Dispose-once uses `Interlocked.Exchange(ref _buffer, null)` rather than a bool, so the pool return survives re-entry — stronger than the contract's "not thread-safe" floor, at no cost.
+  - `Pixels` is sliced to `Stride*Height` in the constructor, once, so no reader can see the pool's round-up.
+  - `AspectRatio` averages opposite sides then divides long/short, so it reads ~1.397 in either orientation.
+  - The three chaos tests were reported, and **the orchestrator re-ran the dispose-once one independently** rather than trusting the report: with `Interlocked` removed the test fails `Expected: 1, Actual: 3` — three `Dispose()` calls, three pool returns, which is exactly the double-return bug and not an incidental failure. Reverted; 14/14 green again.
+
+  ⚠ **Plan defect found here, not an implementer error: `ICollectionStore` was listed under S0.3a but cannot compile until S0.3b.** Its only cohort member is `CommitCohortAsync(Cohort, …)`, and `Cohort` is S0.3b's. So S0.3a was never completable as written — the split ran through the middle of a dependency. The implementer correctly stopped, left the rest building clean, and recorded a NOTE rather than inventing a stand-in `Cohort`, which would have been a unilateral edit to a surface about to freeze. **Resolution: `ICollectionStore` moves to S0.3b**, which also deletes that NOTE. Nothing else in S0.3a was affected.
+- [ ] **S0.3b** `Cohort`, `CohortTile`, `TileState` and `CaptureReason` with public constructors (V10), **plus `ICollectionStore`, moved here from S0.3a** — see the defect note above; it cannot compile before `Cohort` exists, and S0.3b also deletes S0.3a's deferral NOTE from `Collection.cs`. Accept: every `CohortTile` case in TESTING.md §Unit passes, plus these:
+  - the initial state follows the table at ≤good, ≤ok and >ok, and with no candidates — asserting `State`, `Chosen`, `ChosenDistance` **and** `IsLowConfidence` each time, at the exact boundary values too, since the table is written with ≤
   - `ToggleExcluded` on `Unresolved` is a no-op
+  - `ToggleExcluded` from `ManuallySet` round-trips back to **`ManuallySet`**, not to `Included` — the "remembering which" clause is the part a naive implementation drops
+  - `Clear` is a no-op from `Included`, `Excluded` and `Unresolved`, including an `Excluded` that came from `ManuallySet`
 - [ ] **S0.4a** `Core/Scanning`: `DetectionSnapshot`, `IScanPipeline` and its implementation. Rules:
   - The pipeline retains exactly one frame, guarded by a lock.
   - `CaptureAsync` takes ownership of the frame under the lock, then does its work outside the lock.
