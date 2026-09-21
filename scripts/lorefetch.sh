@@ -229,12 +229,20 @@ cmd_build() {
 }
 
 # Not routed through run_dotnet, because `dotnet test` has a failure mode that
-# exit status does not report: if no test adapter is registered it discovers
-# ZERO tests, prints "No test is available", and exits 0. Measured here on
-# 2026-09-21 — a project with xunit.v3 and Microsoft.NET.Test.Sdk but WITHOUT
-# xunit.runner.visualstudio ran none of its three tests and reported success.
-# A whole suite could silently stop running and every signal would stay green,
-# so "ran nothing" is treated as a failure.
+# exit status does not report: it runs ZERO tests and exits 0. Both variants
+# were measured here on 2026-09-21, and each exits 0:
+#
+#   "No test is available"                 — no adapter registered. A project
+#       with xunit.v3 and Microsoft.NET.Test.Sdk but WITHOUT
+#       xunit.runner.visualstudio ran none of its three tests, green.
+#   "No test matches the given testcase filter"
+#                                          — the filter excluded everything,
+#       or the project genuinely has no tests yet.
+#
+# Either way a whole suite can silently stop running with every signal green,
+# which is why "ran nothing" is a failure here. This is also why CI invokes
+# THIS script rather than dotnet test directly: a guard that only exists
+# locally does not guard the thing that gates merges.
 cmd_test() {
   require_solution
   [ -n "$FILTER" ] || FILTER=$(default_filter)
@@ -258,10 +266,21 @@ cmd_test() {
   if grep -q 'No test is available' "$log"; then
     printf '\n'
     note "FAILED: dotnet test discovered NO TESTS and would have exited 0."
-    note "Almost always a missing test adapter: every test project needs"
-    note "xunit.runner.visualstudio alongside xunit.v3, or nothing is"
+    note "That message means no test adapter was registered. Every test project"
+    note "needs xunit.runner.visualstudio alongside xunit.v3, or nothing is"
     note "discovered and the suite silently stops testing anything."
-    grep -i 'No test is available' "$log" | sed 's/^/    /' | head -3
+    grep 'No test is available' "$log" | sed 's/^/    /' | head -3
+    rm -f "$log"; exit 1
+  fi
+
+  if grep -q 'No test matches the given testcase filter' "$log"; then
+    printf '\n'
+    note "FAILED: the filter matched NO TESTS, and dotnet test would have"
+    note "exited 0. Either the filter is wrong, or every test in these"
+    note "projects is excluded by it, or they have no tests yet."
+    note "Filter: ${FILTER:-(none)}"
+    grep 'No test matches the given testcase filter' "$log" \
+      | sed 's/.* in //; s|.*/||; s/^/    /' | sort -u | head -8
     rm -f "$log"; exit 1
   fi
 
