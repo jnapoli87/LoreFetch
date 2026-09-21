@@ -1,0 +1,92 @@
+name: CI
+
+# Two legs, and the macOS one is not about shipping macOS. It is what
+# mechanically enforces that Core stays free of Windows-only dependencies:
+# if it goes red because someone reached for a Windows API, that is the leg
+# doing its job. See docs/TESTING.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # one leg's failure must not hide the other's result
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-latest (ship target)
+          - os: macos-latest
+            name: macos-latest (portability guard)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # global.json pins 10.0.201 with rollForward latestFeature, so this
+      # installs that or a higher feature band of the same major.minor. The
+      # pin is the LOWER of the two dev machines' SDKs on purpose:
+      # latestFeature rolls a band up and never down.
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore LoreFetch.slnx
+
+      - name: Build
+        run: dotnet build LoreFetch.slnx -c Release --no-restore
+
+      # ---------------------------------------------------------------------
+      # Tests go through scripts/lorefetch.sh, NOT through `dotnet test`.
+      #
+      # This is deliberate and it is load-bearing. Measured on this repo
+      # 2026-09-21: `dotnet test` EXITS 0 WHILE RUNNING ZERO TESTS, in two
+      # distinct ways —
+      #
+      #   "No test is available"                      no adapter registered
+      #   "No test matches the given testcase filter" filter excluded all
+      #
+      # A leg calling `dotnet test` directly is therefore green when it has
+      # tested nothing at all, which is precisely the failure the five-level
+      # test strategy exists to prevent. The script traps both and exits 1.
+      # A guard that only exists on a developer's machine does not guard the
+      # thing that gates merges.
+      #
+      # It also owns the per-platform category filter, derived from `uname`:
+      # both legs drop Category=Hardware, and the macOS leg additionally
+      # drops Category=WindowsOnly, because the golden hashes are generated
+      # on win-x64 and INTER_AREA is not bit-exact on ARM64 (CLAUDE.md
+      # Risk 2, measured in S0.0: this OpenCV build reports
+      # "Custom HAL: YES (carotene ...)"). Keeping that in one place means a
+      # local run and a CI run cannot disagree — and a local run that
+      # disagrees with CI is worse than no local run.
+      #
+      # `shell: bash` works on windows-latest, which ships Git Bash — the
+      # same interpreter hooks/pre-commit and .claude/hooks/*.sh already
+      # require.
+      # ---------------------------------------------------------------------
+      - name: Test
+        shell: bash
+        run: bash scripts/lorefetch.sh test --no-pull
+
+      # Not run here, deliberately:
+      #   Accuracy  — a measurement committed as a table, not a pass/fail gate,
+      #               and it needs the fixture corpus, which is card imagery and
+      #               can never be committed.
+      #   Hardware  — needs the C920. Filtered out on both legs.
+      #   Real       — the end-to-end suite's real-implementation cases skip
+      #               here with a stated reason, because they need the hash
+      #               index and the Scryfall cache. That is why "integration is
+      #               done" is defined as zero skips under
+      #               LOREFETCH_REQUIRE_REAL=1 on the local win-x64 machine,
+      #               NOT as zero skips in CI, which is unreachable by
+      #               construction. See docs/TESTING.md and finding V7.
