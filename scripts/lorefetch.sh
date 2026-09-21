@@ -261,26 +261,40 @@ cmd_test() {
   status=0
   dotnet "$@" > "$log" 2>&1 || status=$?
 
-  grep -E '^(Passed!|Failed!|  Passed|  Failed)' "$log" | sed 's/^/    /' || true
+  # dotnet test INDENTS its summary lines, so this must not be anchored at the
+  # start of the line. It was, once, and the "did anything run?" check below
+  # then mis-fired on a run where 52 tests had in fact passed.
+  summaries=$(grep -cE '^[[:space:]]*(Passed!|Failed!)' "$log" || true)
+  grep -E '^[[:space:]]*(Passed!|Failed!)' "$log" | sed 's/^ */    /' || true
 
+  # A missing adapter is always a hard failure, even if other projects ran:
+  # it means a test project is misconfigured and is silently testing nothing.
   if grep -q 'No test is available' "$log"; then
     printf '\n'
-    note "FAILED: dotnet test discovered NO TESTS and would have exited 0."
-    note "That message means no test adapter was registered. Every test project"
-    note "needs xunit.runner.visualstudio alongside xunit.v3, or nothing is"
-    note "discovered and the suite silently stops testing anything."
-    grep 'No test is available' "$log" | sed 's/^/    /' | head -3
+    note "FAILED: a test project discovered NO TESTS and dotnet test would have"
+    note "exited 0. That message means no test adapter was registered — every"
+    note "test project needs xunit.runner.visualstudio alongside xunit.v3, or"
+    note "it silently stops testing anything."
+    grep 'No test is available' "$log" \
+      | sed 's/.* in //; s|.*/||; s/\.dll[.,].*/.dll/; s/^/    /' | sort -u | head -8
     rm -f "$log"; exit 1
   fi
 
-  if grep -q 'No test matches the given testcase filter' "$log"; then
+  # "No test matches the given testcase filter" is NOT a failure by itself.
+  # A project with no tests yet reports it, and so does one whose every test
+  # the platform filter excludes — neither is wrong. What IS a failure is the
+  # whole run matching nothing, because then dotnet test exits 0 having tested
+  # nothing at all. So: fail only when nothing ran anywhere, and otherwise name
+  # the empty projects so they cannot quietly stay empty.
+  empty=$(grep 'No test matches the given testcase filter' "$log" \
+            | sed 's/.* in //; s|.*/||' | sort -u || true)
+
+  if [ "$summaries" -eq 0 ]; then
     printf '\n'
-    note "FAILED: the filter matched NO TESTS, and dotnet test would have"
-    note "exited 0. Either the filter is wrong, or every test in these"
-    note "projects is excluded by it, or they have no tests yet."
+    note "FAILED: the whole run matched NO TESTS, and dotnet test would have"
+    note "exited 0. Either the filter is wrong or nothing has tests yet."
     note "Filter: ${FILTER:-(none)}"
-    grep 'No test matches the given testcase filter' "$log" \
-      | sed 's/.* in //; s|.*/||; s/^/    /' | sort -u | head -8
+    [ -n "$empty" ] && printf '%s\n' "$empty" | sed 's/^/    /'
     rm -f "$log"; exit 1
   fi
 
@@ -289,13 +303,11 @@ cmd_test() {
     tail -60 "$log"; rm -f "$log"; exit "$status"
   fi
 
-  if ! grep -qE '^(Passed!|Failed!)' "$log"; then
+  if [ -n "$empty" ]; then
     printf '\n'
-    note "FAILED: no test summary line in the output, so it is not possible to"
-    note "say whether anything ran. Treating that as a failure rather than a"
-    note "pass. Re-run with -v to see everything."
-    tail -20 "$log" | sed 's/^/    /'
-    rm -f "$log"; exit 1
+    note "NOTE: these test projects matched no tests. Expected while a stream is"
+    note "unstarted; suspicious once it is done."
+    printf '%s\n' "$empty" | sed 's/^/      /'
   fi
 
   rm -f "$log"
