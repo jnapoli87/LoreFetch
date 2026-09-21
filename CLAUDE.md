@@ -154,7 +154,17 @@ Repo-local, **no global config touched** (the global default on these machines i
 
 - `user.name` = `jnapoli87`, `user.email` = `jnapoli87@users.noreply.github.com` — a noreply address, because commits publish whatever email they carry and public history is hard to rewrite.
 - `core.sshCommand` pins `~/.ssh/id_ed25519_personal` (GitHub won't accept one key on two accounts).
-- `core.hooksPath = hooks`, with `hooks/pre-commit` asserting the committing email matches `jnapoli87.*users\.noreply\.github\.com`. Tracked, so it survives a fresh clone where `.git/hooks/` would not. Accept both the bare and the ID-prefixed (`73004017+…`) noreply forms — GitHub's web UI uses the latter.
+- `core.hooksPath = hooks`, with **`hooks/pre-commit` enforcing both of the hard rules** — commit identity and no card imagery. Tracked, so it survives a fresh clone (where `.git/hooks/` would not) and applies inside every worktree.
+
+**What the hook checks, and why each detail matters:**
+
+| Check | Detail |
+|---|---|
+| Identity | Uses `git var GIT_AUTHOR_IDENT` / `GIT_COMMITTER_IDENT`, **not** `git config user.email` — `git var` reports the identity git will *actually* use, catching `GIT_AUTHOR_EMAIL` overrides a config lookup would miss. Author and committer are checked independently. |
+| Identity | Accepts both noreply forms via `^([0-9]+\+)?jnapoli87@users\.noreply\.github\.com$` — GitHub's web UI uses the ID-prefixed variant, so rejecting it would block every web edit. |
+| Imagery | Rejects staged raster files outside `src/LoreFetch.App/Assets/` and `docs/img/`. This is the layer that catches **`git add -f`**, which bypasses `.gitignore` entirely. |
+
+⚠️ **Do not rewrite that identity regex as `^(|[0-9]+\+)…`.** BSD grep on macOS rejects an empty alternative with *"empty (sub)expression"* and then matches nothing — which silently converts the guard into "refuse every commit." That bug was in the first version and only surfaced because the hook was tested rather than eyeballed. **An untested guard is not a guard.**
 
 `gh` CLI auth is per-host, not per-repo, and on these machines it is bound to a separate work account — so create repos in the browser, not via `gh`.
 
@@ -184,9 +194,12 @@ The original plan was lost exactly that way: its memory pointed at `~/.claude/pl
 
 So: every decision, plan, contract and test strategy is a tracked file in `docs/` or this file. If it matters and it isn't in git, it doesn't exist.
 
-### Card imagery is gitignore-enforced, not just documented
+### Card imagery is enforced in two layers, not just documented
 
-The artwork is Wizards of the Coast IP regardless of who photographed it, so neither Scryfall renders nor our own captures may be committed. `.gitignore` blocks all raster formats tree-wide and opts UI/doc assets back in individually, so a stray fixture can't slip through on a `git add -A`. Verify with `git check-ignore -v <path>` if unsure.
+The artwork is Wizards of the Coast IP regardless of who photographed it, so neither Scryfall renders nor our own captures may be committed. Once artwork is in history it is there permanently, short of a rewrite — so this is enforced twice:
+
+1. **`.gitignore`** blocks all raster formats tree-wide, opting UI/doc assets back in individually, so a stray fixture can't slip through on `git add -A`. Verify with `git check-ignore -v <path>`.
+2. **`hooks/pre-commit`** rejects staged raster files outside the allowed asset paths — which catches `git add -f`, the one move that bypasses `.gitignore` completely.
 
 Only **derived** data is committed: the ~8.6 MB hash index and the accuracy tables. The raw Scryfall downloads that build the index are ignored, as is the user's own `collection.csv`.
 

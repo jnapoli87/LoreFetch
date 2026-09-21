@@ -1,0 +1,96 @@
+#!/bin/sh
+#
+# LoreFetch pre-commit guard.
+#
+# Lives in hooks/ (tracked, wired up via core.hooksPath) rather than .git/hooks/
+# so it survives a fresh clone and applies inside every git worktree. A hook that
+# only exists on one machine is not a guard.
+#
+# Both checks below protect rules that are expensive or impossible to undo once
+# pushed, which is why they are enforced here rather than trusted to discipline:
+#
+#   1. Identity — the global default on this machine is a work address, so a
+#      wiped .git/config or a fresh clone silently reverts to it. Rewriting
+#      author history after a public push is not realistically an option.
+#
+#   2. Imagery — card artwork is Wizards of the Coast IP regardless of who
+#      photographed it. .gitignore blocks it by pattern, but `git add -f`
+#      bypasses that; this catches it. Once artwork is in history it is there
+#      permanently, short of a rewrite.
+#
+# Escape hatch is git's own --no-verify. Deliberately not advertised in the
+# failure output: if you need it you already know, and the default should be
+# that these rules hold.
+
+set -eu
+
+fail=0
+
+err()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
+note() { printf '  %s\n' "$*" >&2; }
+
+# ---------------------------------------------------------------------------
+# 1. Commit identity
+# ---------------------------------------------------------------------------
+# Accepts both noreply forms: the bare address and GitHub's ID-prefixed variant
+# (73004017+jnapoli87@users.noreply.github.com), which its web UI uses. Both
+# attribute to the same account, so rejecting one would fail on any web edit.
+# Note: written as an optional group, NOT as `^(|[0-9]+\+)...`. BSD grep (macOS)
+# rejects an empty alternative with "empty (sub)expression" and then matches
+# nothing, which silently turns this guard into "refuse every commit".
+EXPECTED_PATTERN='^([0-9]+\+)?jnapoli87@users\.noreply\.github\.com$'
+EXPECTED_HINT='jnapoli87@users.noreply.github.com'
+
+# `git var` rather than `git config user.email`: it reports the identity git
+# will ACTUALLY use, including GIT_AUTHOR_EMAIL / GIT_COMMITTER_EMAIL env
+# overrides that a config lookup would miss entirely.
+check_identity() {
+  role="$1"
+  ident="$2"
+  email=$(printf '%s' "$ident" | sed -n 's/.*<\([^>]*\)>.*/\1/p')
+
+  if ! printf '%s' "$email" | grep -Eq "$EXPECTED_PATTERN"; then
+    err "pre-commit: refusing — $role identity is not the personal noreply address."
+    note "found:    ${email:-<none>}"
+    note "expected: $EXPECTED_HINT"
+    note ""
+    note "This repository is a private personal project. The machine-wide git"
+    note "default is a work address, so this is almost certainly unintended."
+    note ""
+    note "fix:  git config user.name  jnapoli87"
+    note "      git config user.email $EXPECTED_HINT"
+    fail=1
+  fi
+}
+
+check_identity "author"    "$(git var GIT_AUTHOR_IDENT)"
+check_identity "committer" "$(git var GIT_COMMITTER_IDENT)"
+
+# ---------------------------------------------------------------------------
+# 2. No card imagery
+# ---------------------------------------------------------------------------
+# Only UI assets and documentation screenshots may contain raster files. Any
+# other staged image is assumed to be card artwork or a capture fixture.
+ALLOWED='^(src/LoreFetch\.App/Assets/|docs/img/)'
+RASTER='\.(png|jpe?g|webp|bmp|tiff?|gif|heic|avif)$'
+
+staged=$(git diff --cached --name-only --diff-filter=AM)
+
+if [ -n "$staged" ]; then
+  imagery=$(printf '%s\n' "$staged" | grep -iE "$RASTER" | grep -vE "$ALLOWED" || true)
+
+  if [ -n "$imagery" ]; then
+    err "pre-commit: refusing — raster image files staged outside the allowed asset paths."
+    printf '%s\n' "$imagery" | sed 's/^/  /' >&2
+    note ""
+    note "Card artwork is Wizards of the Coast IP regardless of who photographed"
+    note "it, so neither Scryfall renders nor your own captures may be committed."
+    note "Only DERIVED data belongs in git: the hash index, accuracy tables."
+    note ""
+    note "Allowed image paths: src/LoreFetch.App/Assets/ and docs/img/"
+    note "Fixtures belong outside the repo, or in a gitignored path."
+    fail=1
+  fi
+fi
+
+exit $fail

@@ -35,18 +35,24 @@ The replacement is a **ported perceptual hash** — CardSpotter, BSD-3-Clause, t
 
 The only strictly serial work. Everything downstream forks from this commit, so **its job is to make the four streams independent**, not to build features.
 
-**Already done and verified:** repo at `~/Repos/LoreFetch`, GPLv3 LICENSE, `.gitignore`, remote `git@github.com:jnapoli87/LoreFetch.git`, and repo-local identity (`user.name`, noreply `user.email`, `core.sshCommand` → personal key, `core.hooksPath`). A test commit is authored correctly.
+**Already done and verified:**
+
+- Repo at `~/Repos/LoreFetch`, GPLv3 LICENSE, remote `git@github.com:jnapoli87/LoreFetch.git`.
+- Repo-local identity: `user.name`, noreply `user.email`, `core.sshCommand` → personal key, `core.hooksPath`. No global config touched.
+- `.gitignore` blocks raster files tree-wide with UI/doc assets opted back in individually, so a stray fixture can't ride in on `git add -A`.
+- **`hooks/pre-commit` — written and tested against 10 cases.** Enforces commit identity (rejecting the work address from config *or* `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL`, while accepting both the bare and GitHub's ID-prefixed noreply forms) and rejects staged raster files outside the allowed asset paths, which catches the `git add -f` bypass that `.gitignore` cannot. Tracked, so it survives a fresh clone and applies in every worktree.
+  - *Testing caught a real defect:* the first regex used an empty alternative (`^(|[0-9]+\+)…`), which BSD grep on macOS rejects with "empty (sub)expression" and then matches nothing — silently turning the guard into "refuse every commit." Fail-closed, but broken. An untested guard is not a guard.
+- All planning documents.
 
 Remaining:
 
-1. **`hooks/pre-commit`** — the identity guard. `core.hooksPath=hooks` is set but `hooks/` **does not exist**, and git treats a missing hooks path as *silently no hooks*, so nothing is guarded yet. Assert the committing email matches `jnapoli87.*users\.noreply\.github\.com` (accepting both the bare and ID-prefixed `73004017+…` forms — GitHub's web UI uses the latter). Tracked, so it survives a fresh clone where `.git/hooks/` would not. **Test it by deliberately setting the work email and confirming the commit is refused** — an untested guard is not a guard.
-2. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`. Pin Avalonia 12.1.2 and OpenCvSharp 4.13.0.20260627 now. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`.
-3. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
-4. **The three fakes** — `FolderFrameSource`, `StubCardDetector`, `StubCardIdentifier` (with configurable distances so the UI can reach all four `TileState` values). These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
-5. **The end-to-end integration suite, green from H2.** Written here, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, cohort lifecycle and disposal, exclude/discard semantics, commit idempotency, CSV shape. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
-6. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
-7. **README skeleton** — title, description, GPLv3 note, WotC Fan Content disclaimer.
-8. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
+1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`. Pin Avalonia 12.1.2 and OpenCvSharp 4.13.0.20260627 now. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`.
+2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
+3. **The three fakes** — `FolderFrameSource`, `StubCardDetector`, `StubCardIdentifier` (with configurable distances so the UI can reach all four `TileState` values). These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
+4. **The end-to-end integration suite, green from H2.** Written here, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, cohort lifecycle and disposal, exclude/discard semantics, commit idempotency, CSV shape. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
+5. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
+6. **README skeleton** — title, description, GPLv3 note, WotC Fan Content disclaimer.
+7. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
    - Lighting and mat first: SAD lamp off-axis at a shallow angle, check for PWM banding on a blank frame, and test light/mid/dark mat since black-bordered cards on a dark mat is the worst case for edge detection.
    - **Never commit these images** — gitignored, and backed up outside git.
 
