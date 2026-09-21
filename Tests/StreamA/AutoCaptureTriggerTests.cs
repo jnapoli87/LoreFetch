@@ -7,7 +7,13 @@ namespace LoreFetch.Tests.StreamA;
 /// Unit tests for `AutoCaptureTrigger` — docs/TESTING.md calls it "the
 /// highest-value unit target in the project" and lists the required cases;
 /// this file also covers docs/stream-a-ui.md A0's nearest-centroid matching
-/// requirement, since that is the one detail a naive port gets wrong.
+/// requirement, since that is the one detail a naive port gets wrong, plus
+/// two review findings: settle is measured against a fixed anchor snapshot
+/// rather than the previous frame (otherwise slow drift under ε per frame
+/// still fires the trigger over a full window), and movement is measured as
+/// the max per-corner displacement of a matched quad rather than centroid
+/// distance (otherwise an in-place rotation, which barely moves the
+/// centroid, never resets the settle window).
 ///
 /// `now` is always a fixed base plus an explicit offset — the trigger has no
 /// clock of its own, so every test controls time completely.
@@ -33,6 +39,30 @@ public class AutoCaptureTriggerTests
             new PointF2(centerX - halfSize, centerY + halfSize));
 
     private static DateTimeOffset At(int milliseconds) => Base + TimeSpan.FromMilliseconds(milliseconds);
+
+    /// A square quad of the given half-size, centered at (centerX, centerY)
+    /// and rotated by `angleDegrees` about that same centre. Used to prove
+    /// that rotation-in-place — which barely moves the centroid — is still
+    /// caught by the per-corner displacement check.
+    private static CardQuad RotatedQuad(float centerX, float centerY, float halfSize, double angleDegrees)
+    {
+        var angle = angleDegrees * Math.PI / 180.0;
+        var cos = Math.Cos(angle);
+        var sin = Math.Sin(angle);
+
+        PointF2 Rotate(float dx, float dy)
+        {
+            var rx = (dx * cos) - (dy * sin);
+            var ry = (dx * sin) + (dy * cos);
+            return new PointF2(centerX + (float)rx, centerY + (float)ry);
+        }
+
+        return new CardQuad(
+            Rotate(-halfSize, -halfSize),
+            Rotate(halfSize, -halfSize),
+            Rotate(halfSize, halfSize),
+            Rotate(-halfSize, halfSize));
+    }
 
     // -- fires exactly once when stable for >= SettleMilliseconds --------
 
@@ -239,5 +269,48 @@ public class AutoCaptureTriggerTests
         // 500ms run fires again with no intervening count mismatch needed.
         Assert.False(trigger.Evaluate(quads, expectedCount: 1, At(600)));
         Assert.True(trigger.Evaluate(quads, expectedCount: 1, At(1_100)));
+    }
+
+    // -- anchor vs. previous-frame comparison (orchestrator review finding) --
+
+    /// A card sliding steadily at 3px per 33ms frame never exceeds ε (4px)
+    /// from one frame to the next, but travels ~54px over an 600ms window —
+    /// comparing only to the previous frame would let every single step
+    /// pass and the trigger would fire on a moving hand. Comparing against
+    /// a fixed anchor catches the accumulated drift within a couple of
+    /// frames and keeps restarting the window, so it must never fire here.
+    [Fact]
+    public void SlowDriftUnderEpsilonPerFrameNeverFiresOverASettleWindow()
+    {
+        var trigger = Create(settleMilliseconds: 500, movementTolerancePixels: 4);
+        const double pixelsPerStep = 3.0;
+        const int stepMilliseconds = 33;
+
+        for (var step = 0; step * stepMilliseconds <= 600; step++)
+        {
+            var x = 100f + (float)(pixelsPerStep * step);
+            var fired = trigger.Evaluate(new[] { Quad(x, 100) }, expectedCount: 1, At(step * stepMilliseconds));
+            Assert.False(fired);
+        }
+    }
+
+    /// A card rotating a few degrees per frame about its own centre barely
+    /// moves its centroid at all, so a centroid-only movement test would
+    /// never reset the settle window and the trigger would fire on a
+    /// spinning card. Measuring the max per-corner displacement catches it:
+    /// every frame moves every corner well past ε, so this must never fire.
+    [Fact]
+    public void RotationAboutItsOwnCentreResetsSettleEvenThoughTheCentroidBarelyMoves()
+    {
+        var trigger = Create(settleMilliseconds: 500, movementTolerancePixels: 4);
+        const double degreesPerStep = 10.0;
+        const int stepMilliseconds = 33;
+
+        for (var step = 0; step * stepMilliseconds <= 600; step++)
+        {
+            var quad = RotatedQuad(100, 100, halfSize: 25f, angleDegrees: degreesPerStep * step);
+            var fired = trigger.Evaluate(new[] { quad }, expectedCount: 1, At(step * stepMilliseconds));
+            Assert.False(fired);
+        }
     }
 }
