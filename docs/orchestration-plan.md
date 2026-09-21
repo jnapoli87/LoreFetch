@@ -341,14 +341,14 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   Consequences to carry into **D1 and D3**: the condition half of dedup is only reachable through the **reader**, on a file that already contains conditions. So D's tests for it must go through a written file, not through a commit, and must include the `null` vs `""` pair explicitly. A D3 suite that only exercises `CommitCohortAsync` will pass with that bug present.
   - `StubCollectionStore` gains a `Seed(CollectionRow)` method outside `ICollectionStore`, which is what made the case reachable at all. Accepted, and it is more than a test seam: stream A needs a populated collection to render its `DataGrid`, its sort and its empty-state boundary, and seeding beats committing synthetic cohorts to get there.
-- [ ] **S0.6a** `Tests/Integration` harness:
+- [x] **S0.6a** `Tests/Integration` harness:
   - an `IImplementationSet` provider with `Fakes` and a skipping `Real` stub (V8)
   - the `LOREFETCH_REQUIRE_REAL` switch (V7)
   - a frame generator writing to a temp folder (plain fills with drawn rectangles)
   - `ScriptedTrigger` (V9)
 
   Cases: an X'd tile is absent; Escape writes nothing; `ManuallySet` commits as `Source=Manual` with no distance; a cleared tile commits the machine's proposal; re-commit increments the quantity; a 7-of-9 partial cohort commits 7.
-- [ ] **S0.6b** More `Tests/Integration` cases:
+- [x] **S0.6b** More `Tests/Integration` cases:
   - `CaptureAsync` rectifies the latest snapshot's frame, and is hammered concurrently with the loop
   - every pooled frame is disposed exactly once over a sustained run, using a counting pool
   - a thumbnail is still readable after commit
@@ -356,6 +356,17 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - `AutoCaptured` fires via `ScriptedTrigger`
 
   Accept for S0.6a and S0.6b: `dotnet test Tests/Integration` is green, and every `Real` skip gives its reason.
+
+  *Both done 2026-09-21, verified independently in **both directions**, which is the only verification that means anything for this pair.* With the `ArtworkId` coverage that followed: **`Passed! Failed: 0, Passed: 143, Skipped: 8, Total: 151`**, and `LOREFETCH_REQUIRE_REAL=1` → **`Failed! Failed: 8, Passed: 143, Skipped: 0`**, exit 1. Exactly the 8 `Real` cases flip and nothing else, and each skip carries its reason through the single `RealArtifactGate.SkipOrFail` helper. **V7 is a mechanism now, not a claim** — I6's acceptance on the PC is this command.
+  - **V8 resolved properly:** `RealImplementationSet` compiles today without naming one type that does not exist yet — `HashCardIdentifier`, `CsvCollectionStore` and the rest appear only in comments. Code that cannot compile cannot be skipped, so the indirection is load-bearing.
+  - S0.6a's second chaos case is the one worth keeping: stripping the env-var check made the run report `Passed! … Skipped: 7` **with the variable set** — the guard silently absent. Proving a guard's *absence* is detectable matters as much as proving its presence.
+  - **S0.6b declined to write three of its five nominal cases, and was right to.** (a) concurrency, (d) `SourceFailed` ordering and (e) `AutoCaptured` were already covered at equal or greater fidelity by S0.4a and S0.6a; it named the covering test for each. A near-copy doubles maintenance and creates false confidence that two independent things are guarded.
+  - Its gap-finding was sharp: S0.4a's dispose-accounting test **never calls `CaptureAsync`**, so it exercised only `ProcessFrame`'s swap-and-dispose site and never `TryCaptureFromRetained`'s separate one. The new case runs 500 frames with 20 interleaved captures so **both dispose sites are live at once**. Chaos: a pool wrapper swallowing one `Return` fails it at 500 vs 499.
+  - The genuinely new end-to-end case is **thumbnail-survives-commit**, the regression guard for the `RectifiedCard` disposal footgun CONTRACTS.md says was "removed by construction". It asserts real pixel bytes with a non-uniformity guard against a vacuous all-zero comparison; chaos (a decorator zeroing each committed tile's buffer) fails it on the exact pixel signature.
+
+  🔎 **Finding for stream D, which corrected the orchestrator's own prediction.** Testing the `ArtworkId` rules, I predicted that breaking `CohortTile.SetManually` would fail both the tile-level and the store-level Manual case. **It does not fail the store-level one**, and the reason is structural: `StubCollectionStore` derives the row's `ArtworkId` — and, pre-existing since S0.5b, its `BestMatchDistance` — with its own independent `tile.State == ManuallySet ? null : …` guard. So the store never trusts a manual tile's values, and a tile-level regression is **invisible at the store layer**.
+
+  That is defensible as defence-in-depth, and it is not a contract violation — the store still produces what `ICollectionStore` promises. But it duplicates a rule, which is the same class of thing V10 was created to prevent, and it has a consequence **D3 must decide deliberately rather than inherit**: if the real `CsvCollectionStore` *trusts* the tile instead of re-deriving, a `CohortTile` regression leaks a stale art id and a stale distance into the user's file — and the stub's behaviour will not have warned anyone. Whichever D3 picks, its Manual-row tests must construct a tile whose `ChosenArtworkId` is set (seeded, not via `SetManually`) or they cannot tell the two designs apart.
 - [ ] **S0.7** Scaffolding:
   - one placeholder test per `Tests/StreamX` project, so each builds and runs
   - README: add a `## Stream A — UI` … `## Stream D — Collection & export` section skeleton, and keep the existing content
