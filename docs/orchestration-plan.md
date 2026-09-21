@@ -446,6 +446,10 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
+*Forked 2026-09-21 on the **Windows PC** (`C:\Repos\LoreFetch`), from `main` at `dc1530a`: `stream/a`–`stream/d` in `.claude/worktrees/stream-<x>`.* `guard-write.sh` was re-tested against the live worktrees with 10 synthetic payloads: denied `Abstractions`, `Scanning`, `Fakes`, `Tests/Integration`, a `.csproj` and `global.json` inside a worktree, plus a write outside the repo; allowed each stream's own scope and `main`'s contract files. **A harness pitfall worth knowing:** hand-escaping Windows paths into the JSON payload with `printf` yields invalid JSON, `jq` exits 5, and every case reads as *allow* — build the payload with `jq -n --arg` instead.
+
+**Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
+
 ### Human track H (parallel, may start at G0)
 - [ ] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth.
 - [ ] **H2** 👤 Lighting and mat:
