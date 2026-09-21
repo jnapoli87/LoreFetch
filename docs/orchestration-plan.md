@@ -656,7 +656,7 @@ Global overrides for every D brief:
   **Override, from S0.5b's finding — do not skip this, it is a bug that hides by construction:** the `Condition` half of the `OracleId` + `Condition` dedup key is **unreachable through `CommitCohortAsync`**, because `CohortTile` carries no condition and v1 never assesses one. It is reachable **only through the reader**, on a file that already has conditions in it. So the duplicate-merge tests must be driven from a **written file**, and must cover `null` vs `""` as distinct keys explicitly. Proven on the stub: with the merge key conflating them, 79 unrelated tests passed and nothing failed. CONTRACTS.md calls this the case that "would silently split one card into two rows"; a suite built only around commits will not see it.
 
   **The same trap applies to `ArtworkId`'s fold, for the same structural reason:** a commit-only suite cannot tell agree-or-null from last-write-wins. Drive that from a written file too, with rows that agree and rows that disagree.
-- [ ] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export.
+- [x] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export. — *done 2026-09-21, `stream/d` `1eb6390`. `IsVerified = true` for native, justified: its only target tool is LoreFetch's own reader, which the codec suite covers. leaveOpen chaos fails correctly.*
 - [ ] **D3** `CsvCollectionStore`:
   - commits `Included` and `ManuallySet` tiles, folding duplicates within a cohort
   - returns the number of **cards** committed
