@@ -17,6 +17,19 @@ scripts/lorefetch.sh           # pull, build, test, run
 
 `--no-pull`, `--debug`, `--verbose`, `--all-tests`, `--hardware`, `--filter <expr>`, and `-- <args>` to pass arguments to the app. `--help` lists them.
 
+## How to invoke it from the Bash tool — read this before the first call
+
+**`run` and the bare default never return on their own.** They end by launching an Avalonia window, and the process lives until someone closes it. In the foreground that blocks the tool call, times out or gets killed, and reports nothing about the build or the tests that already ran.
+
+So split the work into two calls:
+
+1. **Foreground, everything that terminates:** `scripts/lorefetch.sh test` (add `pull` first if a pull is wanted: `scripts/lorefetch.sh pull && scripts/lorefetch.sh test`). Read the result, and stop there if it is red.
+2. **Background, the app only:** `scripts/lorefetch.sh run --no-pull` with `run_in_background: true`. The build is incremental, so this is quick. You are notified when the window closes. Don't sleep-poll it.
+
+**Never pipe the script through `| tail`, `| head` or `| grep`.** The script already trims its own output: summary lines on success, the last 60 lines on failure. A pipe buffers everything until exit, so a long or blocking run shows nothing. It also replaces the script's exit code with the pipe's, so a failure reads as success.
+
+Never run the bare `scripts/lorefetch.sh` from the tool. It is the entry point for a human at a terminal, who is the one who closes the window.
+
 ## What the script does that you would otherwise get wrong
 
 - **The test filter matches CI, per platform.** Always `Category!=Hardware`; on macOS also `Category!=WindowsOnly`, because the golden hashes are generated on `win-x64` and `INTER_AREA` is not bit-exact on ARM64. Run `dotnet test` bare on the Mac and the goldens fail for a reason that is not a bug.
