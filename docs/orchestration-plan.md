@@ -448,6 +448,15 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
 *Forked 2026-09-21 on the **Windows PC** (`C:\Repos\LoreFetch`), from `main` at `dc1530a`: `stream/a`–`stream/d` in `.claude/worktrees/stream-<x>`.* `guard-write.sh` was re-tested against the live worktrees with 10 synthetic payloads: denied `Abstractions`, `Scanning`, `Fakes`, `Tests/Integration`, a `.csproj` and `global.json` inside a worktree, plus a write outside the repo; allowed each stream's own scope and `main`'s contract files. **A harness pitfall worth knowing:** hand-escaping Windows paths into the JSON payload with `printf` yields invalid JSON, `jq` exits 5, and every case reads as *allow* — build the payload with `jq -n --arg` instead.
 
+**Paused 2026-09-21 (usage limit), on the Windows PC.** Implementers were stopped mid-package, so worktrees hold **unverified** work — committed and uncommitted. Nothing is ticked that was not independently verified. To resume, verify each stream's commits since the last ticked one, have the uncommitted files finished (or discarded) by a fresh implementer, then continue:
+
+| Stream | Ticked | Committed, not yet verified | Uncommitted in the worktree | Next |
+|---|---|---|---|---|
+| A | A0, A1 | `d5b0b2d` temp-folder cleanup (the A1 follow-up) | — | A2 preview, A3 overlay (briefed, not started) |
+| B | B1a | `3d28cea` B1b goldens | B3a index format, partial: `src/LoreFetch.Core/Identification/`, `Tests/StreamB/HashIndexFileTests.cs` — **was mid-edit with a known missing brace** | verify B1b (chaos: `INTER_LINEAR` in step 5 must fail a golden), then finish B3a |
+| C | — | `f4a459f` C1a + `84979d7` fixups (0 warnings, bounded enumerator test), `1f8380b` C1b | C1c watchdog, partial: `FrameWatchdog.cs`, `FrameWatchdogTests.cs` | verify C1a/C1b, finish C1c |
+| D | D1, D2 | `690ecce` D3 | the D3 test-gap fix, partial: `CsvCollectionStoreWriteSequenceTests.cs` (a failed commit must leave no temp file; removing `TryDeleteBestEffort` currently leaves all 57 green) | finish the fix, tick D3, then D4 Moxfield |
+
 **Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
 
 ### Human track H (parallel, may start at G0)
