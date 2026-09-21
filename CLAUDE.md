@@ -18,6 +18,8 @@ Private personal project, **GPLv3**, unrelated to any employer or day job. Built
 
 Work happens in **four parallel git worktrees** after a serial ~2h foundation pass. `Core/Abstractions` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
 
+⚠ **That freeze is mechanically enforced, which makes it a sequencing constraint.** `.claude/hooks/guard-write.sh` refuses those edits from inside a linked worktree, so a missing package reference or an incomplete contract **cannot be fixed from a stream** — fork with a gap and all four streams stall until someone returns to `main`. Finish and review the contracts and project files *before* creating any worktree, and over-reference packages rather than under-reference: an unused `PackageReference` costs nothing.
+
 ---
 
 ## Decisions that are settled
@@ -154,7 +156,7 @@ Repo-local, **no global config touched** (the global default on these machines i
 
 - `user.name` = `jnapoli87`, `user.email` = `jnapoli87@users.noreply.github.com` — a noreply address, because commits publish whatever email they carry and public history is hard to rewrite.
 - `core.sshCommand` pins `~/.ssh/id_ed25519_personal` (GitHub won't accept one key on two accounts).
-- `core.hooksPath = hooks`, with **`hooks/pre-commit` enforcing both of the hard rules** — commit identity and no card imagery. Tracked, so it survives a fresh clone (where `.git/hooks/` would not) and applies inside every worktree.
+- `core.hooksPath = hooks`, with **`hooks/pre-commit` enforcing three hard rules** — commit identity, no card imagery, and CardSpotter attribution. Tracked, so it survives a fresh clone (where `.git/hooks/` would not) and applies inside every worktree.
 
 **What the hook checks, and why each detail matters:**
 

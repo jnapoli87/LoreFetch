@@ -60,6 +60,10 @@ Remaining:
 
 **Done when:** all four streams can be forked into worktrees and each builds green with nothing stubbed out beyond the intended fakes. The identity guard is proven by a refused commit.
 
+> ⚠ **Items 1 and 2 are hard blockers on forking, not nice-to-haves.** `.claude/hooks/guard-write.sh` **refuses** edits to `Core/Abstractions/**`, `*.csproj` and `*.slnx` from inside a linked worktree. That is the intended design — it is what makes the frozen contract surface real rather than aspirational — but the consequence is that **a missing package reference or an incomplete contract cannot be fixed from a stream.** Fork four worktrees with a `.csproj` gap and all four are blocked until someone goes back to `main`.
+>
+> So before creating any worktree: every project exists, every package a stream could plausibly need is already referenced, and `Core/Abstractions` compiles and is reviewed. Over-reference rather than under-reference — an unused `PackageReference` costs nothing, a missing one costs a fork-wide stall.
+
 **Gate:** the first push is an external publish — content shown and approved before `git push`.
 
 ---
@@ -134,6 +138,7 @@ Stream-specific risks live in each stream doc. These span the whole build:
 4. **Four streams, one reviewer.** Parallelism shifts load from writing to reviewing and integrating. The per-stream reviewer agents are the mitigation; the integration budget is the honest cost.
 5. **`OpenCvSharp4.runtime.osx.arm64` has exactly one release** (2026-06-27, ~6k downloads). No bug reports, which may mean "works" or "unused." Dev-only — worst case, local CV testing is lost and we lean on the PC beside us.
 6. **The fixture corpus can't be committed**, so CI accuracy runs on synthetic frames while real numbers live locally. Accept the divergence; back the corpus up outside git.
+7. **FFmpeg notices inside the OpenCvSharp native runtimes are not enumerated.** The NuGet packages declare Apache-2.0, but the native binaries statically link or ship FFmpeg (LGPL-2.1+, or GPL-2+ with `--enable-gpl`). Both upgrade cleanly into GPLv3 so the *licence* is compatible — but the specific notices those libraries require have not been listed in `THIRD-PARTY-NOTICES`. Chase before promoting a release widely. Low risk for a hobby project, non-zero for a public one.
 
 ---
 
