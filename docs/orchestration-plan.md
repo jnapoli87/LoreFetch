@@ -249,6 +249,15 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
   - `ToggleExcluded` on `Unresolved` is a no-op
   - `ToggleExcluded` from `ManuallySet` round-trips back to **`ManuallySet`**, not to `Included` — the "remembering which" clause is the part a naive implementation drops
   - `Clear` is a no-op from `Included`, `Excluded` and `Unresolved`, including an `Excluded` that came from `ManuallySet`
+
+  *Done 2026-09-21, verified independently.* 158 lines of production code in `Cohorts.cs`, `ICollectionStore` added verbatim to `Collection.cs` in CONTRACTS.md's own position, S0.3a's deferral NOTE deleted. Clean Release build at 0 warnings. **`Passed! Failed: 0, Passed: 28, Total: 28`** (14 inherited + 14 new).
+  - **V10 is honoured properly:** one private `ProposeFromHash(candidates, good, ok)` returns the whole `(State, Chosen, ChosenDistance, IsLowConfidence)` tuple, and *both* the constructor and `Clear()` call it. The threshold comparison exists exactly once, so "what a fresh tile starts as" and "what a cleared tile reverts to" cannot drift.
+  - `ToggleExcluded` remembers the pre-exclude state in a field, so `ManuallySet → Excluded → ManuallySet` round-trips instead of collapsing to `Included`.
+  - `SetManually` also clears `IsLowConfidence`, which the contract does not state but follows from it: the flag is a highlight for a machine guess, and a user's own choice is not one.
+  - The boundary tests use the thresholds themselves as the distances, so ≤ is pinned at both edges with all four columns asserted.
+  - **The orchestrator chaos-tested the one the implementer did not:** flipping both `<=` to `<` fails 3 tests — at-ok becomes `Unresolved` instead of `Included`, and at-good reports `IsLowConfidence` true because it falls through to the ok branch. Exactly the off-by-one, reverted, 28/28 green.
+
+> **Reorder, 2026-09-21: S0.5a and S0.5b run BEFORE S0.4a/S0.4b.** The plan lists the pipeline first, but CONTRACTS.md says the pipeline's test *is* the end-to-end suite, and that suite needs the fakes. Written in listed order, S0.4a — the highest-risk code in Stream 0, holding the lock and the frame-ownership handoff — would sit untested until S0.6a, or would need throwaway test doubles that the real fakes then duplicate. The fakes do not depend on the pipeline in either direction, so nothing is lost by swapping them, and S0.4a then gets tested against the same fakes the end-to-end suite uses. This is within the plan's own rules: S0.5a and S0.5b are marked ∥. New order: **S0.5a → S0.5b → S0.4a → S0.4b → S0.6a → S0.6b → S0.7 → S0.2 → S0.8.** S0.2 (CI) moves late because its test leg cannot pass until S0.7 adds the placeholder tests.
 - [ ] **S0.4a** `Core/Scanning`: `DetectionSnapshot`, `IScanPipeline` and its implementation. Rules:
   - The pipeline retains exactly one frame, guarded by a lock.
   - `CaptureAsync` takes ownership of the frame under the lock, then does its work outside the lock.
