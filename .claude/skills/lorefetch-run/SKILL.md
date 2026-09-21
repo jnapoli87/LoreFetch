@@ -28,6 +28,8 @@ So split the work into two calls:
 
 **Never pipe the script through `| tail`, `| head` or `| grep`.** The script already trims its own output: summary lines on success, the last 60 lines on failure. A pipe buffers everything until exit, so a long or blocking run shows nothing. It also replaces the script's exit code with the pipe's, so a failure reads as success.
 
+**On Windows, close any running app before you build.** A running `LoreFetch.App.exe` is locked, so the next build fails with `MSB3027`/`MSB3021`, *"The file is locked by: LoreFetch.App (…)"*. That is not a code failure. Stopping a background task or killing a blocked call does **not** close the window it opened: the app outlives the shell that started it. So check `Get-Process LoreFetch.App` first. If an instance you launched is still running, stop it (`Stop-Process -Name LoreFetch.App`). If you didn't launch it, the user may still be using it, so ask before you close it.
+
 Never run the bare `scripts/lorefetch.sh` from the tool. It is the entry point for a human at a terminal, who is the one who closes the window.
 
 ## What the script does that you would otherwise get wrong
