@@ -99,21 +99,19 @@ scryfall-bulk/
 test-images/*
 !test-images/README.md
 
-# Local tooling and linked worktrees — a `git add -A` on main must never pick
-# up a worktree as an embedded repository.
+# Linked worktrees only — a `git add -A` on main must never pick up a worktree
+# as an embedded repository.
 #
-# .claude/hooks/ and .claude/settings.json ARE tracked, deliberately: they have
-# to apply inside every worktree, which means they have to come from git.
-# .claude/skills/ is not — skills are the operator's own tooling, and none of
-# this project's state lives in one. Committing one IS a deliberate act, and
-# lorefetch-run is the one we made deliberately: the PC needs it from git,
-# because its whole job is to point at scripts/lorefetch.sh on both machines.
-# Note the `/*` rather than `/`: a trailing-slash ignore excludes the directory
-# itself, git never descends into it, and a negation for anything inside is
-# silently dead. Same shape as test-images/* above.
+# Everything else under .claude/ IS tracked, deliberately and for one reason:
+# Claude Code runs on both the Mac and the Windows PC against this same repo,
+# and in four linked worktrees after the fork. hooks/, settings.json and
+# skills/ only apply where they exist on disk, so git is the only thing that
+# puts them on the other machine. A skill that lives in one checkout is a
+# skill the other machine silently does not have.
+#
+# The consequence to respect: this repo is PUBLIC, so .claude/skills/ holds
+# project skills only. Nothing personal and nothing work-related goes there.
 .claude/worktrees/
-.claude/skills/*
-!.claude/skills/lorefetch-run/
 .idea/
 
 # macOS directory metadata.
