@@ -42,6 +42,7 @@ The only strictly serial work. Everything downstream forks from this commit, so 
 - `.gitignore` blocks raster files tree-wide with UI/doc assets opted back in individually, so a stray fixture can't ride in on `git add -A`.
 - **`hooks/pre-commit` — written and tested against 10 cases.** Enforces commit identity (rejecting the work address from config *or* `GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_EMAIL`, while accepting both the bare and GitHub's ID-prefixed noreply forms) and rejects staged raster files outside the allowed asset paths, which catches the `git add -f` bypass that `.gitignore` cannot. Tracked, so it survives a fresh clone and applies in every worktree.
   - *Testing caught a real defect:* the first regex used an empty alternative (`^(|[0-9]+\+)…`), which BSD grep on macOS rejects with "empty (sub)expression" and then matches nothing — silently turning the guard into "refuse every commit." Fail-closed, but broken. An untested guard is not a guard.
+- **Claude Code hooks** in `.claude/` — two `PreToolUse` guards, tested against 16 synthetic payloads. They mechanise the two rules that were previously discipline only: project state stays in the repo, and the **frozen contract surface** is unwritable from inside a linked worktree (detected via `--absolute-git-dir` ≠ `--git-common-dir`, so `main` can still author it). Plus a hard block on force-push and a tripwire warning on plain `git push` / `gh pr create`. See `../CLAUDE.md`.
 - All planning documents.
 
 Remaining:

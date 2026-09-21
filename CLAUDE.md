@@ -203,6 +203,21 @@ The artwork is Wizards of the Coast IP regardless of who photographed it, so nei
 
 Only **derived** data is committed: the ~8.6 MB hash index and the accuracy tables. The raw Scryfall downloads that build the index are ignored, as is the user's own `collection.csv`.
 
+### Claude Code hooks — the rules that were previously only discipline
+
+`.claude/settings.json` (committed, so it applies in every worktree) wires two `PreToolUse` guards in `.claude/hooks/`:
+
+| Guard | Rule | Behaviour |
+|---|---|---|
+| `guard-write.sh` | Project state stays in the repo | **Denies** writes outside the repo. Claude's scratchpad and `/tmp` are exempt — temp files are legitimate, they just are not project state. |
+| `guard-write.sh` | Frozen contract surface | **Denies** edits to `Core/Abstractions/**`, `*.csproj`, `*.slnx` **only inside a linked worktree**, so Stream 0 can still author them on `main`. Detected via `--absolute-git-dir` ≠ `--git-common-dir`. |
+| `guard-bash.sh` | No force-push | **Denies** `--force`, `-f`, `--force-with-lease` on any `git … push`. The repo is public; rewriting history is unrecoverable for anyone who cloned it, and history is the audit trail for authorship and the imagery rule. |
+| `guard-bash.sh` | Publishing needs prior review | **Warns** (does not block) on plain `git push`, `gh pr create`, `gh repo create`, `gh release create`. Deliberately a tripwire rather than a wall — explicit go-aheads do happen, and a block would make pushing impossible. |
+
+Both were tested by piping synthetic payloads (16 cases). One defect surfaced: the force-push pattern originally matched only flag *names* between `git` and `push`, so `git -C /repo push --force` slipped through — a flag *value* broke it. The pattern is now deliberately loose, which is the safe direction, because the deny additionally requires a force flag.
+
+**After changing these, run `/hooks` or restart the session** — the settings watcher only watches directories that already had a settings file at session start, so a newly created `.claude/settings.json` is not live until then.
+
 ### Other standing rules
 
 - **The README is written incrementally**, one section per stream as each earns it — not as a lump at the end.

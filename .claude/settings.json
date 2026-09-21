@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-write.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking write scope"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "if": "Bash(git *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking for force-push"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "if": "Bash(gh *)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking publish action"
+          }
+        ]
+      }
+    ]
+  }
+}
