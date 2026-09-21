@@ -476,14 +476,14 @@ Global overrides for every A brief:
 - Never set `IsDefault` on any button.
 - Status text comes from `IScanPipeline.SourceDescription`.
 
-- [ ] **A0** `AutoCaptureTrigger` in `Core/Trigger`:
+- [x] **A0** `AutoCaptureTrigger` in `Core/Trigger`: — *done 2026-09-21, `stream/a` `cdaf7f6` + fix `2cd4b05`. **Review found a real defect:** movement was measured frame-to-frame, so a card drifting 3 px/frame (under ε=4 each step, ~45 px over the window) fired the trigger on a moving hand. Now every snapshot is compared to the quads at the settle window's start, by max corner displacement (centroid is used only to match quads — a card rotated in place moves no centroid). "Scene breaks" = count ≠ expected, per stream-a; movement restarts the timer but never re-arms. TESTING.md §Unit still says "or movement beyond ε" re-arms — stale wording, superseded by stream-a A0. Consequence: swapping one card for another without lifting it does not re-fire auto mode; Space covers it. 14 tests; 6 chaos cases fail correctly.*
   - count-gated settle over `SettleMilliseconds`
   - movement epsilon is `MovementTolerancePixels`, matched by **nearest centroid**
   - "the scene breaks" means any count ≠ expected
   - re-arm only after the scene breaks, and `NotifyCaptured` suppresses re-firing
 
   Accept: every case in TESTING.md §Unit passes, including two near-equal-area quads swapping order without resetting the settle.
-- [ ] **A1** App shell and composition root:
+- [x] **A1** App shell and composition root: — *done 2026-09-21, `stream/a` `01b1fa6`. `AttachDeveloperTools` left uncalled: current Avalonia docs require portal licence credentials (paid tier). Smoke-launch via `LOREFETCH_SMOKE_EXIT_MS=3000` independently re-run: starts in Fakes mode against generated frames in `%TEMP%`, exits 0. A leaked temp folder per launch was found and sent back with A2.*
   - `AppComposition` offers a `Fakes` mode, with `Real` added at integration
   - it calls `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`, then `RunAsync` once
   - a status line
