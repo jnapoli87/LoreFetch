@@ -43,9 +43,10 @@ Remaining:
 2. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`. Pin Avalonia 12.1.2 and OpenCvSharp 4.13.0.20260627 now. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`.
 3. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
 4. **The three fakes** — `FolderFrameSource`, `StubCardDetector`, `StubCardIdentifier` (with configurable distances so the UI can reach all four `TileState` values). These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
-5. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
-6. **README skeleton** — title, description, GPLv3 note, WotC Fan Content disclaimer.
-7. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
+5. **The end-to-end integration suite, green from H2.** Written here, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, cohort lifecycle and disposal, exclude/discard semantics, commit idempotency, CSV shape. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
+6. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
+7. **README skeleton** — title, description, GPLv3 note, WotC Fan Content disclaimer.
+8. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
    - Lighting and mat first: SAD lamp off-axis at a shallow angle, check for PWM banding on a blank frame, and test light/mid/dark mat since black-bordered cards on a dark mat is the worst case for edge detection.
    - **Never commit these images** — gitignored, and backed up outside git.
 
@@ -83,9 +84,9 @@ This is where the bugs live, and they will be **lifetime and threading bugs**, n
 1. **`RectifiedCard` lifetime versus the cohort grid.** `Cohort` is `IDisposable` and owns its tiles' buffers. If the UI bound them into a long-lived list, the thumbnails are reading freed memory — which looks fine in dev and fails during a demo. Flagged as an open question in [`CONTRACTS.md`](CONTRACTS.md); resolve it here at the latest.
 2. **Frame buffer handoff across the capture thread boundary.** Pooled buffers make ownership explicit; verify one owner, one `Dispose`.
 3. **Real thresholds replace placeholders.** `GoodDistance` / `OkDistance` come from stream B's calibration. Grep for any hardcoded distance anywhere in A, C or D.
-4. **The end-to-end test** from [`TESTING.md`](TESTING.md): synthetic frame → full pipeline → cohort → commit → assert the CSV on disk.
+4. **Flip the skip gate.** The end-to-end suite already exists and has been green since H2 against the fakes ([`TESTING.md`](TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
 
-**Done when:** the full loop runs on real frames — detect, rectify, identify, grid, commit, export — with the end-to-end test green in CI.
+**Done when: the skip count reaches zero.** That's the whole definition — the end-to-end suite runs against real implementations throughout, with nothing gated out. Mechanical rather than a judgement call.
 
 ---
 

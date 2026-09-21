@@ -4,15 +4,59 @@ Spans all three streams, so it belongs to the spine rather than to any one of th
 
 ---
 
+## When each test arrives — the gating model
+
+The obvious trap: write the end-to-end test early and CI is red for twelve hours, which trains everyone to ignore CI. That is worse than having no CI. But deferring integration tests to "the integration checkpoint" reliably means writing them at hour 20 in a hurry.
+
+Neither is necessary, because **the contracts are frozen**. Two mechanisms avoid the tension entirely:
+
+### 1. The fakes make an end-to-end test possible on day zero
+
+Stream 0 ships `FolderFrameSource`, `StubCardDetector` and `StubCardIdentifier`. So the full path — frame source → detect → rectify → identify → cohort → commit → CSV — is **testable and green from H2**, long before the hash or the camera exist.
+
+It tests none of the hash's correctness. It tests the *wiring*: that the contracts compose, that cohort lifecycle and disposal behave, that exclude/discard semantics hold, that commit is idempotent, that the CSV shape is right. **That is where integration bugs actually live** — and across four worktrees, a test that fails the instant someone breaks a contract is the single highest-value guard available.
+
+It would, for instance, catch the `RectifiedCard`-lifetime footgun: commit a cohort, then read a tile's thumbnail.
+
+### 2. Real implementations reuse the same tests, gated by skip
+
+Real implementations do **not** get new integration tests. They get the *same* tests with the real implementation injected. Write against the interface, inject the implementation, and gate on artifact presence:
+
+```
+if (!File.Exists(indexPath))
+    Assert.Skip("hash index not built yet — stream B incomplete");
+```
+
+**Skipped is not red.** A skip that says *why* is honest signal, keeps CI green, and the skip count becomes a live progress indicator of what is not yet wired.
+
+This makes the integration milestone mechanical rather than a judgement call:
+
+> **Integration is done when the skip count reaches zero.**
+
+Its corollary matters too: a skip that survives past its checkpoint is a bug, not a convenience. At the integration checkpoint, flip the gate so a skipped test **fails** — otherwise skips quietly become permanent and the suite silently stops testing anything real.
+
+### What blocks a stream merging into `main`
+
+| Must be green | Must not block |
+|---|---|
+| Build, both CI legs | Accuracy tables (measurement, not pass/fail) |
+| All unit tests | Hardware verification (can't run in CI) |
+| The fakes end-to-end test | Other streams' unfinished work |
+| That stream's own tests | Tests skipped for a missing artifact |
+
+Streams own disjoint directories, so their tests can't interfere with each other — which is what makes "green at every merge" achievable with four concurrent streams.
+
 ## The five levels
 
-| Level | What it covers | Where it lives | Runs in CI? |
-|---|---|---|---|
-| **Unit** | Pure logic: trigger state machine, hash invariants, CSV store, quad filtering, CSV formatting | each stream | ✅ |
-| **Integration (synthetic)** | Generated frame → detect → rectify → hash → identify → expected oracle name | stream B | ✅ |
-| **Integration (end-to-end)** | Generated frame → full pipeline → cohort → commit → CSV on disk | Integration checkpoint | ✅ |
-| **Accuracy** | Real fixture corpus: correct@1 / wrong@1 / no-match × height × difficulty | stream B, **local only** | ❌ images can't be committed |
-| **Hardware** | Live C920: negotiated format, sustained memory, live accuracy | manual on the Windows PC | ❌ |
+| Level | What it covers | Where it lives | Live from | Runs in CI? |
+|---|---|---|---|---|
+| **Unit** | Pure logic: trigger state machine, hash invariants, CSV store, quad filtering, escaping | each stream | as written | ✅ |
+| **Integration (fakes)** | Frame source → detect → rectify → identify → cohort → commit → CSV, all through stubs | Stream 0 | **H2** | ✅ |
+| **Integration (real)** | The *same* tests with real implementations injected | Stream 0, impls swapped in | skips until the artifact exists | ✅ (skips, never red) |
+| **Accuracy** | Real fixture corpus: correct@1 / wrong@1 / no-match × height × difficulty | stream B, **local only** | when fixtures captured | ❌ images can't be committed |
+| **Hardware** | Live C920: negotiated format, sustained memory, live accuracy | manual on the Windows PC | stream C | ❌ |
+
+Note rows 2 and 3 are one test suite, not two. That is the whole point: parameterise over the implementation rather than duplicating the scenario.
 
 The synthetic frame generator (stream B, task B7) is what makes levels 2 and 3 possible at all. It is not a convenience — it's the only committable substitute for real captures.
 
@@ -38,15 +82,16 @@ The synthetic frame generator (stream B, task B7) is what makes levels 2 and 3 p
 
 Generated frame at a known simulated height → the full query path → the expected oracle name. Includes **the round-trip gate**: a Scryfall render must retrieve *itself* at Hamming distance ≈ 0 **through the same code the scanner calls**, not a test-only shortcut. This is the test that catches reference/query transform divergence, which otherwise degrades matching silently rather than failing.
 
-### Integration (end-to-end) — Integration checkpoint
+### Integration (fakes, then real) — written in Stream 0, live from H2
 
-`FolderFrameSource` over synthetic frames → detector → rectifier → identifier → `Cohort` → `CommitCohortAsync` → assert the CSV on disk. Must cover:
+One suite, parameterised over the implementation set: `[fakes]` from H2, `[real]` skipping until each artifact exists. `FolderFrameSource` → detector → rectifier → identifier → `Cohort` → `CommitCohortAsync` → assert the CSV on disk. Must cover:
 
 - an X'd tile is **absent** from the file
 - Escape (discard) writes nothing at all
 - a `ManuallySet` tile commits the corrected name, not the machine guess
 - re-committing the same card increments quantity rather than adding a row
 - a partial cohort (7 cards where 9 were expected) commits 7
+- **a tile's thumbnail is still readable after the cohort commits** ← catches the `RectifiedCard` disposal footgun flagged in `CONTRACTS.md`, which otherwise surfaces as corrupt images during a demo
 
 ### Accuracy — local only
 
