@@ -101,5 +101,14 @@ test-images/*
 
 # Local tooling and linked worktrees — a `git add -A` on main must never pick
 # up a worktree as an embedded repository.
+#
+# .claude/hooks/ and .claude/settings.json ARE tracked, deliberately: they have
+# to apply inside every worktree, which means they have to come from git.
+# .claude/skills/ is not — skills are the operator's own tooling, and none of
+# this project's state lives in one. Committing one later is a deliberate act.
 .claude/worktrees/
+.claude/skills/
 .idea/
+
+# macOS directory metadata.
+.DS_Store
