@@ -113,6 +113,8 @@ test-images/*
 # project skills only. Nothing personal and nothing work-related goes there.
 .claude/worktrees/
 .idea/
+# Personal Rider run configuration; kept local, not shared.
+.run/LoreFetch.App.run.xml
 
 # macOS directory metadata.
 .DS_Store
