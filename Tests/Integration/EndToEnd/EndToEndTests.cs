@@ -374,6 +374,67 @@ public class EndToEndTests
         }
     }
 
+    /// Package S0.6b's regression guard for the old `RectifiedCard`
+    /// disposal footgun (docs/CONTRACTS.md §"Why `RectifiedCard` is not
+    /// pooled" — "removed by construction"): a tile's `Image` is plain
+    /// managed memory, never pooled, never `IDisposable`, so nothing in the
+    /// commit path has any business touching it. Assert on the actual pixel
+    /// bytes, not merely that the reference is still non-null — a null check
+    /// would pass even if something cleared the buffer in place.
+    [Theory]
+    [MemberData(nameof(ImplementationSets.All), MemberType = typeof(ImplementationSets))]
+    public async Task Tile_ThumbnailImage_IsStillReadable_AfterCohortCommits(ImplementationSetKind kind)
+    {
+        var set = ImplementationSets.Create(kind);
+        set.EnsureAvailable();
+
+        var ct = TestContext.Current.CancellationToken;
+        var frameDir = SyntheticFrames.CreateTempDirectory();
+        try
+        {
+            var settings = new ScanSettings { ExpectedCount = 1, GoodDistance = GoodDistance, OkDistance = OkDistance };
+            var frameFactory = set.CreateFrameSourceFactory(frameDir, TimeSpan.FromMilliseconds(15));
+            await using var source = await frameFactory.CreateAsync(settings, ct);
+
+            await using var pipeline = ScanPipelineFactory.Create(
+                source,
+                set.CreateDetector(cardCount: 1),
+                set.CreateRectifier(),
+                set.CreateIdentifier(new[] { GoodDistance - 10 }),
+                new ScriptedTrigger(fireOnCall: int.MaxValue),
+                settings,
+                NullLoggerFactory.Instance);
+
+            var cohorts = await RunAndCaptureManyAsync(pipeline, times: 1, ct);
+            var cohort = cohorts[0];
+            Assert.NotNull(cohort);
+            var tile = cohort!.Tiles[0];
+
+            // A deep copy taken BEFORE commit, not a reference into the same
+            // backing array — otherwise an in-place corruption during commit
+            // would corrupt this "before" snapshot too, and the comparison
+            // below would trivially agree with itself no matter what
+            // happened.
+            var beforeCommit = tile.Image.Pixels.ToArray();
+
+            // Guard against a vacuous pass on an all-one-value buffer: the
+            // synthetic frame is a flat fill with a drawn rectangle, so a
+            // real crop of it must contain more than one distinct byte.
+            var firstByte = beforeCommit[0];
+            Assert.Contains(beforeCommit, b => b != firstByte);
+
+            var store = set.CreateCollectionStore();
+            await store.CommitCohortAsync(cohort, ct);
+
+            var afterCommit = tile.Image.Pixels.ToArray();
+            Assert.Equal(beforeCommit, afterCommit);
+        }
+        finally
+        {
+            SyntheticFrames.DeleteDirectory(frameDir);
+        }
+    }
+
     /// Starts `pipeline.RunAsync` in the background, then — `times` times —
     /// waits for a FRESH frame since the last capture (not merely "at least
     /// one frame ever") and calls `CaptureAsync` once. `FolderFrameSource`

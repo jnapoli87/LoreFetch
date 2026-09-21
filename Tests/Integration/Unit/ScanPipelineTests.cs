@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Scanning;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LoreFetch.Tests.Integration.Unit;
@@ -160,6 +161,80 @@ public class ScanPipelineTests
         // swap-and-dispose; the last one is still retained until this call.
         await pipeline.DisposeAsync();
 
+        Assert.Equal(frameCount, pool.RentCount);
+        Assert.Equal(pool.RentCount, pool.ReturnCount);
+    }
+
+    /// Package S0.6b: a stronger variant of the test just above. That one
+    /// (package S0.4a) proves rents == returns across ~40 frames with NO
+    /// `CaptureAsync` calls at all, so it only ever exercises ProcessFrame's
+    /// own swap-and-dispose path. `TryCaptureFromRetained` (which both
+    /// `CaptureAsync` and the auto-fire path route through) disposes the
+    /// frame it takes ownership of too — a SEPARATE dispose site — and
+    /// nothing asserted rent == return while that site was actually firing
+    /// interleaved with the loop. This test drives an order of magnitude
+    /// more frames and calls `CaptureAsync` repeatedly throughout the run,
+    /// so both dispose sites are live at once and the accounting still has
+    /// to come out even at the end.
+    ///
+    /// Built via `ScanPipelineFactory.Create` — the same frozen composition
+    /// entry point `Tests/Integration/EndToEnd` uses — rather than `new
+    /// ScanPipeline(...)`, even though this test stays in this file
+    /// (mirroring its sibling above) rather than moving to the
+    /// `IImplementationSet` harness: pool accounting needs a caller-supplied
+    /// `ArrayPool<byte>`, and neither `IFrameSourceFactory` nor
+    /// `FolderFrameSourceFactory` (the only factory `IImplementationSet`
+    /// exposes) has a seam for one — `FolderFrameSource.Open` defaults to
+    /// `ArrayPool<byte>.Shared` with no override reachable through that
+    /// factory. Adding one would mean editing a frozen contract.
+    [Fact]
+    public async Task DisposeAsync_SustainedRunWithInterleavedCaptures_RentsEqualReturnsAcrossHundredsOfFrames()
+    {
+        var pool = new CountingArrayPool();
+        const int frameCount = 500;
+        const int captureCount = 20;
+        var source = new TestFrameSource(pool, frameCount: frameCount, delayMs: 1);
+        var settings = new ScanSettings { ExpectedCount = 1 };
+
+        var pipeline = ScanPipelineFactory.Create(
+            source, new StubCardDetector(cardCount: 1), new StubRectifier(), new StubCardIdentifier(),
+            new ControllableTrigger(), settings, NullLoggerFactory.Instance);
+
+        var frameProcessedCount = 0;
+        pipeline.FrameProcessed += (_, _) => Interlocked.Increment(ref frameProcessedCount);
+
+        var runTask = pipeline.RunAsync(TestContext.Current.CancellationToken);
+
+        var successfulCaptures = 0;
+        var lastObserved = 0;
+        for (var i = 0; i < captureCount; i++)
+        {
+            // Same "strictly greater than last observed" wait as the
+            // threshold test below: guarantees a frame has arrived since the
+            // previous capture, rather than merely "at least one ever".
+            await WaitUntilAsync(() => Volatile.Read(ref frameProcessedCount) > lastObserved, TestContext.Current.CancellationToken);
+            var cohort = await pipeline.CaptureAsync(TestContext.Current.CancellationToken);
+            if (cohort is not null)
+            {
+                successfulCaptures++;
+            }
+
+            lastObserved = Volatile.Read(ref frameProcessedCount);
+        }
+
+        // The finite source (frameCount: 500) runs out and RunAsync
+        // completes on its own — no cancellation needed, same completion
+        // model as the sibling test above, but only reached after every
+        // interleaved capture above has had its chance to steal a frame
+        // mid-stream.
+        await runTask;
+
+        // DisposeAsync releases whichever frame is still retained when the
+        // source ends: the one frame neither ProcessFrame's swap-and-dispose
+        // nor any CaptureAsync call ever got to.
+        await pipeline.DisposeAsync();
+
+        Assert.True(successfulCaptures > 0, "Expected at least one CaptureAsync call to succeed mid-run.");
         Assert.Equal(frameCount, pool.RentCount);
         Assert.Equal(pool.RentCount, pool.ReturnCount);
     }
