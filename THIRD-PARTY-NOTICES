@@ -18,8 +18,9 @@ CardSpotter — BSD 3-Clause
 
 LoreFetch's card identification is a C# port of the 1024-bit perceptual hash
 from CardSpotter by Jonas Gillberg (https://github.com/relgin/cardspotter),
-specifically the hashing and matching logic in Code/CardData.cpp and
-Code/ImageHash.*. The port is a derivative work of that source.
+specifically the hashing and matching logic in Code/CardData.h,
+Code/CardData.cpp and Code/QueryThread.cpp. The port is a derivative work
+of that source.
 
   Copyright (c) 2019, Jonas Gillberg
   All rights reserved.
@@ -50,10 +51,9 @@ Code/ImageHash.*. The port is a derivative work of that source.
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
   POSSIBILITY OF SUCH DAMAGE.
 
-  ⚠ VERIFY BEFORE v0.1.0: the copyright line above was taken from a research
-  summary, not read from the upstream LICENSE file. Confirm the exact holder
-  and year against https://github.com/relgin/cardspotter/blob/master/LICENSE
-  and correct it here if it differs.
+  Copyright line verified 2026-09-21 against
+  https://github.com/relgin/cardspotter/blob/master/LICENSE — holder and
+  year match the upstream LICENSE exactly.
 
 
 -------------------------------------------------------------------------------

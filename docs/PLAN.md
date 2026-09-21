@@ -18,6 +18,7 @@ The spine: sequencing, streams, integration, endgame. **Decisions live in [`../C
 | [`stream-d-export.md`](stream-d-export.md) | Collection store, native format, third-party adapters | stream D reviewer |
 | [`TESTING.md`](TESTING.md) | Five test levels and what each must assert | architecture review |
 | [`stream-review-directions.md`](stream-review-directions.md) | How the four stream reviews are launched, run and handed back | the orchestrating session |
+| [`RECONCILIATION.md`](RECONCILIATION.md) | Every ruling on the four reviews' 20 contract changes and 20 open questions | reconciliation |
 
 Each stream doc is deliberately **self-contained enough to review in isolation** — it names what it owns, what it consumes, its done-when, its fallbacks, a *"what a reviewer should scrutinise"* section for code review, and a *"Plan review: research targets"* section for the pre-build review.
 
@@ -28,8 +29,8 @@ Each stream doc is deliberately **self-contained enough to review in isolation**
 Stream reviewers may propose contract changes, and Stream 0 freezes the contracts, so the reviews land **before** Stream 0 writes code:
 
 1. **Architecture review** — one full-context session. Settles boundaries, ownership and the contract surface, so each stream reviewer inherits a correct seam instead of reviewing a moving target. *Done 2026-09-21; merged to `main`.*
-2. **Four stream reviews, in parallel** — each in its own worktree forked from `main`, reading only its stream doc, `CONTRACTS.md` and `CONTEXT.md` (plus `CLAUDE.md`, which auto-loads). Isolation is the point: no cross-stream context muddying the research. See [`stream-review-directions.md`](stream-review-directions.md).
-3. **Reconciliation** — one full-context session reads all four "Proposed contract changes" sections *against each other* and applies the accepted ones to `CONTRACTS.md` once. Skipping this means four proposals get applied on their own terms.
+2. **Four stream reviews, in parallel** — each in its own worktree forked from `main`, reading only its stream doc, `CONTRACTS.md` and `CONTEXT.md` (plus `CLAUDE.md`, which auto-loads). Isolation is the point: no cross-stream context muddying the research. See [`stream-review-directions.md`](stream-review-directions.md). *Done 2026-09-21; branches `review/stream-a|b|c|d`.*
+3. **Reconciliation** — one full-context session reads all four "Proposed contract changes" sections *against each other* and applies the accepted ones to `CONTRACTS.md` once. Skipping this means four proposals get applied on their own terms. *Done 2026-09-21 — 20 contract changes and 20 open questions ruled on; decision record in [`RECONCILIATION.md`](RECONCILIATION.md).*
 4. **Stream 0** builds and freezes.
 5. **Streams A–D fork.**
 
@@ -60,13 +61,29 @@ The only strictly serial work. Everything downstream forks from this commit, so 
 - **Claude Code hooks** in `.claude/` — two `PreToolUse` guards, tested against 16 synthetic payloads. They mechanise the two rules that were previously discipline only: project state stays in the repo, and the **frozen contract surface** is unwritable from inside a linked worktree (detected via `--absolute-git-dir` ≠ `--git-common-dir`, so `main` can still author it). Plus a hard block on force-push and a tripwire warning on plain `git push` / `gh pr create`. See `../CLAUDE.md`.
 - All planning documents.
 
-Remaining — **~3.5h**, up from the original ~2h because the architecture review moved the scan pipeline and two more fakes here. They can't move into a stream: the end-to-end suite proves the pipeline, so it must exist before the fork.
+Remaining — **~4h**, up from the original ~2h: the architecture review moved the scan pipeline and two more fakes here, and reconciliation added two further fakes, the pipeline factory and the thresholds loader. They can't move into a stream: the end-to-end suite proves the pipeline, so it must exist before the fork.
 
 0. **Prove `OpenCvSharp4.runtime.osx.arm64` on the Mac, first.** `Core` references OpenCvSharp (for `Core/Imaging` and `FolderFrameSource`), so stream A's demo path depends on a package with exactly one release. Load it and run one `Cv2` call before anything else. If it fails, you find out before the fork, not after.
-1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`. Pin Avalonia 12.1.2 and OpenCvSharp 4.13.0.20260627 now. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`.
+1. **All projects, with all package references** — `Core`, `Capture`, `Lab`, `App`, `Tests`, all on **`net8.0`**. **This is the main merge-conflict source removed by construction:** if every package a stream needs is already referenced, no stream ever edits a `.csproj`. The reconciled set, every item of which a stream review named as un-addable after the fork:
+
+   | Package | Version | For |
+   |---|---|---|
+   | `Avalonia`, `.Desktop`, `.Themes.Fluent`, `.Controls.DataGrid` | 12.1.2 | A |
+   | `Avalonia.Headless.XUnit` | 12.1.2 | A — the only way to test the keyboard map automatically |
+   | `AvaloniaUI.DiagnosticsSupport` | 2.2.3 | A — DevTools; **may require a paid tier**, see `RECONCILIATION.md` |
+   | `CommunityToolkit.Mvvm` | 8.4.2 | A |
+   | `OpenCvSharp4` | 4.13.0.20260627 | B, C, Core |
+   | `OpenCvSharp4.runtime.win` / `.runtime.osx.arm64` | matching | B, C, Core |
+   | `OpenCvSharp5.AvaloniaExtensions` | — | A, Mat→screen |
+   | `FlashCap` | 1.12.0 | C |
+   | `Microsoft.Extensions.Logging.Abstractions` | current | **the logging seam** — C's done-when criteria are phrased "the log shows…" |
+   | `CsvHelper` | current (Apache-2.0 option) | D — insurance only; `TextFieldParser` is in-box and no library gives the unknown-column guard |
+
+   `net8.0` because Avalonia 12 dropped everything below it and every pin above is verified against it; nothing needs `net10.0`, and self-contained publish means the user's machine never sees the TFM.
 2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
 3. **`Core/Scanning`** — the scan pipeline: detection loop, capture from the latest snapshot's frame, threshold application, trigger calls. Then **frozen**.
-4. **The five fakes** — `FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier` (configurable distances so the UI can reach all four `TileState` values), `StubOracleCatalog`. These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
+4. **The seven fakes** — `FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier` (configurable distances so the UI can reach all four `TileState` values), `StubOracleCatalog` (**~33k entries, configurable** — a few hundred cannot reproduce the type-ahead's only performance problem), plus **`StubCollectionStore` and `StubCollectionExporter`**, added in reconciliation. Stream A's collection view, empty state and export picker are all built against `ICollectionStore` and `ICollectionExporter`, which belong to stream D — without those two the claim that "stream A never needs anything real from B, C or D" was simply false. These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
+   - Also here: **`ScanPipelineFactory`** and the **thresholds-file loader**. Composition is Stream 0's, so stream A calls one function rather than learning the wiring, and never implements a file format stream B defines.
 5. **The end-to-end integration suite, green from the end of Stream 0.** Written here in `Tests/Integration/`, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, frame ownership, exclude/discard/clear semantics, commit idempotency, CSV shape. Its frames are **generated at test setup** into a temp folder (plain fills with a drawn rectangle — the stub detector ignores content), so no raster is ever committed. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
 6. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
 7. **Shared-write scaffolding** — `Tests/StreamA|B|C|D/` folders, and a **README skeleton** (title, description, GPLv3 note, WotC Fan Content disclaimer) with **one headed section per stream**. Each stream edits only its own folder and its own section, so parallel edits merge cleanly.
@@ -165,7 +182,7 @@ Stream-specific risks live in each stream doc. These span the whole build:
 Per-stream criteria are in the stream docs; test levels in [`TESTING.md`](TESTING.md). The cross-cutting bar:
 
 - `dotnet test` green on Mac **and** `windows-latest` CI.
-- Stream B's round-trip gate passes: a Scryfall render retrieves itself at distance ≈ 0 through the full query path.
+- Stream B's round-trip gate passes: a Scryfall render retrieves **its own artwork** through the full query path at or below the recorded distance floor (not ≈ 0 — the two sides are asymmetric by design; see [`RECONCILIATION.md`](RECONCILIATION.md)), and the committed golden hashes match on **both** CI legs.
 - The accuracy × height table is committed, measured on **normal cards** (not lands), with both thresholds and the distance-margin data behind them.
 - **`wrong@1` ≈ 0.** Failures must be no-match, not confident-wrong — a silent miss is recoverable, a confident wrong answer is permanent bad inventory.
 - The whole loop is achievable keyboard-only: space → enter → space → enter, no mouse.

@@ -12,7 +12,7 @@ Neither is necessary, because **the contracts are frozen**. Two mechanisms avoid
 
 ### 1. The fakes make an end-to-end test possible on day zero
 
-Stream 0 ships the scan pipeline and five fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`). So the full path — frame source → detect → rectify → identify → cohort → commit → CSV — is **testable and green from the end of Stream 0**, long before the hash or the camera exist.
+Stream 0 ships the scan pipeline and seven fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`, `StubCollectionStore`, `StubCollectionExporter`). So the full path — frame source → detect → rectify → identify → cohort → commit → CSV — is **testable and green from the end of Stream 0**, long before the hash or the camera exist.
 
 It tests none of the hash's correctness. It tests the *wiring*: that the contracts compose, that frame ownership holds, that exclude/discard/clear semantics hold, that commit is idempotent, that the CSV shape is right. **That is where integration bugs actually live** — and across four worktrees, a test that fails the instant someone breaks a contract is the single highest-value guard available.
 
@@ -82,7 +82,9 @@ Level 2 needs no card imagery at all (frames are generated at setup). Level 3 do
 
 ### Integration (synthetic) — stream B
 
-Generated frame at a known simulated height → the full query path → the expected oracle name. Includes **the round-trip gate**: a Scryfall render must retrieve *itself* at Hamming distance ≈ 0 **through the same code the scanner calls**, not a test-only shortcut. This is the test that catches reference/query transform divergence, which otherwise degrades matching silently rather than failing.
+Generated frame at a known simulated height → the full query path → the expected oracle name. Includes **the round-trip gate**: a Scryfall render must retrieve **its own artwork** — asserted on `ArtworkId`, not `OracleId`, or the gate passes on a different art of the same card — **through the same code the scanner calls**, not a test-only shortcut.
+
+The gate asserts a **bound, not equality**: the reference side blurs and downsamples where the query side does not, so a small distance floor is expected and demanding ≈ 0 would mean deleting the mechanism that makes the algorithm work. Record the measured floor and assert against it. Paired with **committed golden hashes run on both CI legs**, because `INTER_AREA` is not bit-exact across x86-64 and ARM64. Together these are what catch reference/query transform divergence, which otherwise degrades matching silently rather than failing.
 
 ### Integration (fakes, then real) — written in Stream 0, live from the end of Stream 0
 
@@ -94,7 +96,7 @@ One suite in `Tests/Integration/`, parameterised over the implementation set: `[
 - a *Cleared* tile commits the machine's proposal again
 - re-committing the same card increments quantity rather than adding a row
 - a partial cohort (7 cards where 9 were expected) commits 7
-- `Capture()` rectifies the frame its latest snapshot came from, not a newer one
+- `CaptureAsync` rectifies the frame its latest snapshot came from, not a newer one — and is safe to call concurrently with the pipeline loop, which is the race that makes this test worth having
 - every pooled `CameraFrame` is disposed exactly once over a sustained run
 - **a tile's thumbnail is still readable after the cohort commits** ← a regression guard: the old `RectifiedCard` disposal footgun was removed by construction, and this keeps it removed
 

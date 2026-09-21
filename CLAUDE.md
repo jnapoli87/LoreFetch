@@ -17,6 +17,7 @@ Private personal project, **GPLv3**, unrelated to any employer or day job. Built
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Collection store, native format, third-party adapters |
 | [`docs/TESTING.md`](docs/TESTING.md) | Five test levels and what each must assert |
 | [`docs/stream-review-directions.md`](docs/stream-review-directions.md) | How the pre-build stream reviews run |
+| [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) | Every stream-review ruling and why — the record behind the current contract surface |
 
 Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning` and every `.csproj` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
 
@@ -30,15 +31,21 @@ Work happens in **four parallel git worktrees** after a serial ~3.5h foundation 
 
 The engine is a C# port of **CardSpotter**'s 1024-bit perceptual hash (`github.com/relgin/cardspotter`, **BSD-3-Clause**, GPLv3-compatible, must be attributed in `THIRD-PARTY-NOTICES`). This is the algorithm shipping in Wizards' own SpellTable — verified by inspecting its production WASM bundle, which contains no neural net despite the "card recognition AI" marketing.
 
-Seven steps, in order. Reference side and query side **must** apply the identical transform:
+Seven steps. **The two sides are deliberately asymmetric** — steps 2 and 3 run on the **reference side only**; the query side enters at step 4 with an already-rectified 488×680 card. Upstream does exactly this, and the convergence argument below *depends* on it: blurring and downsampling the reference is what destroys detail a webcam cannot reproduce. Steps 4–6 are shared and must be bit-identical.
 
-1. Rectify the card (perspective-correct from the detected quad)
-2. `GaussianBlur` 3×3, σ=1
-3. Resize to **96 px wide**, `INTER_AREA`, grayscale
-4. Take region `width × 0.85·width` — the **top ~61%** of the card: title, art *and* type line
-5. Resize that region to **32×32**
-6. 4×4 grid of 8×8 cells; each bit = pixel > **median of its own cell** → **1024 bits**
-7. Match by Hamming distance, with per-cell grid distances and early rejection
+| Step | | Side |
+|---|---|---|
+| 1 | Rectify the card (perspective-correct from the detected quad) — pinned `INTER_LINEAR`; `warpPerspective` does **not** support `INTER_AREA` | query |
+| 2 | `GaussianBlur` 3×3, σ=1 (bit-exact across platforms — passing σ explicitly forces OpenCV's fixed-point path) | **reference only** |
+| 3 | Resize to **96 px wide**, `INTER_AREA`, grayscale | **reference only** |
+| 4 | Take region `width × 0.85·width` — the **top ~61%** of the card: title, art *and* type line | both |
+| 5 | Resize that region to **32×32**, `INTER_AREA` | both |
+| 6 | 4×4 grid of 8×8 cells; each bit = pixel > **median of its own cell** → **1024 bits** | both |
+| 7 | Match by **full** 1024-bit Hamming distance | — |
+
+**Step 7: do not port upstream's early rejection.** It is threshold-keyed and inadmissible — it prunes cards beyond a distance threshold rather than cards that cannot make the top N, so it changes the ranking. It also directly contradicts `ICardIdentifier`'s "NEVER filters by threshold". It buys nothing: brute force over 55k × 1024 bits measures **0.243 ms** per query, 2.19 ms for a 9-card cohort.
+
+**Step 3 is `INTER_AREA` by choice, not by fidelity.** Upstream passes `cv::INTER_AREA` as `resize`'s 4th positional argument, which is `double fx` — so it silently runs `INTER_LINEAR`. That is an upstream bug. We build our own index, so what matters is that our two sides agree, not that they match CardSpotter's binaries; `INTER_AREA` is the correct filter for a ~5× downscale. A port that "faithfully" copies the call gets `INTER_LINEAR` by accident.
 
 Why this survives webcam frames when naive pHash doesn't: rectification removes distortion rather than tolerating it; blurring and downsampling the *reference* side destroys the high-frequency detail a webcam can't reproduce, so photo and render converge; the **local median per cell** makes every bit invariant to local brightness, exposure and white balance; and the 4×4 grid lets glare corrupt some cells instead of failing the whole match.
 
@@ -102,7 +109,9 @@ Why CSV wins here:
 - **Users can hand-fix a bad row in Excel.** This matters: identification is opt-out, so some wrong matches will slip through, and being able to correct the file is a feature.
 - Zero dependencies, no EF ceremony, and integration tests are write-file / read-file / assert.
 
-Accepted costs: full-file rewrite per commit (~300 KB at 10k rows, microseconds), no indexing (linear scan of 10k rows is nothing), no transactions (covered by write-temp-then-rename, atomic on NTFS and APFS). UTF-8 **with BOM** or Excel mangles non-ASCII card names.
+Accepted costs: full-file rewrite per commit (~300 KB at 10k rows, microseconds), no indexing (linear scan of 10k rows is nothing), no transactions (covered by write-temp-then-rename — documented atomic on APFS, undocumented on NTFS, and only ever a guarantee that a reader sees no *truncated* file, never that the write survived power loss; the `.bak` covers the rest). UTF-8 **with BOM** or Excel mangles non-ASCII card names.
+
+**v1 ships two formats: the native SOT and one third-party adapter, Moxfield** — the only researched tool that provably accepts name-only rows. ManaBox requires a set or Scryfall id and so *cannot* take our rows; Archidekt blocks name-only uploads; Deckbox works but is documented only by folklore; Dragon Shield has no import documentation at all. One verified adapter beats four guessed ones; the README says which and why. Details in `docs/CONTRACTS.md`.
 
 **The native format is the source of truth, and every export adapter projects *down* from it** — so it carries everything available at commit time, not just what v1's adapters consume: `OracleId` (the Scryfall stable key, free from the hash index), `OracleName`, `Quantity`, `Condition`, `LastScannedAt`, `BestMatchDistance`, `Source` (`Hash` | `Manual`). A three-column SOT would permanently cap what any future exporter could emit.
 
@@ -128,11 +137,11 @@ Ladder: **basic lands → normal cards → everything else is stretch.**
 | CV | **OpenCvSharp4 `4.13.0.20260627`** + `runtime.win` + `runtime.osx.arm64` | **No 4.12.x exists** (4.11 → 4.13). **Never use `.slim`** — it disables `videoio`, i.e. no camera. Versions below `4.13.0.20260602` break single-file publish (used `Assembly.Location`, empty under single-file). |
 | Capture | **FlashCap 1.12.0** (Apache-2.0) | `EnumerateDescriptors()` does explicit format negotiation — this is why it's here. |
 | Mat → screen | `OpenCvSharp5.AvaloniaExtensions`, or one reused `WriteableBitmap` | Do **not** use `OpenCvSharp4.Extensions` (GDI+ / `System.Drawing.Common`, throws off-Windows) or `.WpfExtensions`. |
-| Store | **CSV is the store of record** — no database | Write via temp-file + atomic rename (atomic on NTFS and APFS). Full rewrite per commit is ~300 KB at 10k rows. |
+| Store | **CSV is the store of record** — no database | Temp file **in the target's own directory** (`%TEMP%` silently degrades the rename to copy+delete), `Flush(true)`, then `File.Move(overwrite: true)`. Documented atomic on APFS, undocumented either way on NTFS. Full rewrite per commit is ~300 KB at 10k rows. |
 
 **The C920 trap.** It is **USB 2.0**, so at 1920×1080 the uncompressed YUYV mode can only advertise **5 fps** — bus bandwidth, not slow software. MJPG advertises 30. OpenCV's `set()` for FOURCC **returns false and silently leaves you on YUY2**, which is the origin of every "my C920 is 5 fps" report. So: prefer `DSHOW` (1.44 s to first frame vs MSMF's 5.71 s at 1080p); set `FourCC = "MJPG"` **before** width/height; **read the properties back and assert**. If MSMF is unavoidable, set `OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS=0` *before the first OpenCvSharp type is touched*. Unmeasured cost to watch: MJPEG means 30 × 1080p JPEG decodes/sec on the CPU.
 
-**Avalonia preview.** Allocate **one** `WriteableBitmap` and mutate it — per-frame allocation is the documented cause of every "camera preview is choppy" report. Convert BGR→BGRA before blitting, respect `RowBytes` (Skia pads rows), and call `InvalidateVisual()` rather than rebinding `Source`. Measured ceiling is 60 fps @ 1080p, above our 30 fps need. Draw overlays as vector children over the `Image`, not baked into the Mat.
+**Avalonia preview.** Allocate **one** `WriteableBitmap` and mutate it — per-frame allocation is the documented cause of every "camera preview is choppy" report. Convert BGR→BGRA before blitting, respect `RowBytes` (Skia pads rows), and call `InvalidateVisual()` rather than rebinding `Source`. Draw overlays as vector children over the `Image`, not baked into the Mat. **And dispose the `Lock()` every frame** — Skia caches an `SKImage` snapshot that only `BitmapFramebuffer.Dispose()` invalidates, so a held lock renders frame 1 forever. (An earlier "measured ceiling is 60 fps @ 1080p" claim here had no primary source — the person cited is a contributor, not a maintainer, and said he had not benchmarked it. Removed rather than restated; the approach stands on the allocation argument alone.)
 
 **Publish.** `-r win-x64 --self-contained -p:PublishSingleFile=true` **plus `-p:IncludeNativeLibrariesForSelfExtract=true`** — without that flag `OpenCvSharpExtern.dll` ships as a loose file and it isn't single-file. Expect ~150–250 MB. Unsigned exe trips SmartScreen; note it in the README.
 
@@ -141,16 +150,16 @@ Ladder: **basic lands → normal cards → everything else is stretch.**
 **No API key and no authentication exist** — nothing to register for. Requirements:
 
 - Both `User-Agent` (`LoreFetch/0.1 (github.com/jnapoli87/LoreFetch)`) **and** `Accept` headers are mandatory. Their docs say explicitly: do not let an HTTP library choose the User-Agent.
-- Rate limits are IP-based: 2/sec on `/cards/*`, 10/sec elsewhere; a 429 locks you out 30 s and "it is not acceptable to ignore HTTP 429 responses." **`*.scryfall.io` file origins are unmetered**, so the image pull for the hash build is fast (~0.74 GB at `small`, ~1 hour).
+- Rate limits are IP-based: 2/sec on `/cards/*`, 10/sec elsewhere; a 429 locks you out 30 s and "it is not acceptable to ignore HTTP 429 responses." **`*.scryfall.io` file origins are unmetered**, so the image pull for the hash build is bounded by wall clock and disk, not rate limit. **Pull `normal` (488×680), not `small`** — `small` is 146×204, and building the index from it means the reference side's 96 px step is a 1.5× downscale while the query side's is 5.1×, so the two sides can never converge and the distance floor is permanently and invisibly inflated. `normal` is *exactly* `RectifiedCard`'s canonical size, which is the whole reason 488×680 was chosen. Cost: **~6.0 GB** (109.6 KB average) rather than ~0.79 GB. Fallback if that is impractical is `border_crop` (480×680) — never `small`.
 - Bulk data is **gzipped JSONL**: field `jsonl_download_uri`, size field `compressed_size`. The old `download_uri`/`size` fields are gone and most tutorials are stale. Resolve via `GET /bulk-data/{type}`; filenames carry a daily timestamp, so never hardcode. Use **`unique_artwork`**.
-- Counts: 32,992 oracle names, 53,482 unique arts, 98,578 prints.
+- Counts, re-measured 2026-09-21 against the live bulk file: **54,963** objects in `unique_artwork` over **37,926** oracle ids; **48,713** arts over **33,578** oracle ids after a scope-appropriate filter. The older 32,992 / 53,482 figures were drift, not error. **3,440 objects have no top-level `image_uris`** (multi-faced — images live per face) and will crash or silently vanish in a naive builder; skip them explicitly, along with `art_series` and `token` layouts.
 - Display terms forbid distorting/blurring/cropping-off the copyright line on images *shown to users*, and require artist credit alongside an art crop. Internal transforms for hashing are fine.
 
-**Never commit card imagery** — not Scryfall renders, and not your own photographs either; the artwork is WotC IP regardless of who shot it. The fixture corpus stays local and gitignored. Commit only *derived* data: the ~8.6 MB hash index and accuracy tables. CI therefore runs against synthetically generated frames. README carries a **WotC Fan Content Policy disclaimer**.
+**Never commit card imagery** — not Scryfall renders, and not your own photographs either; the artwork is WotC IP regardless of who shot it. The fixture corpus stays local and gitignored. Commit only *derived* data: the hash index (**6.0 MiB** of hash payload in scope, ~8.2 MiB once the name table is counted — the old "~8.6 MB from ~67k arts" figure was arithmetic on a count that was never real) and the accuracy tables. CI therefore runs against synthetically generated frames. README carries a **WotC Fan Content Policy disclaimer**.
 
 ### Platform
 
-Ship **`win-x64` binary only**. But the codebase stays portable — no project named `.Windows`, no gratuitous `#if WINDOWS`, and the `macos-latest` CI leg exists to enforce that. Everything except FlashCap's macOS capture backend already runs on Apple Silicon, mostly as a side effect of dropping OCR. macOS is documented as "should work, unsupported, build from source"; supporting it properly would mean `Info.plist` camera entitlements, Gatekeeper instructions, a `.app` bundle and Mac-camera testing — which is exactly the trap the original plan fell into by building *for* two platforms.
+Ship **`win-x64` binary only**. But the codebase stays portable — no project named `.Windows`, no gratuitous `#if WINDOWS`, and the `macos-latest` CI leg exists to enforce that. Everything already runs on Apple Silicon, mostly as a side effect of dropping OCR. FlashCap **does** have an AVFoundation backend as of 1.11.0 — the earlier claim that none existed was stale — but issue #182 reports it crashing natively and delivering mis-channelled colour, so the decision is unchanged and better supported than before: no device-opening test on the `macos-latest` leg. macOS is documented as "should work, unsupported, build from source"; supporting it properly would mean `Info.plist` camera entitlements, Gatekeeper instructions, a `.app` bundle and Mac-camera testing — which is exactly the trap the original plan fell into by building *for* two platforms.
 
 ### Git identity
 
@@ -180,12 +189,20 @@ Repo-local, **no global config touched** (the global default on these machines i
 
 ## The one gate that matters most
 
-**A Scryfall render must retrieve *itself* at Hamming distance ≈ 0 through the full query path.** If the reference-side and query-side transforms diverge at all — a different resize interpolation, a different region offset — matching degrades *silently* rather than failing loudly. This is the highest-risk failure mode in the project. Guard it with a round-trip test before building anything on top.
+**A Scryfall render must retrieve its own artwork through the full query path, at a small, recorded, stable Hamming distance.** Not ≈ 0 — the reference side blurs and downsamples where the query side does not, so a floor is *expected*, and demanding zero would mean deleting the mechanism that makes a webcam frame match a print render.
+
+The invariant is therefore not "both sides identical" but: **each side's transform exists exactly once in the codebase, the shared steps are bit-identical, and neither side changes without rebuilding the index.** Guard it with committed golden hashes plus a round-trip test that asserts the measured floor as a bound, before building anything on top.
+
+Two ways this still fails silently, both guarded rather than assumed:
+
+- **Artwork granularity.** `unique_artwork` holds 54,963 arts over 37,926 oracle ids, so a gate asserting only `OracleId` passes while matching a *different art of the same card*. Assert on `ArtworkId`.
+- **Architecture.** `INTER_AREA` is **not** bit-exact across x86-64 and ARM64 (carotene's NEON HAL; OpenCV #24163 confirmed, #22477 closed won't-fix). So **the index is built and committed on `win-x64`**, the ship target, and the golden-hash test runs on *both* CI legs — a Mac/Windows divergence then fails loudly instead of quietly inflating every distance.
 
 ## Real risks, in order
 
 1. **Glare, focus and tilt — not resolution.** These are the top four items in Wizards' own SpellTable troubleshooting list, and they destroy the local-median bit pattern. Mitigation is physical: diffuse off-axis lighting (a SAD lamp works; position it at a shallow angle, not beside the camera, and check for PWM flicker banding against the 30 fps shutter). Colour temperature is irrelevant — we grayscale before hashing.
-2. **Reference/query transform divergence** — see the gate above.
+2. **Reference/query transform divergence.** Not "the two sides differ" — they differ *by design*. The risk is an **unintended** change to either side, or to the shared steps, after the index is built. Guarded by golden hashes, one transform function per side, and a rebuild-on-change rule. See the gate above.
+   **New, found in review: `INTER_AREA` is not bit-exact across x86-64 and ARM64.** An index built on the Mac may not match queries hashed on Windows, presenting exactly as "degrades silently". Mitigated by building the index on `win-x64` and running the golden-hash test on both CI legs.
 3. **False card detections** — filter on aspect *and* area, log every rejection.
 4. **Mat contrast.** Detection depends on finding the card's edge, and modern cards are black-bordered, so a *dark* mat is the worst case — which is what the original plan recommended four times. Settle it by measurement.
 5. **Same-art printings are permanently indistinguishable** by hash. Accepted (oracle name only), but say so in the README rather than letting users discover it.
@@ -209,7 +226,7 @@ The artwork is Wizards of the Coast IP regardless of who photographed it, so nei
 1. **`.gitignore`** blocks all raster formats tree-wide, opting UI/doc assets back in individually, so a stray fixture can't slip through on `git add -A`. Verify with `git check-ignore -v <path>`.
 2. **`hooks/pre-commit`** rejects staged raster files outside the allowed asset paths — which catches `git add -f`, the one move that bypasses `.gitignore` completely.
 
-Only **derived** data is committed: the ~8.6 MB hash index and the accuracy tables. The raw Scryfall downloads that build the index are ignored, as is the user's own `collection.csv`.
+Only **derived** data is committed: the ~8.2 MiB hash index and the accuracy tables. The raw Scryfall downloads that build the index are ignored, as is the user's own `collection.csv`.
 
 ### Claude Code hooks — the rules that were previously only discipline
 
