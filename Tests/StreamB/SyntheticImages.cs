@@ -43,6 +43,24 @@ internal static class SyntheticImages
         return BgrFromBuffer(buffer, width, height, stride);
     }
 
+    /// Independent per-pixel random noise -- deterministic in `seed`. Unlike
+    /// a regular checkerboard (whose every downscale box averages to
+    /// exactly the same value regardless of box-filter vs. bilinear
+    /// sampling, degenerating to a flat image either way), true noise's
+    /// local average genuinely differs between `INTER_AREA`'s box mean and
+    /// `INTER_LINEAR`'s few-tap bilinear sample. This is what makes a
+    /// resize-filter swap show up in a golden hash instead of disappearing
+    /// into the same flat result under either filter.
+    public static Mat MakeHighFrequencyNoiseBgr(int width, int height, int seed)
+    {
+        var stride = width * 3;
+        var buffer = new byte[stride * height];
+        var random = new Random(seed);
+        random.NextBytes(buffer);
+
+        return BgrFromBuffer(buffer, width, height, stride);
+    }
+
     /// Alternating full-contrast pixels: the highest-frequency content a
     /// grayscale conversion can see, used to pin `QueryTransform` against
     /// any blur -- a 3x3 Gaussian blur collapses this pattern almost to a
