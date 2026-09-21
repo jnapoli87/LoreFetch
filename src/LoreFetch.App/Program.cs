@@ -2,8 +2,9 @@ using Avalonia;
 
 namespace LoreFetch.App;
 
-// Bare entry point. Stream A's package A1 owns the real app shell (startup
-// composition, the main window, the scan pipeline wiring) and replaces this.
+// Bare entry point. The real app shell — startup composition, the main
+// window, the scan pipeline wiring — lives in App.axaml.cs's
+// OnFrameworkInitializationCompleted and in AppComposition (A1).
 internal static class Program
 {
     [STAThread]
