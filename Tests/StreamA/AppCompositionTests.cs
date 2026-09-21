@@ -39,6 +39,55 @@ public class AppCompositionTests
         Assert.Equal(1, factory.Source.ReadAsyncCallCount);
 
         await session.DisposeAsync();
+
+        Assert.Equal(1, factory.Source.DisposeAsyncCallCount);
+    }
+
+    /// Orchestrator review (2026-09-21): nothing ever disposed the frame
+    /// source composition opened, so `FolderFrameSource`'s own decode loop
+    /// — and the temp folder it reads from — outlived every run. Proves the
+    /// fix generically: `AppSession.DisposeAsync` must dispose the source
+    /// exactly once, and must invoke the optional `onDisposed` cleanup hook
+    /// exactly once, using a counting source rather than real file I/O.
+    [Fact]
+    public async Task DisposeAsync_DisposesTheFrameSourceAndRunsOnDisposedExactlyOnce()
+    {
+        var factory = new CountingFrameSourceFactory();
+        var settings = new ScanSettings();
+        var onDisposedCallCount = 0;
+
+        var session = await AppComposition.ComposeAsync(
+            factory,
+            new StubCardDetector(cardCount: 0),
+            new StubRectifier(),
+            new StubCardIdentifier(),
+            new AutoCaptureTrigger(settings),
+            settings,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken,
+            onDisposed: () => onDisposedCallCount++);
+
+        await session.RunTask;
+        await session.DisposeAsync();
+
+        Assert.Equal(1, factory.Source.DisposeAsyncCallCount);
+        Assert.Equal(1, onDisposedCallCount);
+    }
+
+    /// The concrete regression from orchestrator review: launching in
+    /// Fakes mode creates a real temp folder for `FolderFrameSourceFactory`
+    /// (`DemoFrames.CreateFolder`), and before this fix nothing ever
+    /// deleted it — every launch left one behind. This exercises the exact
+    /// pair of methods `AppComposition` wires together, directly.
+    [Fact]
+    public void DemoFrames_CreateFolder_ThenDeleteFolderBestEffort_LeavesNoDirectoryBehind()
+    {
+        var folder = DemoFrames.CreateFolder();
+        Assert.True(Directory.Exists(folder));
+
+        DemoFrames.DeleteFolderBestEffort(folder);
+
+        Assert.False(Directory.Exists(folder));
     }
 
     [Fact]
@@ -68,6 +117,8 @@ public class AppCompositionTests
     {
         public int ReadAsyncCallCount { get; private set; }
 
+        public int DisposeAsyncCallCount { get; private set; }
+
         public string Description => "counting-fake";
 
         public FrameGeometry Geometry => new(1, 1, 0);
@@ -78,7 +129,11 @@ public class AppCompositionTests
             return EmptyAsync();
         }
 
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync()
+        {
+            DisposeAsyncCallCount++;
+            return ValueTask.CompletedTask;
+        }
 
         private static async IAsyncEnumerable<CameraFrame> EmptyAsync()
         {

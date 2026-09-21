@@ -26,18 +26,38 @@ public enum CompositionMode
 /// tear the whole session down.
 public sealed class AppSession : IAsyncDisposable
 {
-    public AppSession(IScanPipeline pipeline, Task runTask, ScanSettings settings)
+    private readonly Action? _onDisposed;
+
+    public AppSession(
+        IScanPipeline pipeline,
+        IFrameSource source,
+        Task runTask,
+        ScanSettings settings,
+        Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
+        ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(runTask);
         ArgumentNullException.ThrowIfNull(settings);
 
         Pipeline = pipeline;
+        Source = source;
         RunTask = runTask;
         Settings = settings;
+        _onDisposed = onDisposed;
     }
 
     public IScanPipeline Pipeline { get; }
+
+    /// The frame source composition opened. `ScanPipeline` never disposes
+    /// this — its own doc comment says so explicitly ("does not dispose the
+    /// underlying IFrameSource — the pipeline does not own its lifecycle")
+    /// — so whoever opened it is responsible for closing it. Orchestrator
+    /// review (2026-09-21) found that nothing ever did: `FolderFrameSource`
+    /// keeps decoding on its own timer until its `DisposeAsync` is called,
+    /// so the demo path's background loop, and the temp folder it reads
+    /// from, outlived every run.
+    public IFrameSource Source { get; }
 
     /// The `Task` returned by the one `RunAsync` call composition made.
     /// Faults when the frame source fails — CONTRACTS.md: `SourceFailed` is
@@ -49,10 +69,14 @@ public sealed class AppSession : IAsyncDisposable
 
     public ScanSettings Settings { get; }
 
-    /// Disposes the pipeline (which cancels and drains its loop) and then
-    /// awaits the run task, swallowing the cancellation/fault a normal
-    /// shutdown produces. A caller that wants to observe a real failure
-    /// should inspect `RunTask` itself before calling this.
+    /// Disposes the pipeline (which cancels and drains its loop), awaits the
+    /// run task, then disposes the frame source itself — only at that point
+    /// has `FolderFrameSource`'s own decode loop actually stopped, which is
+    /// why `onDisposed` (the Fakes path's temp-folder cleanup) runs last,
+    /// after the source that reads from it is closed. Exceptions the run
+    /// task raises on a normal shutdown are swallowed; a caller that wants
+    /// to observe a real failure should inspect `RunTask` itself before
+    /// calling this.
     public async ValueTask DisposeAsync()
     {
         await Pipeline.DisposeAsync().ConfigureAwait(false);
@@ -67,6 +91,10 @@ public sealed class AppSession : IAsyncDisposable
         catch (FrameSourceException)
         {
         }
+
+        await Source.DisposeAsync().ConfigureAwait(false);
+
+        _onDisposed?.Invoke();
     }
 }
 
@@ -99,7 +127,21 @@ public static class AppComposition
         ICardIdentifier identifier = new StubCardIdentifier();
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
 
-        return ComposeAsync(frameSourceFactory, detector, rectifier, identifier, trigger, settings, loggers, ct);
+        // Best-effort cleanup of the temp folder DemoFrames created, run
+        // from AppSession.DisposeAsync only after the frame source itself
+        // (and therefore its decode loop) has stopped. Orchestrator review
+        // found every launch left one of these behind — nothing ever
+        // deleted them.
+        return ComposeAsync(
+            frameSourceFactory,
+            detector,
+            rectifier,
+            identifier,
+            trigger,
+            settings,
+            loggers,
+            ct,
+            onDisposed: () => DemoFrames.DeleteFolderBestEffort(frameFolder));
     }
 
     /// The testable core of composition, factored out so Tests/StreamA can
@@ -108,7 +150,9 @@ public static class AppComposition
     /// folder on disk or the real fakes. Opens the frame source, builds the
     /// pipeline through the frozen `ScanPipelineFactory`, and starts
     /// `RunAsync` exactly once — this is the one place in the app allowed
-    /// to call it.
+    /// to call it. `onDisposed` is an optional extra cleanup step (e.g. a
+    /// temp folder the caller created for this frame source) run at the end
+    /// of `AppSession.DisposeAsync`, after the source itself is closed.
     public static async Task<AppSession> ComposeAsync(
         IFrameSourceFactory frameSourceFactory,
         ICardDetector detector,
@@ -117,7 +161,8 @@ public static class AppComposition
         IAutoCaptureTrigger trigger,
         ScanSettings settings,
         ILoggerFactory loggers,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(frameSourceFactory);
         ArgumentNullException.ThrowIfNull(detector);
@@ -131,6 +176,6 @@ public static class AppComposition
         var pipeline = ScanPipelineFactory.Create(source, detector, rectifier, identifier, trigger, settings, loggers);
         var runTask = pipeline.RunAsync(ct);
 
-        return new AppSession(pipeline, runTask, settings);
+        return new AppSession(pipeline, source, runTask, settings, onDisposed);
     }
 }

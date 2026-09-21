@@ -55,4 +55,30 @@ internal static class DemoFrames
 
         return folder;
     }
+
+    /// Deletes a folder `CreateFolder` returned, swallowing the two
+    /// exceptions a delete can throw while a reader still has a file
+    /// briefly open. `FolderFrameSource` decodes with a fresh `Cv2.ImRead`
+    /// on every timer tick rather than holding the file open, so this is
+    /// meant to be called only after that source has itself been disposed
+    /// (`AppSession.DisposeAsync` does this) — at that point the race
+    /// window is already effectively closed, and this catch is insurance,
+    /// not the primary defence. Orchestrator review (2026-09-21) found that
+    /// nothing was calling this at all: every launch left its temp folder
+    /// behind (`%TEMP%/lorefetch-demo-frames-<guid>`).
+    public static void DeleteFolderBestEffort(string folder)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+
+        try
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
 }
