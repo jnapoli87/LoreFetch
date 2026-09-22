@@ -647,10 +647,35 @@ At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×23
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
 
-  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
-  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
-  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
-  ruling below.
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand. It validates every label, refuses a
+  height/layout/orientation combination that cannot physically fit, warns under 0.5″ of margin, validates each
+  `--card` against the 33,596-name oracle catalog and writes the catalog's **canonical** spelling, quotes per
+  RFC 4180, and writes the ground-truth row only after the frame lands. `--dry-run` validates a whole shot list
+  without touching the camera; `--verify <csv>` audits rows already written. Frames land as **`.png`**.
+
+  **Shot list, revised 2026-09-22 after the user chose portrait cards over rotating them:**
+
+  | Batch | Height | Layout | Mat | Captures |
+  |---|---|---|---|---|
+  | A — six groups of 9 | **15″** | 3×3 portrait | light | 6 |
+  | B — **same six groups** | 20″ | 3×3 portrait | light | 6 |
+  | C / D — two groups from A | 15″ | 3×3 portrait | mid / dark | 4 |
+  | E — lines | 12″ + 20″ | 3-in-a-line | light | 4 |
+  | F — singles | 12″ + 20″ | 1 card | light | 4 |
+  | G — lands | 15″ | 3×3 portrait | light | 2 |
+  | H — sleeved, foil | 15″ | 1 or 3 | light | 4 |
+
+  **15″, not 12″, for every 3×3** — a portrait 3×3 needs h ≥ **13.47″** (it wants 10.7″ on the 1080 axis), so 12″ portrait misses by −1.17″ and 14″ leaves only +0.42″. 15″ gives **+1.21″**, and at 15″ *both* orientations fit, so the height alone makes the geometry safe. A and B are **paired on the same cards** so height is isolated; C and D reuse A's groups so the mat is attributable. E and F stay at 12″ because a single card and a 3-line fit portrait at any height, which makes the card-width sweep three points — **283 / 227 / 170 px** — instead of two. Resolution is not the binding constraint: the reference side downsamples to **96 px wide**, so even 170 px carries ~1.8× what the index retains.
+
+  🔴 **Defect found and fixed 2026-09-22, before the bench session: `compute_fit()` hardcoded layout 9's ROTATED footprint**, so it silently overstated margin for portrait cards — at 12″ it reported a comfortable **+1.83″** when portrait actually runs **−1.17″** off the frame. It would have filed a frame with its top and bottom rows cropped away: precisely the silent crop-scale failure B5c had just finished quantifying as the cause of a confident *wrong* identification. Now `--orientation portrait|rotated`, **defaulting to portrait** (the stricter case), with the other orientation's margin printed as information. Verified: default at 12″/L9 refuses with the −1.17″ reason and points out rotated would fit; 15″ portrait reports +1.21″; 20″ portrait +5.18″; layouts 1 and 3 are byte-identical across orientations. **How it surfaced is the lesson:** the implementer hit a margin that disagreed with the orchestrator's brief and reported the disagreement as information rather than emitting the number the brief expected. Both numbers were right — for different card orientations — and the brief was the thing that was underspecified.
+
+  **`--height` is now a numeric range (6–30″, decimals allowed), not an allowlist**, because `compute_fit()` is the real guard and an allowlist had to grow every time the bench picked a new height. 9.75″ is consequently *accepted* now, and correctly warns at 0.04″ of margin — which tells the operator the real reason rather than refusing blankly.
+
+  **RULING — `ground-truth.csv` keeps its 7 columns; orientation does NOT become a column.** Its schema stays `file,height_in,layout,slot,oracle_name,rung,mat`. Three reasons: orientation is **invisible to identification by design** (B5a orders corners short-edge-first so a rectified card is always upright-or-180°, and B3b hashes both 180° orientations), so B6 does not need it to score; it is recoverable from the `file` path, which now carries `-portrait`/`-rotated` for layout 9, the only layout where it varies; and a schema change while the operator is mid-capture would orphan rows already written. If the orientation-invariance claim is ever worth falsifying, parsing it back out of the filename is sufficient for a one-off analysis.
+
+  **Cosmetic nit, not a bug:** the fit line labels the footprint "short x long" while printing portrait's as `10.70"x7.70"`. Those are the dimensions checked against the short and long *axes* respectively, not sorted by size. The verdicts and margins are correct; only the label reads oddly.
+
+  🔴 **B6 requirement, surfaced by a user question about slot order — do not skip it.** B6 must map detected quads back to slot numbers, and the only sane rule is sorting quad centroids **row-major: top-to-bottom, then left-to-right**. That rule must be pinned in code with its own test, and the operator must lay grids in aligned rows for it to be unambiguous. **Critically: if the detected count disagrees with the layout count, B6 must NOT pair by position** — a 3×3 frame that detects 8 of 9 would silently misalign every slot after the gap and manufacture eight wrong answers from one missed card. B5a proved missed detections happen (a sleeved card on black). B6 fails such a frame loudly, or resolves the gap by position rather than by index.
 
   Gates B6.
 - [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
