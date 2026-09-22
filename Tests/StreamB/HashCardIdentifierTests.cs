@@ -87,6 +87,33 @@ public class HashCardIdentifierTests
         Assert.Equal(CardHash.WordCount, candidate.Distance);
     }
 
+    /// Three oracles at the SAME distance -- a genuine tie the ranking test
+    /// above never exercises, since its four entries all sit at distinct
+    /// distances. Entries are listed in the order oracle-T0, oracle-T1,
+    /// oracle-T2, so `HashFixtures.BuildIndexData`'s first-seen-order dedup
+    /// gives them exactly that oracle-table index order. Asking for fewer
+    /// candidates than there are tied oracles forces the tie-break to pick
+    /// a winner: ascending oracle-table index keeps T0 and T1, not T2.
+    [Fact]
+    public void Identify_TiedDistances_TieBreaksByAscendingOracleTableIndex()
+    {
+        var baseHash = SymmetricQueryHash(seed: 1011);
+        var tiedHash = HashFixtures.FlipFirstNBits(baseHash, 40);
+
+        var entries = new List<HashIndexEntry>
+        {
+            MakeEntry("oracle-T0", "Card T0", "art-T0", tiedHash),
+            MakeEntry("oracle-T1", "Card T1", "art-T1", tiedHash),
+            MakeEntry("oracle-T2", "Card T2", "art-T2", tiedHash),
+        };
+        var identifier = BuildIdentifier(entries);
+
+        var result = identifier.Identify(SymmetricQueryCard(seed: 1011), maxCandidates: 2);
+
+        Assert.Equal(["oracle-T0", "oracle-T1"], result.Select(c => c.OracleId));
+        Assert.Equal([40, 40], result.Select(c => c.Distance));
+    }
+
     // ---- Distinctness -------------------------------------------------
 
     [Fact]
