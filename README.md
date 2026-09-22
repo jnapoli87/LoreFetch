@@ -88,7 +88,27 @@ scripts/lorefetch.sh test
 
 ## Stream A — UI
 
-Filled in by Stream A as the Avalonia app, auto-capture trigger and capture/cohort UI land.
+The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a count selector (1 / 3 / 9) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented in [Stream D](#stream-d--collection--export).
+
+Every interaction has a keyboard path, and the happy path never touches the mouse:
+
+| Key / action | Effect |
+|---|---|
+| **Space** | Capture whatever is detected right now — ignores the expected count, so two cards down still makes a two-card cohort. Replaces any pending cohort. No-op with nothing detected. |
+| **Enter** | Accept the cohort: commit every tile that isn't X'd, clear the grid, re-arm auto mode. |
+| **Escape** | Discard the cohort. Nothing is written. |
+| **Left-click a tile** | Toggle its **X** (opt-out). No X means included — the default is to keep a card, not to affirm it. |
+| **Right-click a tile** | *Set card manually…* opens a type-ahead over the oracle catalog; *Clear* reverts a manual pick back to the hash's own proposal. |
+
+Capture only fills the grid — commit is always the separate Enter. That's what makes a spurious capture cheap: Escape costs nothing, where a wrong commit would cost a hand-edit.
+
+**Tile visuals.** No border means a confident match. An amber border means low-confidence — the hash still proposed a card, but the match sits close enough to the ok-threshold to deserve a second look; it's emphasis, never a gate, and a low-confidence tile still commits on Enter like any other included tile. A red border with a "Right-click to set" hint means Unresolved: nothing was proposed. A grey border, a dark overlay and a ✕ mean Excluded. A blue border with a small "M" badge means the card was set by hand rather than proposed by the hash, so it stays visibly distinct from a machine match.
+
+**Auto mode** fires on a count-gated settle: the expected count has to hold steady for the settle window (≥500 ms by default) before it captures, and any card movement restarts that timer. It fires once per scene and then stays armed-off until the count itself changes — without that re-arm rule a tableau that stays put would re-fire every settle window forever. One consequence worth knowing: swapping one card for another without lifting the rest doesn't change the count, so it doesn't restart the clock and doesn't re-fire on its own — press Space to capture the swap.
+
+**Non-happy states.** An empty collection shows a placeholder instead of an empty table. If the frame source dies — camera unplugged, a folder that vanished — a banner shows the failure's message text, never a stack trace. If the collection file can't be written (e.g. it's open in Excel), a banner offers Retry and keeps the pending cohort intact so nothing already captured is lost. A missing hash index or thresholds file surfaces the same way, as a plain-text banner rather than a crash.
+
+**Try it without a camera.** In the current build the app runs in Fakes mode — no webcam and no real card identification yet. Set `LOREFETCH_FRAMES_DIR` to a folder of your own images and the preview cycles through them instead of generated placeholder frames. Identification in this mode is a demo: a stand-in identifier cycles each captured tile through confident, low-confidence and Unresolved in turn, so every tile state is reachable — it is not a real card match. The real webcam and the real identifier arrive once the streams are integrated.
 
 ## Stream B — Identification
 

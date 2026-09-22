@@ -17,7 +17,7 @@ Core has **no Avalonia/UI dependency and no FlashCap dependency**, and must stay
 | `Imaging/` | Card detection and rectification (not yet on `main`) | Stream B |
 | `Collection/` | CSV collection store (not yet on `main`) | Stream D |
 | `Export/` | Export adapters (not yet on `main`) | Stream D |
-| `Trigger/` | `IAutoCaptureTrigger` implementation (not yet on `main`) | Stream A |
+| `Trigger/` | `IAutoCaptureTrigger` implementation | Stream A |
 
 ## The freeze
 
