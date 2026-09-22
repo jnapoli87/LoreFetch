@@ -57,102 +57,427 @@ of that source.
 
 
 -------------------------------------------------------------------------------
-Runtime dependencies
+Runtime dependencies — complete at I5 (2026-09-22)
 -------------------------------------------------------------------------------
 
-Entries are added as each package is actually referenced. Until Stream 0
-creates the projects, this section lists what the plan commits to using, so
-nothing is forgotten — but it is not yet a statement about shipped binaries.
+Every package below is either a direct <PackageReference> in a tracked
+.csproj, or a transitive dependency that actually ships a native binary in
+the win-x64 self-contained single-file publish (checked against
+src/LoreFetch.App/obj/project.assets.json — the resolved graph, not guessed).
+Licence and copyright facts come from each package's own .nuspec and any
+bundled LICENSE/NOTICE file in the local NuGet cache
+(~/.nuget/packages/<id>/<version>/), not from memory or vendor reputation.
 
-  Avalonia .......................... MIT          (planned)
-  Avalonia.Controls.DataGrid ........ MIT          (planned)
-  CommunityToolkit.Mvvm ............. MIT          (planned)
-  OpenCvSharp4 ...................... Apache-2.0   (planned)
-  OpenCvSharp4.runtime.win .......... Apache-2.0   (planned)
-  FlashCap .......................... Apache-2.0   (planned)
-  .NET runtime ...................... MIT          (bundled by self-contained publish)
+  Package                                          Version              Licence
+  ------------------------------------------------  -------------------  -----------
+  Avalonia                                          12.1.2               MIT
+  Avalonia.Desktop                                  12.1.2               MIT
+  Avalonia.Themes.Fluent                            12.1.2               MIT
+  Avalonia.Controls.DataGrid                        12.1.2               MIT
+  Avalonia.Angle.Windows.Natives (native, win-x64)  2.1.27548.20260419   BSD-3-Clause (ANGLE Project)
+  MicroCom.Runtime (native interop, transitive)     0.11.6               MIT
+  CommunityToolkit.Mvvm                             8.4.2                MIT
+  SkiaSharp (transitive, Avalonia's renderer)        3.119.4              MIT
+  SkiaSharp.NativeAssets.Win32 (native, win-x64)     3.119.4              MIT
+  HarfBuzzSharp (transitive, Avalonia's text shaper) 8.3.1.3              MIT
+  HarfBuzzSharp.NativeAssets.Win32 (native, win-x64) 8.3.1.3              MIT
+  Microsoft.Extensions.Logging                      10.0.12               MIT
+  Microsoft.Extensions.Logging.Abstractions          10.0.12               MIT
+  Microsoft.Extensions.Logging.Console               10.0.12               MIT
+  Microsoft.Extensions.Configuration                 10.0.12               MIT
+  Microsoft.Extensions.Configuration.Abstractions    10.0.12               MIT
+  Microsoft.Extensions.Configuration.Binder          10.0.12               MIT
+  Microsoft.Extensions.DependencyInjection           10.0.12               MIT
+  Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12            MIT
+  Microsoft.Extensions.Options                       10.0.12               MIT
+  Microsoft.Extensions.Options.ConfigurationExtensions 10.0.12             MIT
+  Microsoft.Extensions.Primitives                    10.0.12               MIT
+  Microsoft.IO.RecyclableMemoryStream               3.0.1                 MIT
+  OpenCvSharp4                                      4.13.0.20260627      Apache-2.0
+  OpenCvSharp4.runtime.win (native, win-x64)        4.13.0.20260627      Apache-2.0 *
+  OpenCvSharp4.runtime.osx.arm64 (native, dev-only)  4.13.0.20260627      Apache-2.0 *
+  FlashCap / FlashCap.Core                          1.12.0                Apache-2.0
+  CsvHelper                                         33.1.0                Apache-2.0 **
+  AvaloniaUI.DiagnosticsSupport (Debug-only, §below) 2.2.3                NONE — unlicensed ***
 
-Note on the OpenCvSharp native runtimes: the NuGet packages declare
-Apache-2.0, but the native binaries statically link or ship third-party
-libraries including FFmpeg (LGPL-2.1+, or GPL-2+ when built with --enable-gpl).
-Both upgrade cleanly into GPLv3, so this is compatible — but the specific
-notices those libraries require have not been enumerated here. Chase this
-before promoting a release widely.
+  Test-only, not shipped in the published app (listed for completeness):
+  Avalonia.Headless.XUnit                           12.1.2                MIT
+  Microsoft.NET.Test.Sdk                            18.0.0                MIT
+  xunit.v3                                          3.2.2                 Apache-2.0
+  xunit.runner.visualstudio                         3.1.5                 Apache-2.0
+
+  *   See "OpenCvSharp native runtimes — FFmpeg" below.
+  **  CsvHelper 33.1.0's .nuspec declares a dual licence expression,
+      "MS-PL OR Apache-2.0". LoreFetch elects Apache-2.0 (see the comment
+      beside its PackageVersion entry in Directory.Packages.props).
+  *** See "AvaloniaUI.DiagnosticsSupport" below — resolved, does not ship.
+
+Copyright holders, per package's own .nuspec <copyright> field or bundled
+LICENSE file (bundled file takes precedence where one exists):
+
+  Avalonia, Avalonia.Desktop, Avalonia.Themes.Fluent,
+  Avalonia.Controls.DataGrid, Avalonia.Angle.Windows.Natives,
+  Avalonia.Headless.XUnit ................. Copyright 2013-2026 (c) The AvaloniaUI Project
+    (Avalonia.Angle.Windows.Natives' bundled LICENSE file is the ANGLE
+    Project's own BSD-3-Clause text, not the AvaloniaUI MIT text — see below;
+    the .nuspec's "MIT" expression describes the wrapper package's own code,
+    not the native binary it carries.)
+  MicroCom.Runtime .......................... Copyright 2021 (c) Nikita Tsukanov
+  CommunityToolkit.Mvvm ...................... Copyright (c) .NET Foundation and Contributors
+  SkiaSharp, SkiaSharp.NativeAssets.Win32,
+  HarfBuzzSharp, HarfBuzzSharp.NativeAssets.Win32  Copyright (c) 2015-2016 Xamarin, Inc.;
+                                                    Copyright (c) 2017-2018 Microsoft Corporation
+    (from each package's bundled LICENSE.txt)
+  Microsoft.Extensions.* (all of the above),
+  Microsoft.IO.RecyclableMemoryStream,
+  Microsoft.NET.Test.Sdk ..................... (c) Microsoft Corporation. All rights reserved.
+    (per .nuspec <copyright>; no bundled LICENSE.txt in these packages —
+    each also carries its own THIRD-PARTY-NOTICES.TXT, see below)
+  OpenCvSharp4, OpenCvSharp4.runtime.win,
+  OpenCvSharp4.runtime.osx.arm64 .............. Copyright 2008-2026, shimat (nuspec <authors>)
+  FlashCap, FlashCap.Core ..................... Copyright (c) Kouji Matsui
+  CsvHelper .................................... Copyright (c) 2009-2024 Josh Close
+  xunit.v3, xunit.runner.visualstudio ......... Copyright (C) .NET Foundation
+
+None of these packages bundle a NOTICE file (Apache-2.0 §4(d)) in their
+nupkg — checked directly for OpenCvSharp4, OpenCvSharp4.runtime.win,
+FlashCap and FlashCap.Core — so only the licence text itself is owed for
+the Apache-2.0 group.
+
+  --- MIT License text (applies to every "MIT" package listed above,
+      body verified byte-for-byte against SkiaSharp's and HarfBuzzSharp's
+      bundled LICENSE.txt; CommunityToolkit.Mvvm's bundled License.md is the
+      same text with cosmetic punctuation differences only) ---
+
+  Permission is hereby granted, free of charge, to any person obtaining a
+  copy of this software and associated documentation files (the "Software"),
+  to deal in the Software without restriction, including without limitation
+  the rights to use, copy, modify, merge, publish, distribute, sublicense,
+  and/or sell copies of the Software, and to permit persons to whom the
+  Software is furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+  FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+  DEALINGS IN THE SOFTWARE.
+
+  --- Apache License, Version 2.0 text (applies to every "Apache-2.0"
+      package listed above: OpenCvSharp4 and its two runtime packages,
+      FlashCap / FlashCap.Core, CsvHelper (elected), xunit.v3,
+      xunit.runner.visualstudio; verified against a canonically-formatted
+      copy bundled with another package in the same NuGet cache) ---
+
+                                Apache License
+                          Version 2.0, January 2004
+                       http://www.apache.org/licenses/
+
+  TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+  1. Definitions.
+
+     "License" shall mean the terms and conditions for use, reproduction,
+     and distribution as defined by Sections 1 through 9 of this document.
+
+     "Licensor" shall mean the copyright owner or entity authorized by
+     the copyright owner that is granting the License.
+
+     "Legal Entity" shall mean the union of the acting entity and all
+     other entities that control, are controlled by, or are under common
+     control with that entity. For the purposes of this definition,
+     "control" means (i) the power, direct or indirect, to cause the
+     direction or management of such entity, whether by contract or
+     otherwise, or (ii) ownership of fifty percent (50%) or more of the
+     outstanding shares, or (iii) beneficial ownership of such entity.
+
+     "You" (or "Your") shall mean an individual or Legal Entity
+     exercising permissions granted by this License.
+
+     "Source" form shall mean the preferred form for making modifications,
+     including but not limited to software source code, documentation
+     source, and configuration files.
+
+     "Object" form shall mean any form resulting from mechanical
+     transformation or translation of a Source form, including but
+     not limited to compiled object code, generated documentation,
+     and conversions to other media types.
+
+     "Work" shall mean the work of authorship, whether in Source or
+     Object form, made available under the License, as indicated by a
+     copyright notice that is included in or attached to the work
+     (an example is provided in the Appendix below).
+
+     "Derivative Works" shall mean any work, whether in Source or Object
+     form, that is based on (or derived from) the Work and for which the
+     editorial revisions, annotations, elaborations, or other modifications
+     represent, as a whole, an original work of authorship. For the
+     purposes of this License, Derivative Works shall not include works
+     that remain separable from, or merely link (or bind by name) to the
+     interfaces of, the Work and Derivative Works thereof.
+
+     "Contribution" shall mean any work of authorship, including the
+     original version of the Work and any modifications or additions to
+     that Work or Derivative Works thereof, that is intentionally
+     submitted to Licensor for inclusion in the Work by the copyright
+     owner or by an individual or Legal Entity authorized to submit on
+     behalf of the copyright owner. For the purposes of this definition,
+     "submitted" means any form of electronic, verbal, or written
+     communication sent to the Licensor or its representatives, including
+     but not limited to communication on electronic mailing lists, source
+     code control systems, and issue tracking systems that are managed
+     by, or on behalf of, the Licensor for the purpose of discussing and
+     improving the Work, but excluding communication that is conspicuously
+     marked or otherwise designated in writing by the copyright owner as
+     "Not a Contribution."
+
+     "Contributor" shall mean Licensor and any individual or Legal Entity
+     on behalf of whom a Contribution has been received by Licensor and
+     subsequently incorporated within the Work.
+
+  2. Grant of Copyright License. Subject to the terms and conditions of
+     this License, each Contributor hereby grants to You a perpetual,
+     worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+     copyright license to reproduce, prepare Derivative Works of,
+     publicly display, publicly perform, sublicense, and distribute the
+     Work and such Derivative Works in Source or Object form.
+
+  3. Grant of Patent License. Subject to the terms and conditions of
+     this License, each Contributor hereby grants to You a perpetual,
+     worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+     (except as stated in this section) patent license to make, have
+     made, use, offer to sell, sell, import, and otherwise transfer the
+     Work, where such license applies only to those patent claims
+     licensable by such Contributor that are necessarily infringed by
+     their Contribution(s) alone or by combination of their
+     Contribution(s) with the Work to which such Contribution(s) was
+     submitted. If You institute patent litigation against any entity
+     (including a cross-claim or counterclaim in a lawsuit) alleging that
+     the Work or a Contribution incorporated within the Work constitutes
+     direct or contributory patent infringement, then any patent licenses
+     granted to You under this License for that Work shall terminate as
+     of the date such litigation is filed.
+
+  4. Redistribution. You may reproduce and distribute copies of the Work
+     or Derivative Works thereof in any medium, with or without
+     modifications, and in Source or Object form, provided that You meet
+     the following conditions:
+
+     (a) You must give any other recipients of the Work or Derivative
+         Works a copy of this License; and
+
+     (b) You must cause any modified files to carry prominent notices
+         stating that You changed the files; and
+
+     (c) You must retain, in the Source form of any Derivative Works
+         that You distribute, all copyright, patent, trademark, and
+         attribution notices from the Source form of the Work, excluding
+         those notices that do not pertain to any part of the Derivative
+         Works; and
+
+     (d) If the Work includes a "NOTICE" text file as part of its
+         distribution, then any Derivative Works that You distribute must
+         include a readable copy of the attribution notices contained
+         within such NOTICE file, excluding those notices that do not
+         pertain to any part of the Derivative Works, in at least one of
+         the following places: within a NOTICE text file distributed as
+         part of the Derivative Works; within the Source form or
+         documentation, if provided along with the Derivative Works; or,
+         within a display generated by the Derivative Works, if and
+         wherever such third-party notices normally appear. The contents
+         of the NOTICE file are for informational purposes only and do
+         not modify the License. You may add Your own attribution notices
+         within Derivative Works that You distribute, alongside or as an
+         addendum to the NOTICE text from the Work, provided that such
+         additional attribution notices cannot be construed as modifying
+         the License.
+
+     You may add Your own copyright statement to Your modifications and
+     may provide additional or different license terms and conditions
+     for use, reproduction, or distribution of Your modifications, or for
+     any such Derivative Works as a whole, provided Your use,
+     reproduction, and distribution of the Work otherwise complies with
+     the conditions stated in this License.
+
+  5. Submission of Contributions. Unless You explicitly state otherwise,
+     any Contribution intentionally submitted for inclusion in the Work
+     by You to the Licensor shall be under the terms and conditions of
+     this License, without any additional terms or conditions.
+     Notwithstanding the above, nothing herein shall supersede or modify
+     the terms of any separate license agreement you may have executed
+     with Licensor regarding such Contributions.
+
+  6. Trademarks. This License does not grant permission to use the trade
+     names, trademarks, service marks, or product names of the Licensor,
+     except as required for reasonable and customary use in describing
+     the origin of the Work and reproducing the content of the NOTICE
+     file.
+
+  7. Disclaimer of Warranty. Unless required by applicable law or agreed
+     to in writing, Licensor provides the Work (and each Contributor
+     provides its Contributions) on an "AS IS" BASIS, WITHOUT WARRANTIES
+     OR CONDITIONS OF ANY KIND, either express or implied, including,
+     without limitation, any warranties or conditions of TITLE,
+     NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR
+     PURPOSE. You are solely responsible for determining the
+     appropriateness of using or redistributing the Work and assume any
+     risks associated with Your exercise of permissions under this
+     License.
+
+  8. Limitation of Liability. In no event and under no legal theory,
+     whether in tort (including negligence), contract, or otherwise,
+     unless required by applicable law (such as deliberate and grossly
+     negligent acts) or agreed to in writing, shall any Contributor be
+     liable to You for damages, including any direct, indirect, special,
+     incidental, or consequential damages of any character arising as a
+     result of this License or out of the use or inability to use the
+     Work (including but not limited to damages for loss of goodwill,
+     work stoppage, computer failure or malfunction, or any and all
+     other commercial damages or losses), even if such Contributor has
+     been advised of the possibility of such damages.
+
+  9. Accepting Warranty or Additional Liability. While redistributing
+     the Work or Derivative Works thereof, You may choose to offer, and
+     charge a fee for, acceptance of support, warranty, indemnity, or
+     other liability obligations and/or rights consistent with this
+     License. However, in accepting such obligations, You may act only
+     on Your own behalf and on Your sole responsibility, not on behalf
+     of any other Contributor, and only if You agree to indemnify,
+     defend, and hold each Contributor harmless for any liability
+     incurred by, or claims asserted against, such Contributor by reason
+     of your accepting any such warranty or additional liability.
+
+  --- BSD 3-Clause text bundled with Avalonia.Angle.Windows.Natives'
+      native ANGLE binaries (LICENSE file inside the nupkg — distinct from,
+      and not to be confused with, the AvaloniaUI-authored MIT text that
+      covers the rest of that package family) ---
+
+  Copyright 2018 The ANGLE Project Authors.
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions
+  are met:
+
+      Redistributions of source code must retain the above copyright
+      notice, this list of conditions and the following disclaimer.
+
+      Redistributions in binary form must reproduce the above
+      copyright notice, this list of conditions and the following
+      disclaimer in the documentation and/or other materials provided
+      with the distribution.
+
+      Neither the name of TransGaming Inc., Google Inc., 3DLabs Inc.
+      Ltd., nor the names of their contributors may be used to endorse
+      or promote products derived from this software without specific
+      prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+  FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+  COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+  INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+  CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
 
 
+OpenCvSharp native runtimes — FFmpeg
 -------------------------------------------------------------------------------
-Runtime dependencies — confirmed at I5 (2026-09-22)
+
+OpenCvSharp4.runtime.win and OpenCvSharp4.runtime.osx.arm64: the wrapper
+package itself declares Apache-2.0 (verified via .nuspec, both
+4.13.0.20260627). Both bundle statically-linked native third-party code
+beyond OpenCV itself, confirmed by extracting build-configuration strings
+and copyright strings from the shipped binaries themselves
+(`strings runtimes/*/native/*`), since neither nupkg bundles a
+LICENSE/COPYING/NOTICE file for any of this — only README.runtime.md:
+
+  - FFmpeg. Statically linked into libOpenCvSharpExtern.dylib on osx-arm64
+    (per README.runtime.md: "macOS ... packages include FFmpeg ...
+    statically linked"); shipped as a separate, dynamically loaded
+    opencv_videoio_ffmpeg4130_64.dll on win-x64. Embedded configure strings
+    show NEITHER --enable-gpl NOR --enable-nonfree on either platform, and
+    the osx-arm64 build explicitly --disable-libx264 --disable-libx265 (the
+    two codecs that force FFmpeg to GPL); win-x64 only enables
+    --enable-libopenh264 --enable-libvpx --enable-libaom, all permissively
+    (BSD-style) licensed. That is consistent with this same package
+    family's own README.runtime.md statement for its Linux variant — "the
+    full (non-slim) package includes FFmpeg (LGPL v2.1) ... statically
+    linked" — and is the basis for calling FFmpeg here LGPL-2.1+ rather
+    than GPL. UNDETERMINED WITH CERTAINTY: no FFmpeg LICENSE.md/COPYING
+    text is bundled in either nupkg, so this rests on binary-string
+    inspection plus the vendor's parallel statement, not on a first-party
+    licence file — flagged rather than smoothed over, per PLAN risk 7.
+    Static linking under LGPL-2.1 also carries a relinking obligation (§6)
+    that this notice does not yet resolve. CONCLUSION: not GPL-configured
+    on either shipped platform — compatible with GPLv3, no STOP condition
+    triggered.
+  - libjpeg-turbo (IJG-style/BSD, "Copyright (C) 1991-2025 The
+    libjpeg-turbo Project and many others") and libpng (the libpng/zlib
+    licence, "Copyright (c) 1998-2002,2004,2006-2018 Glenn
+    Randers-Pehrson" et al.) are also statically linked, per copyright
+    strings found the same way. Both are permissive and do not affect
+    GPLv3 compatibility.
+
+Chase the LGPL-2.1 relinking obligation and a citable FFmpeg licence text
+before a wide release; nothing above blocks GPLv3 as currently built.
+
+
+SkiaSharp / HarfBuzzSharp native win32 binaries — further bundled components
 -------------------------------------------------------------------------------
 
-Every remaining package actually referenced by a tracked .csproj, verified
-against its .nuspec (and, for AvaloniaUI.DiagnosticsSupport and the OpenCvSharp
-native runtimes, the package's bundled files) in the local NuGet cache
-(~/.nuget/packages/<id>/<version>/), not assumed from the vendor's reputation.
+The Win32 native assets (SkiaSharp.NativeAssets.Win32,
+HarfBuzzSharp.NativeAssets.Win32) statically link a further ~20 third-party
+components (ANGLE, HarfBuzz itself, Skia's own third_party libraries —
+FreeType, ICU, libpng, libjpeg-turbo, libwebp, zlib, expat, and others),
+enumerated with their individual licence texts in a THIRD-PARTY-NOTICES.txt
+file bundled inside HarfBuzzSharp.NativeAssets.Win32 8.3.1.3 itself (found
+at harfbuzzsharp.nativeassets.win32/8.3.1.3/THIRD-PARTY-NOTICES.txt in the
+NuGet cache — 2716 lines, not reproduced here; treat that path as the exact
+pointer this notice requires). Every licence family present there (MIT,
+BSD, Apache-2.0, MPL, LGPL) is either permissive or upgrades cleanly into
+GPLv3; none is GPL-only. Not independently verified: which of those ~20
+components are actually linked into the specific win-x64 binary shipped
+here versus present only in the Linux/macOS/WebAssembly variants covered by
+the same combined notices file — chase before a wide release, same caveat
+as the OpenCvSharp FFmpeg finding above.
 
-  Avalonia.Desktop ............................ MIT
-  Avalonia.Headless.XUnit ..................... MIT
-  Avalonia.Themes.Fluent ...................... MIT
-  CsvHelper ................................... Apache-2.0 *
-  Microsoft.Extensions.Logging ................ MIT
-  Microsoft.Extensions.Logging.Abstractions ... MIT
-  Microsoft.Extensions.Logging.Console ........ MIT
-  Microsoft.NET.Test.Sdk ...................... MIT
-  OpenCvSharp4.runtime.osx.arm64 .............. Apache-2.0 **
-  xunit.runner.visualstudio ................... Apache-2.0
-  xunit.v3 .................................... Apache-2.0
+The Microsoft.Extensions.* packages listed above each bundle their own
+THIRD-PARTY-NOTICES.TXT (the standard dotnet/runtime one — e.g.
+microsoft.extensions.configuration/10.0.12/THIRD-PARTY-NOTICES.TXT, 1418
+lines), listing small embedded components (ASP.NET, Slicing-by-8 CRC, etc.)
+under permissive licences (Apache-2.0, BSD). Not reproduced here for the
+same reason; pointer given.
 
-  * CsvHelper 33.1.0's .nuspec declares a dual licence expression,
-    "MS-PL OR Apache-2.0". LoreFetch elects Apache-2.0 (see the comment
-    beside its PackageVersion entry in Directory.Packages.props).
 
-  ** OpenCvSharp4.runtime.osx.arm64 and OpenCvSharp4.runtime.win: the wrapper
-     package itself declares Apache-2.0 (verified via .nuspec, both
-     4.13.0.20260627). Both bundle statically-linked native third-party
-     code beyond OpenCV itself, confirmed by extracting build-configuration
-     strings and copyright strings from the shipped binaries themselves
-     (`strings runtimes/*/native/*`), since neither nupkg bundles a
-     LICENSE/COPYING/NOTICE file for any of this — only README.runtime.md:
-
-       - FFmpeg. Statically linked into libOpenCvSharpExtern.dylib on
-         osx-arm64 (per README.runtime.md: "macOS ... packages include
-         FFmpeg ... statically linked"); shipped as a separate, dynamically
-         loaded opencv_videoio_ffmpeg4130_64.dll on win-x64. Embedded
-         configure strings show NEITHER --enable-gpl NOR --enable-nonfree
-         on either platform, and the osx-arm64 build explicitly
-         --disable-libx264 --disable-libx265 (the two codecs that force
-         FFmpeg to GPL); win-x64 only enables --enable-libopenh264
-         --enable-libvpx --enable-libaom, all permissively (BSD-style)
-         licensed. That is consistent with this same package family's own
-         README.runtime.md statement for its Linux variant — "the full
-         (non-slim) package includes FFmpeg (LGPL v2.1) ... statically
-         linked" — and is the basis for calling FFmpeg here LGPL-2.1+
-         rather than GPL. UNDETERMINED WITH CERTAINTY: no FFmpeg
-         LICENSE.md/COPYING text is bundled in either nupkg, so this rests
-         on binary-string inspection plus the vendor's parallel statement,
-         not on a first-party licence file — flagged rather than smoothed
-         over, per PLAN risk 7. Static linking under LGPL-2.1 also carries
-         a relinking obligation (§6) that this notice does not yet resolve.
-       - libjpeg-turbo (IJG-style/BSD, "Copyright (C) 1991-2025 The
-         libjpeg-turbo Project and many others") and libpng (the
-         libpng/zlib licence, "Copyright (c) 1998-2002,2004,2006-2018 Glenn
-         Randers-Pehrson" et al.) are also statically linked, per copyright
-         strings found the same way. Both are permissive and do not affect
-         GPLv3 compatibility.
-
-     Chase the LGPL-2.1 relinking obligation and a citable FFmpeg licence
-     text before a wide release; nothing above blocks GPLv3 as currently
-     built.
+AvaloniaUI.DiagnosticsSupport
+-------------------------------------------------------------------------------
 
 AvaloniaUI.DiagnosticsSupport (2.2.3) declares NO licence at all — its
 .nuspec has no <license>/<licenseUrl> element, and the package contains no
 LICENSE/COPYING file (only README.md, an icon, and build props/targets),
 confirmed by inspecting both directly in the NuGet cache. This is not an
-oversight in this notices file; the package itself ships unlicensed. It is
-referenced unconditionally by src/LoreFetch.App/App.csproj and would
-therefore ship in the single-file publish as built today. A separate,
-already-approved plan makes the reference Debug-only; until that lands,
-LoreFetch is redistributing a package with no stated redistribution rights
-whenever it publishes a Release build.
+oversight in this notices file; the package itself ships unlicensed.
+
+RESOLVED at I5: src/LoreFetch.App/App.csproj now references it as
+  <PackageReference Include="AvaloniaUI.DiagnosticsSupport"
+                     Condition="'$(Configuration)' == 'Debug'" />
+so a Release build — what `dotnet publish -r win-x64 --self-contained` for
+the shipped binary actually is — never pulls it in, and the unlicensed
+package never reaches a distributed artifact. It is listed here only
+because it is still a PackageReference in a tracked .csproj (the hook's
+advisory grep does not look at the Condition attribute), and because a
+Debug build run locally still carries it — which is fine for development,
+never for anything redistributed.
 
 
 -------------------------------------------------------------------------------
