@@ -32,19 +32,47 @@ public static class ImagesCommand
             return 1;
         }
 
-        var repoRoot = RepoPaths.FindRepoRoot();
+        // Non-throwing: whether the repo can be located decides what this
+        // command can default, not whether it can run at all. See
+        // RepoPaths.FindRepoRoot's doc comment for the B4b-era defect this
+        // replaces -- that used to be an unconditional FindRepoRoot() call
+        // whose failure was an unhandled exception naming "--out", which is
+        // not even one of this command's flags.
+        var repoRootFound = RepoPaths.TryFindRepoRoot(out var repoRoot);
 
-        try
+        if (repoRootFound)
         {
-            CacheDirectoryGuard.EnsureOutsideRepo(cacheDir, repoRoot);
+            try
+            {
+                CacheDirectoryGuard.EnsureOutsideRepo(cacheDir, repoRoot!);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 1;
+            }
         }
-        catch (InvalidOperationException ex)
+        else
         {
-            Console.Error.WriteLine(ex.Message);
-            return 1;
+            // Nothing to protect against: if this process cannot locate
+            // ANY repository checkout, --cache cannot be "inside" one
+            // either. The guard's job is moot, not defeated.
+            Console.WriteLine(
+                "images: could not locate the repository automatically -- skipping the inside-repo cache check.");
         }
 
-        manifestPath ??= Path.Combine(RepoPaths.DefaultScryfallBulkDir(), BulkCommand.ManifestFileName);
+        if (manifestPath is null)
+        {
+            if (!repoRootFound)
+            {
+                Console.Error.WriteLine(
+                    "images: could not locate the repository automatically. Pass --manifest explicitly.");
+                return 1;
+            }
+
+            manifestPath = Path.Combine(repoRoot!, "scryfall-bulk", BulkCommand.ManifestFileName);
+        }
+
         if (!File.Exists(manifestPath))
         {
             Console.Error.WriteLine(

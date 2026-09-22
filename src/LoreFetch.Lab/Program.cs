@@ -1,9 +1,8 @@
 // LoreFetch.Lab — index-build tooling entry point.
 //
 // Hand-rolled dispatch on purpose: the .csproj is frozen and cannot take a
-// new command-line-parsing package, and a two-command switch does not
-// need one. Structured so B4b (`images`) and B4c (`build-index`) add a
-// case each without touching this shape.
+// new command-line-parsing package, and a small switch does not need one.
+// Structured so each command adds one case without touching this shape.
 using LoreFetch.Lab;
 
 if (args.Length == 0)
@@ -20,6 +19,7 @@ return await (command switch
     "bulk" => BulkCommand.RunAsync(rest),
     "printings" => PrintingsCommand.RunAsync(rest),
     "images" => ImagesCommand.RunAsync(rest),
+    "build-index" => BuildIndexCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -47,5 +47,14 @@ static void PrintUsage()
                                    keyed by ArtworkId. Resumable; skips files
                                    already present; --cache must resolve outside
                                    the repository.
+          build-index [--manifest <path>] --cache <dir> --out <file.lfidx>
+                                   [--subset N] [--parallelism N] [--allow-missing]
+                                   [--ids <file>] [--fill N]
+                                   Hash every cached image_uris.normal render
+                                   (ReferenceTransform -> CardHasher) into a
+                                   cards.lfidx. --subset N or --ids <file>
+                                   (one ArtworkId per line, optionally padded
+                                   with --fill N more) build a smaller,
+                                   labelled index instead of the full one.
         """);
 }

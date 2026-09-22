@@ -14,7 +14,17 @@ public static class PrintingsCommand
 
     public static async Task<int> RunAsync(string[] args, HttpClient? httpClient = null)
     {
-        var outDir = BulkCommand.ParseOutDir(args) ?? RepoPaths.DefaultScryfallBulkDir();
+        string outDir;
+        try
+        {
+            outDir = BulkCommand.ParseOutDir(args) ?? RepoPaths.DefaultScryfallBulkDir();
+        }
+        catch (RepoRootNotFoundException ex)
+        {
+            Console.Error.WriteLine($"printings: {ex.Message} Pass --out explicitly.");
+            return 1;
+        }
+
         Directory.CreateDirectory(outDir);
 
         using var http = httpClient ?? ScryfallBulkClient.CreateHttpClient();
