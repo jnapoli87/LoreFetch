@@ -40,7 +40,12 @@ public class HashCardIdentifierTests
         var entries = new List<HashIndexEntry>
         {
             MakeEntry("oracle-d100", "Card D100", "art-d100", HashFixtures.FlipFirstNBits(baseHash, 100)),
-            MakeEntry("oracle-d2", "Card D2", "art-d2", HashFixtures.FlipBits(baseHash, 500, 501)),
+            // Bits 1000/1001 fall in grid word 15 (bit/64 = 15) -- the LAST
+            // of the 16 words, deliberately, not word 0 like the others.
+            // Distance math that dropped the last word (a real chaos-tested
+            // mutation) would silently under-count exactly this entry and
+            // still pass a test that only ever flips bits in word 0.
+            MakeEntry("oracle-d2", "Card D2", "art-d2", HashFixtures.FlipBits(baseHash, 1000, 1001)),
             MakeEntry("oracle-d30", "Card D30", "art-d30", HashFixtures.FlipFirstNBits(baseHash, 30)),
             MakeEntry("oracle-d5", "Card D5", "art-d5", HashFixtures.FlipFirstNBits(baseHash, 5)),
         };
@@ -51,6 +56,35 @@ public class HashCardIdentifierTests
         Assert.Equal(4, result.Count);
         Assert.Equal(["oracle-d2", "oracle-d5", "oracle-d30", "oracle-d100"], result.Select(c => c.OracleId));
         Assert.Equal([2, 5, 30, 100], result.Select(c => c.Distance));
+    }
+
+    /// Direct, narrow companion to the ranking test above: proves every one
+    /// of the 16 grid-cell words is actually summed into the distance, not
+    /// just that the FIRST word is (which every bit-flip in the ranking
+    /// test below 100 would satisfy on its own). Flips exactly one bit in
+    /// each of the 16 words and asserts the distance is exactly 16 -- a
+    /// distance computed over any fewer than all 16 words would undercount.
+    [Fact]
+    public void Identify_Distance_SumsEveryGridWord_NotJustTheFirst()
+    {
+        var baseHash = SymmetricQueryHash(seed: 1010);
+
+        var oneBitPerWord = new int[CardHash.WordCount];
+        for (var word = 0; word < CardHash.WordCount; word++)
+        {
+            oneBitPerWord[word] = (word * 64) + 3; // an arbitrary, distinct bit inside each word
+        }
+
+        var entries = new List<HashIndexEntry>
+        {
+            MakeEntry("oracle-all-words", "Card All Words", "art-all-words", HashFixtures.FlipBits(baseHash, oneBitPerWord)),
+        };
+        var identifier = BuildIdentifier(entries);
+
+        var result = identifier.Identify(SymmetricQueryCard(seed: 1010), maxCandidates: 1);
+
+        var candidate = Assert.Single(result);
+        Assert.Equal(CardHash.WordCount, candidate.Distance);
     }
 
     // ---- Distinctness -------------------------------------------------
