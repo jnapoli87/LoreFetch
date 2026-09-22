@@ -19,8 +19,8 @@
 #
 # Usage:
 #   scripts/capture-fixtures.sh --height <in> --layout <n> --mat <mat> \
-#     --rung <rung> --card <name> [--card <name> ...] [--catalog <path>] \
-#     [--force] [--dry-run]
+#     --rung <rung> --card <name> [--card <name> ...] [--orientation <o>] \
+#     [--catalog <path>] [--force] [--dry-run]
 #   scripts/capture-fixtures.sh --verify <ground-truth.csv> [--catalog <path>]
 #
 # Required (capture mode):
@@ -40,6 +40,18 @@
 #                   CSV always gets the catalog's canonical spelling.
 #
 # Options:
+#   --orientation <o>  one of: portrait rotated. Only layout 9 (a 3x3 grid)
+#                      has two real arrangements — PORTRAIT keeps the
+#                      grid's 7.7" side on the frame's binding axis (the
+#                      stricter case) and ROTATED puts its 10.7" side there
+#                      instead (this script's arrangement before this flag
+#                      existed). Layouts 1 and 3 accept the flag but have
+#                      only one footprint each, so it changes nothing for
+#                      them. Defaults to portrait — the stricter case, and
+#                      the project's chosen arrangement — because a default
+#                      that under-reports risk is the wrong default. The
+#                      OTHER orientation's margin is always printed too, as
+#                      information, for layout 9.
 #   --catalog <path>  the oracle-name manifest to validate --card values
 #                      (or --verify's csv) against. Default:
 #                      scryfall-bulk/filtered-artworks.jsonl in the repo.
@@ -69,10 +81,13 @@
 # Height/layout are cross-checked against each other, not just against
 # --height's own numeric range: the C920's frame at height h covers only
 # (1920/ppi) x (1080/ppi) inches (ppi = 1360/h), so a 3x3 grid's 7.7"x10.7"
-# footprint does not fit at every height in that range. A combination whose
-# margin is negative is refused outright, and one under 0.5" is filed with
-# a warning — the frame looks fine either way, which is exactly what makes
-# a bad fit a silent-corruption risk rather than an obvious one.
+# footprint does not fit at every height in that range — AND, for layout 9,
+# which of the grid's two sides is on the binding axis depends on
+# --orientation, so the same height can both fit and fail depending on it
+# (12" fits rotated, fails portrait). A combination whose margin is
+# negative is refused outright, and one under 0.5" is filed with a warning
+# — the frame looks fine either way, which is exactly what makes a bad fit
+# a silent-corruption risk rather than an obvious one.
 #
 # NOT implemented (follow-up once stream/b merges): a cross-check of the
 # REQUESTED height against the frame's own content, by deriving the true
@@ -96,6 +111,7 @@ note() { printf '    %s\n' "$1"; }
 LAYOUTS="1 3 9"
 MATS="light mid dark"
 RUNGS="land normal stretch"
+ORIENTATIONS="portrait rotated"
 
 # --height has no fixed allowlist. compute_fit() below is the real guard —
 # it is strictly better validation than any fixed set of "sensible" heights,
@@ -130,6 +146,10 @@ STREAMC_CSPROJ="$REPO/Tests/StreamC/LoreFetch.Tests.StreamC.csproj"
 FILTER="FullyQualifiedName~HardwareCameraTests.Negotiates1080pMjpgAndDeliversLiveFrames"
 
 HEIGHT=""; LAYOUT=""; MAT=""; RUNG=""; FORCE=0; DRY_RUN=0
+# Defaults to "portrait": it is both the STRICTER of the two arrangements
+# (see layout_footprint below) and the project's chosen one, and a default
+# that under-reports risk is the wrong default.
+ORIENTATION="portrait"
 CARDS=""
 VERIFY_CSV=""
 CATALOG_FILE="$REPO/scryfall-bulk/filtered-artworks.jsonl"
@@ -187,25 +207,48 @@ native_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
 
-# Does this height/layout combination physically fit the C920's frame?
+# Resolves layout + orientation to a short x long footprint, inches, from
+# CLAUDE.md's Geometry table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7, 3x3
+# grid 7.7x10.7 or its swap). Only layout 9 (a 3x3 grid) has two real
+# arrangements, because it is the only footprint whose two sides differ:
+# PORTRAIT puts the grid's shorter 7.7" side on the frame's short (binding)
+# axis — the stricter case — while ROTATED puts its longer 10.7" side
+# there instead; ROTATED reproduces exactly the fs=7.7/fl=10.7 pair this
+# script always used before --orientation existed. Layouts 1 and 3 accept
+# an orientation argument for a uniform CLI, but do NOT get a second
+# footprint — a single card and a straight line of 3 have only one real
+# arrangement, so inventing a second pair for them would be validation
+# theatre. Layout 3's footprint is deliberately left as 2.5x10.7 either
+# way, per the orchestrator's ruling.
+layout_footprint() {  # $1 = layout, $2 = orientation ("portrait"|"rotated")
+  case "$1" in
+    1) printf '2.5 3.5\n' ;;
+    3) printf '2.5 10.7\n' ;;
+    9)
+      case "$2" in
+        rotated)  printf '7.7 10.7\n' ;;
+        portrait) printf '10.7 7.7\n' ;;
+      esac
+      ;;
+  esac
+}
+
+# Does this height/footprint combination physically fit the C920's frame?
 # ppi = 1360/h (CLAUDE.md's "Geometry" table); the frame then covers
-# 1920/ppi x 1080/ppi inches, long axis x short axis. Footprints below are
-# short x long, from the same table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7,
-# 3x3 grid 7.7x10.7). The margin is the TIGHTER of the two axes — a grid
-# can lose on either one — and awk does the arithmetic because 1360/h is
-# fractional and this is /bin/sh, where integer arithmetic would round it
-# away entirely (e.g. 1360/8 truncating to a different answer than 170).
+# 1920/ppi x 1080/ppi inches, long axis x short axis. fs/fl (short x long)
+# come from layout_footprint above — this function no longer derives them
+# from a layout number itself, so the same formula and thresholds serve
+# both the chosen orientation and, for layout 9, the other one printed as
+# information. The margin is the TIGHTER of the two axes — a grid can lose
+# on either one — and awk does the arithmetic because 1360/h is fractional
+# and this is /bin/sh, where integer arithmetic would round it away
+# entirely (e.g. 1360/8 truncating to a different answer than 170).
 #
 # Prints "<STATUS> <margin> <axis> <frame_short> <frame_long> <foot_short> <foot_long>"
 # — STATUS is FAIL (margin < 0), WARN (0 <= margin < 0.5) or OK; <axis> is
 # "short" or "long", whichever axis the margin came from.
-compute_fit() {  # $1 = height (inches), $2 = layout
-  h=$1
-  case "$2" in
-    1) fs=2.5;  fl=3.5 ;;
-    3) fs=2.5;  fl=10.7 ;;
-    9) fs=7.7;  fl=10.7 ;;
-  esac
+compute_fit() {  # $1 = height (inches), $2 = footprint short (fs), $3 = footprint long (fl)
+  h=$1; fs=$2; fl=$3
   awk -v h="$h" -v fs="$fs" -v fl="$fl" 'BEGIN {
     frame_short = 1080 * h / 1360
     frame_long  = 1920 * h / 1360
@@ -486,12 +529,13 @@ while [ $# -gt 0 ]; do
     --layout) shift; [ $# -gt 0 ] || die "--layout needs a value"; LAYOUT=$1 ;;
     --mat)    shift; [ $# -gt 0 ] || die "--mat needs a value"; MAT=$1 ;;
     --rung)   shift; [ $# -gt 0 ] || die "--rung needs a value"; RUNG=$1 ;;
+    --orientation) shift; [ $# -gt 0 ] || die "--orientation needs a value"; ORIENTATION=$1 ;;
     --card)    shift; [ $# -gt 0 ] || die "--card needs a value"; add_card "$1" ;;
     --catalog) shift; [ $# -gt 0 ] || die "--catalog needs a value"; CATALOG_FILE=$1 ;;
     --verify)  shift; [ $# -gt 0 ] || die "--verify needs a value"; VERIFY_CSV=$1 ;;
     --force)   FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '3,82p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,97p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         die "unknown argument: $1  (try --help)" ;;
   esac
   shift
@@ -521,20 +565,44 @@ in_height_range "$HEIGHT" || die "invalid --height '$HEIGHT' (expected a number 
 in_set "$LAYOUT" "$LAYOUTS" || die "invalid --layout '$LAYOUT' (expected one of: $LAYOUTS)"
 in_set "$MAT" "$MATS"       || die "invalid --mat '$MAT' (expected one of: $MATS)"
 in_set "$RUNG" "$RUNGS"     || die "invalid --rung '$RUNG' (expected one of: $RUNGS)"
+in_set "$ORIENTATION" "$ORIENTATIONS" || die "invalid --orientation '$ORIENTATION' (expected one of: $ORIENTATIONS)"
 
 # Height and layout are also validated AGAINST EACH OTHER: a layout can be
 # geometrically too big for a height even though both are individually
 # allowed (a 3x3 grid does not fit the C920's frame at every height in
-# range). A frame that is too small still looks like a normal photo — it
-# just crops cards off the edge — which is exactly the silent-corruption
-# failure this whole script exists to prevent, so a negative margin is
-# refused outright rather than filed and discovered later in B6.
-fit=$(compute_fit "$HEIGHT" "$LAYOUT")
+# range) — and for layout 9, WHICH footprint applies depends on
+# --orientation (see layout_footprint above), so the same height can fit
+# in one orientation and fail in the other. A frame that is too small
+# still looks like a normal photo — it just crops cards off the edge —
+# which is exactly the silent-corruption failure this whole script exists
+# to prevent, so a negative margin is refused outright rather than filed
+# and discovered later in B6.
+footprint=$(layout_footprint "$LAYOUT" "$ORIENTATION")
+set -- $footprint
+fit=$(compute_fit "$HEIGHT" "$1" "$2")
 set -- $fit
 FIT_STATUS=$1; FIT_MARGIN=$2; FIT_AXIS=$3; FIT_FRAME_SHORT=$4; FIT_FRAME_LONG=$5; FIT_FOOT_SHORT=$6; FIT_FOOT_LONG=$7
 
+# For layout 9 only, also compute the OTHER orientation's fit and print it
+# as information — never gating, always informational — so the operator
+# sees at a glance whether flipping orientation would change the outcome
+# (e.g. at 12" layout 9: portrait FAILs, rotated is OK). Layouts 1 and 3
+# have one footprint regardless of orientation (see layout_footprint), so
+# there is nothing distinct to report there.
+if [ "$LAYOUT" = 9 ]; then
+  OTHER_ORIENTATION=rotated
+  [ "$ORIENTATION" = rotated ] && OTHER_ORIENTATION=portrait
+  other_footprint=$(layout_footprint "$LAYOUT" "$OTHER_ORIENTATION")
+  set -- $other_footprint
+  other_fit=$(compute_fit "$HEIGHT" "$1" "$2")
+  set -- $other_fit
+  OTHER_STATUS=$1; OTHER_MARGIN=$2; OTHER_AXIS=$3
+  note "orientation $ORIENTATION (chosen): margin ${FIT_MARGIN}\" on the $FIT_AXIS axis [$FIT_STATUS] (footprint ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\")"
+  note "orientation $OTHER_ORIENTATION (other): margin ${OTHER_MARGIN}\" on the $OTHER_AXIS axis [$OTHER_STATUS] — informational only, does not change what this run does"
+fi
+
 if [ "$FIT_STATUS" = FAIL ]; then
-  die "height $HEIGHT\" cannot fit layout $LAYOUT: needs ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\" (short x long), the frame at ${HEIGHT}\" only covers ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" — short by ${FIT_MARGIN}\" on the $FIT_AXIS axis"
+  die "height $HEIGHT\" cannot fit layout $LAYOUT in $ORIENTATION orientation: needs ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\" (short x long), the frame at ${HEIGHT}\" only covers ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" — short by ${FIT_MARGIN}\" on the $FIT_AXIS axis"
 fi
 FIT_WARNING=""
 if [ "$FIT_STATUS" = WARN ]; then
@@ -587,7 +655,21 @@ done
 # would stack a second lossy generation on top for no reason. Ruled by the
 # orchestrator 2026-09-22; test-images/README.md's .jpg is being corrected
 # separately (out of this script's scope).
-FILENAME="${HEIGHT}in-L${LAYOUT}-${MAT}-${RUNG}-${slug_all}.png"
+# Orientation goes in the filename ONLY for layout 9, and only there: it
+# is the only layout with two real footprints (see layout_footprint), so
+# it is the only layout where a portrait and a rotated capture of the
+# same height/mat/rung/cards are genuinely different frames. Without this
+# tag they would collide on the same DEST_FILE/CSV_FILE_FIELD, so a second
+# capture in the other orientation would either be silently refused (no
+# --force) or silently overwrite/relabel the first (with --force) — the
+# exact silent-corruption failure this script exists to prevent. Layouts
+# 1 and 3 keep their pre-existing filenames unchanged, since orientation
+# never changes their footprint or their frame. This is NOT added as a
+# ground-truth.csv column — that header is fixed and B6 parses it — so it
+# only ever shows up inside the existing "file" column's path.
+ORIENT_TAG=""
+[ "$LAYOUT" = 9 ] && ORIENT_TAG="-${ORIENTATION}"
+FILENAME="${HEIGHT}in-L${LAYOUT}${ORIENT_TAG}-${MAT}-${RUNG}-${slug_all}.png"
 DEST_DIR="$REPO/test-images/fixtures/${HEIGHT}in/${LAYOUT}"
 DEST_FILE="$DEST_DIR/$FILENAME"
 CSV_FILE_FIELD="fixtures/${HEIGHT}in/${LAYOUT}/$FILENAME"
@@ -606,6 +688,7 @@ done
 if [ "$DRY_RUN" -eq 1 ]; then
   say "Dry run — nothing touched"
   note "destination : $DEST_FILE"
+  note "orientation : $ORIENTATION"
   note "fit margin  : ${FIT_MARGIN}\" on the $FIT_AXIS axis (frame ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" vs footprint ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\", short x long)"
   [ -n "$FIT_WARNING" ] && note "WARNING: $FIT_WARNING"
   note "would refuse to overwrite unless --force (existing-file check skipped in --dry-run)"
@@ -685,7 +768,7 @@ fi
 printf '%s\n' "$ROWS" >> "$GT_CSV"
 
 say "Filed"
-note "$CARD_COUNT card(s), height=${HEIGHT}in layout=$LAYOUT mat=$MAT rung=$RUNG"
+note "$CARD_COUNT card(s), height=${HEIGHT}in layout=$LAYOUT orientation=$ORIENTATION mat=$MAT rung=$RUNG"
 note "fit margin  : ${FIT_MARGIN}\" on the $FIT_AXIS axis (frame ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" vs footprint ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\", short x long)"
 note "frame -> ${DEST_FILE#"$REPO"/}"
 note "ground-truth -> ${GT_CSV#"$REPO"/} (+$CARD_COUNT row(s))"
