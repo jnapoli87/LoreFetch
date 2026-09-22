@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -26,25 +27,25 @@ public partial class MainWindow : Window
     /// itself render-loop-paced on top of that.
     private static readonly TimeSpan RenderInterval = TimeSpan.FromSeconds(1.0 / 15.0);
 
-    private readonly object _frameLock = new();
+    // Fixes the A2 data race: the old design copied into a single
+    // `_stagingBuffer` under a lock and let the UI thread convert from a
+    // REFERENCE to that same array after releasing the lock, so the
+    // producer could overwrite it mid-conversion (a torn frame — top of one
+    // frame, bottom of the next). `FrameHandoff` is a three-slot rotation
+    // where the producer never writes into a slot the consumer currently
+    // holds, so that read is now impossible by construction. See its own
+    // doc comment for the invariant. CONTRACTS.md guarantees a frame's own
+    // contents are valid only for the duration of the FrameProcessed
+    // callback, so `OnFrameProcessed` still does all its copying (via
+    // `Publish`) before returning — conversion still happens later, on the
+    // UI thread in OnRenderFrame.
+    private readonly FrameHandoff _frameHandoff = new();
+    private long _frameSequence;
 
-    // --- Fields touched by BOTH threads, guarded by _frameLock -----------
-    //
-    // OnFrameProcessed (the pipeline's background thread) copies raw,
-    // UNCONVERTED frame bytes here every time it fires. Conversion happens
-    // later, on the UI thread in OnRenderFrame, once the destination
-    // WriteableBitmap is locked and its real RowBytes is known. CONTRACTS.md
-    // guarantees a frame's own contents are valid only for the duration of
-    // the FrameProcessed callback, so the copy — not the conversion — is
-    // what has to happen inside it; the pipeline recycles the pooled buffer
-    // the instant the handler returns.
-    private byte[]? _stagingBuffer;
-    private int _pendingWidth;
-    private int _pendingHeight;
-    private int _pendingStride;
-    private PixelLayout _pendingLayout;
-    private IReadOnlyList<CardQuad> _pendingQuads = [];
-    private bool _hasPendingFrame;
+    // Fires once, on the UI thread, when the ~15 fps gate defers a render
+    // rather than dropping it (see ScheduleRenderIfDue). Not a
+    // DispatcherTimer because it is armed from the background thread.
+    private readonly Timer _deferredRenderTimer;
 
     // --- UI-thread-only fields --------------------------------------------
     //
@@ -74,6 +75,16 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Dormant until ScheduleRenderIfDue's else-branch first arms it
+        // with Change(...); Timeout.Infinite means it never fires on its
+        // own. The callback runs on a thread-pool thread, so it still has
+        // to marshal to the UI thread itself.
+        _deferredRenderTimer = new Timer(
+            _ => Dispatcher.UIThread.Post(RequestRenderNow),
+            state: null,
+            dueTime: Timeout.Infinite,
+            period: Timeout.Infinite);
     }
 
     public MainWindow(AppSession session)
@@ -97,32 +108,22 @@ public partial class MainWindow : Window
             _pipeline.FrameProcessed -= OnFrameProcessed;
             _pipeline = null;
         }
+
+        _deferredRenderTimer.Dispose();
     }
 
     /// Raised on the pipeline's background thread for every processed frame
     /// (CONTRACTS.md `IScanPipeline.FrameProcessed`). `frame` is valid only
     /// for the duration of this call, so the only thing this does with it is
-    /// copy its bytes into `_stagingBuffer` before returning — no Avalonia
+    /// hand its bytes to `_frameHandoff` before returning — no Avalonia
     /// object is touched here, and nothing here ever retains `frame` itself.
+    /// `Publish` does the actual copy, into a buffer the UI thread can never
+    /// be reading (see `FrameHandoff`'s doc comment).
     private void OnFrameProcessed(CameraFrame frame, DetectionSnapshot snapshot)
     {
-        lock (_frameLock)
-        {
-            var needed = frame.Stride * frame.Height;
-            if (_stagingBuffer is null || _stagingBuffer.Length < needed)
-            {
-                _stagingBuffer = new byte[needed];
-            }
-
-            frame.Pixels.Span.CopyTo(_stagingBuffer);
-
-            _pendingWidth = frame.Width;
-            _pendingHeight = frame.Height;
-            _pendingStride = frame.Stride;
-            _pendingLayout = frame.Layout;
-            _pendingQuads = snapshot.Quads;
-            _hasPendingFrame = true;
-        }
+        var sequence = Interlocked.Increment(ref _frameSequence);
+        _frameHandoff.Publish(
+            frame.Pixels.Span, frame.Width, frame.Height, frame.Stride, frame.Layout, snapshot.Quads, sequence);
 
         ScheduleRenderIfDue();
     }
@@ -130,36 +131,52 @@ public partial class MainWindow : Window
     /// Coalesces to ~15 fps AND to at most one outstanding request. The
     /// frame source can call OnFrameProcessed far faster than 15 fps (a
     /// synthetic folder source on a short timer, or a real 30 fps camera),
-    /// so both gates are needed: the time check limits how often a render is
-    /// asked for, and the CompareExchange stops a second ask piling up
-    /// before the render loop gets to the first one. Called from the
-    /// background thread — see the Dispatcher.UIThread.Post below for why
-    /// the actual RequestAnimationFrame call still has to cross to the UI
-    /// thread.
+    /// so both gates are needed: the CompareExchange stops a second ask
+    /// piling up before the render loop gets to the first one, and the time
+    /// check limits how often a render actually fires.
+    ///
+    /// The time check used to just `return` when a frame landed inside the
+    /// interval — which drops it silently: if the source then stalls (or
+    /// stops), nothing ever asks for a render again and the newest frame
+    /// sits in `_frameHandoff` forever undrawn. It now DEFERS instead: arms
+    /// `_deferredRenderTimer` for the remainder of the interval, so the
+    /// render still happens even if no further frame ever arrives. Only one
+    /// of {defer, immediate request} can be outstanding at a time — that is
+    /// exactly what `_renderScheduled` already gates — so re-arming the
+    /// timer on every call some frame source floods this with is harmless:
+    /// later calls in the same interval see `_renderScheduled` already set
+    /// and return immediately without touching the timer again.
     private void ScheduleRenderIfDue()
     {
-        var now = DateTime.UtcNow;
-        if (now - _lastRenderRequestUtc < RenderInterval)
-        {
-            return;
-        }
-
         if (Interlocked.CompareExchange(ref _renderScheduled, 1, 0) != 0)
         {
             return;
         }
 
-        _lastRenderRequestUtc = now;
+        var elapsed = DateTime.UtcNow - _lastRenderRequestUtc;
+        if (elapsed >= RenderInterval)
+        {
+            // RequestRenderNow itself asserts UI-thread access
+            // (Dispatcher.VerifyAccess via RequestAnimationFrame), so the
+            // call has to be marshalled there even though this method runs
+            // on the pipeline's background thread.
+            Dispatcher.UIThread.Post(RequestRenderNow);
+        }
+        else
+        {
+            _deferredRenderTimer.Change(RenderInterval - elapsed, Timeout.InfiniteTimeSpan);
+        }
+    }
 
-        // RequestAnimationFrame itself asserts UI-thread access
-        // (Dispatcher.VerifyAccess), so the CALL has to be marshalled there
-        // even though this method runs on the pipeline's background thread —
-        // `MainWindow` is itself a `TopLevel`, so no separate lookup is
-        // needed. This still coalesces: `_renderScheduled` gates it to at
-        // most one outstanding Post (and, once that runs, one outstanding
-        // RequestAnimationFrame) at a time, so a frame source faster than
-        // ~15 fps cannot queue a backlog of either.
-        Dispatcher.UIThread.Post(() => RequestAnimationFrame(OnRenderFrame));
+    /// Runs on the UI thread, either posted directly from
+    /// `ScheduleRenderIfDue` or from `_deferredRenderTimer`'s callback (via
+    /// its own `Dispatcher.UIThread.Post` — see the constructor). Whichever
+    /// path got here, this is the one place that stamps
+    /// `_lastRenderRequestUtc` and asks for the next animation frame.
+    private void RequestRenderNow()
+    {
+        _lastRenderRequestUtc = DateTime.UtcNow;
+        RequestAnimationFrame(OnRenderFrame);
     }
 
     /// Runs on the UI thread. Order matters and is exactly
@@ -172,39 +189,35 @@ public partial class MainWindow : Window
     {
         Interlocked.Exchange(ref _renderScheduled, 0);
 
-        byte[] staging;
-        int width, height, stride;
-        PixelLayout layout;
-        IReadOnlyList<CardQuad> quads;
-
-        lock (_frameLock)
+        if (!_frameHandoff.TryTake(out var buffer, out var metadata))
         {
-            if (!_hasPendingFrame || _stagingBuffer is null)
+            return;
+        }
+
+        try
+        {
+            EnsureBitmap(metadata.Width, metadata.Height);
+
+            using (var framebuffer = _bitmap!.Lock())
             {
-                return;
+                EnsureConvertedBuffer(framebuffer.RowBytes, metadata.Height);
+                PixelConvert.ToBgra32(
+                    buffer.Span, metadata.Width, metadata.Height, metadata.Stride, metadata.Layout,
+                    _convertedBuffer!, framebuffer.RowBytes);
+                Marshal.Copy(_convertedBuffer!, 0, framebuffer.Address, framebuffer.RowBytes * metadata.Height);
             }
 
-            staging = _stagingBuffer;
-            width = _pendingWidth;
-            height = _pendingHeight;
-            stride = _pendingStride;
-            layout = _pendingLayout;
-            quads = _pendingQuads;
-            _hasPendingFrame = false;
+            PreviewImage.InvalidateVisual();
+
+            DrawQuadOverlay(metadata.Quads, metadata.Width, metadata.Height);
         }
-
-        EnsureBitmap(width, height);
-
-        using (var framebuffer = _bitmap!.Lock())
+        finally
         {
-            EnsureConvertedBuffer(framebuffer.RowBytes, height);
-            PixelConvert.ToBgra32(staging, width, height, stride, layout, _convertedBuffer!, framebuffer.RowBytes);
-            Marshal.Copy(_convertedBuffer!, 0, framebuffer.Address, framebuffer.RowBytes * height);
+            // Frees the slot for the producer to reuse — must run even if
+            // conversion above throws, or the producer permanently loses a
+            // buffer out of its three-slot rotation.
+            _frameHandoff.Return();
         }
-
-        PreviewImage.InvalidateVisual();
-
-        DrawQuadOverlay(quads, width, height);
     }
 
     /// Draws each detected quad as a vector `Polygon` child of
