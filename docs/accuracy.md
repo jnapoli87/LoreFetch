@@ -1350,3 +1350,157 @@ file), `Tests/StreamB/Accuracy/AccuracyCommandOkDistanceTests.cs` (new),
 `Tests/StreamB/Accuracy/AccuracyHarnessRealCaptureTests.cs` (`OkDistance`
 from thresholds file), `Tests/StreamB/HashCardIdentifierRealIndexCatalogTests.cs`
 (new), `docs/accuracy.md` (this section).
+
+## B2-witness: the query-hash witness was index-coupled, and the isolated query-side divergence measurement, 2026-09-22
+
+Package B2-witness, Windows PC, `stream/b` `d379df3` + this session's
+commit. The orchestrator found that
+`QueryHashWitnessTests.RegeneratedWitness_MatchesOrExplainsTheCommittedOne`
+was comparing the committed 50-artwork witness (captured on arm64-darwin)
+against a **re-sample** drawn from whatever index happens to be loaded --
+`QueryHashWitnessBuilder.Build` calls `RoundTripSampler.SelectUniformSample`
+against the CURRENT index every time. The index was rebuilt between the
+witness's capture and this session (digital-only filter: 48,750 -> 47,418
+arts), so the seeded sample silently drew a different 50 artworks. Running
+the old code on this machine reproduced exactly the reported symptom:
+
+```
+Foreign architecture: witness was measured on "arm64-darwin", running on
+"x64-windows". Informational only, not asserted. 48/50 query hashes differ;
+average bit-distance among differences: 0.0.
+```
+
+**That is 48 artworks the comparison never actually computed a hash for at
+all** (not in the re-sampled 50, because the index population/order
+changed), misreported as "differing hashes" at a suspicious, tell-tale
+average bit-distance of exactly 0.0 -- every one of them was really a
+`Dictionary` lookup miss, not a hash comparison.
+
+### Fix
+
+Query-side hashes depend only on the render bytes and the query transform
+(`QueryTransform.Prepare` -> `CardHasher.Hash`), never on the index --
+so comparing against a committed witness must regenerate hashes for
+**exactly the `ArtworkId`s the committed witness names**, not resample.
+`QueryHashWitnessBuilder.BuildForArtworkIds(cacheDir, artworkIds)` (new)
+does this directly, with no index parameter at all. `Build` (the sampler
+path) is now implemented in terms of it and stays in use only for
+generating a NEW witness (`lab query-hash-witness`) and for the
+generator's own run-to-run determinism test.
+
+`QueryHashWitnessDiff` now reports `MissingArtworkIds` (render not in the
+cache -- never compared) and `Differences` (compared, hashes did not
+match) as two separate lists, with `MissingCount`/`DifferingCount` and
+bit-distance stats (`TotalDifferingBits`, `MaxBitsInOneHash`,
+`AverageBitDistanceAmongDifferences`) computed over `Differences` only.
+`QueryHashWitnessTests.RegeneratedWitness_MatchesOrExplainsTheCommittedOne`
+regenerates against `committed.Entries.Select(e => e.ArtworkId)` instead of
+resampling, asserts `MissingCount == 0 && DifferingCount == 0` on the same
+architecture, and reports missing/differing separately (with bits) in the
+foreign-architecture skip message. New pure unit tests
+(`QueryHashWitnessCompareTests`, no I/O) pin the missing-vs-differing
+separation directly against synthetic documents.
+
+### Measurement -- the isolated query-side x64-vs-ARM64 divergence
+
+**Run before any regeneration**, against the committed arm64-darwin
+witness (`Tests/StreamB/RoundTrip/round-trip-witness.json` as it stood at
+`d379df3`, `measuredOn: "arm64-darwin"`), using the FIXED comparison
+(`BuildForArtworkIds` against the committed witness's own 50 `ArtworkId`s,
+`LOREFETCH_SCRYFALL_CACHE=C:\LoreFetchData\scryfall-cache`):
+
+```
+Foreign architecture: witness was measured on "arm64-darwin", running on
+"x64-windows". Informational only, not asserted. Compared 50: 0 missing
+(render not in cache), 0 differing; over the differing hashes -- total
+bits 0, max bits in one hash 0, average bit-distance 0.0.
+```
+
+| | |
+|---|---|
+| Compared | 50 |
+| Missing | 0 |
+| Differing | 0 |
+| Total differing bits | 0 |
+| Max bits in one hash | 0 |
+
+**This is the first isolated measurement of the QUERY side's own
+`INTER_AREA` step (`CardHasher`'s 32x32 resize) across x86-64 vs. ARM64.**
+Everything recorded elsewhere in this file about the architecture
+divergence (the 11-of-49.9M-bits figure under "Measured -- ARM64 index
+divergence is real but vanishing" in `docs/orchestration-plan.md`) is
+whole-index and reference-side: it comes from diffing two full committed
+index files, which only exercise `ReferenceTransform`
+(`GaussianBlur` + 96px `INTER_AREA` resize), never the query path. This
+measurement is the query side alone, on 50 real Scryfall renders decoded
+fresh on this machine and pushed through the exact `QueryTransform.Prepare`
+-> `CardHasher.Hash` calls `HashCardIdentifier.Identify` itself makes.
+
+**Zero bits differed across all 50 artworks, at both architecture AND
+index-content boundaries** (the committed witness's renders are the same
+488x680 Scryfall bytes; only the machine differs). This is consistent
+with, and extends, the mechanism already recorded above (`Empirical
+finding -- the win-x64 goldens pass on ARM64`): the 1024-bit hash is a
+*thresholded* quantity (each bit is "pixel > the median of its own 8x8
+cell"), so a sub-LSB `INTER_AREA` interpolation difference only flips a
+bit when a pixel sits exactly on its cell's median -- and apparently none
+of the 50x1024 = 51,200 bits sampled here did. **Evidence, not proof**: a
+larger sample could still catch a flip (the reference-side index diff
+found 11 flipped bits out of 49.9M, a ~1-in-4.5M rate -- at that rate,
+51,200 bits would be expected to show roughly 0.01 flips, so a
+zero-observation result here is fully consistent with, not contradicted
+by, the reference-side rate). Do not read "zero measured" as "provably
+bit-exact" -- it is the same class of small-sample evidence the goldens
+finding already flagged, now with the query side's own number attached.
+
+### Committed witness regenerated on win-x64
+
+Per the package brief, the committed witness is now regenerated on this
+machine (`lab query-hash-witness --cache C:\LoreFetchData\scryfall-cache
+--out Tests\StreamB\RoundTrip\round-trip-witness.json`, default sample
+size 50 / seed 20260922, unchanged), so the "same architecture" branch of
+`QueryHashWitnessTests.RegeneratedWitness_MatchesOrExplainsTheCommittedOne`
+now asserts bit-exactness on the win-x64 ship architecture instead of
+perpetually taking the (correct, but never-asserting) foreign-architecture
+skip path. The arm64 measurement above is kept in this file rather than
+overwritten -- it is the only record of the cross-architecture number now
+that the committed file itself is win-x64/win-x64.
+
+Re-run after regeneration: `RegeneratedWitness_MatchesOrExplainsTheCommittedOne`
+**passes** (not skipped) -- `MeasuredOn` in the freshly written witness is
+now `x64-windows`, matching this machine's own `ArchitectureProvenance.CurrentToken()`.
+
+### Test suite status after this package
+
+- `Tests/StreamB`: `LOREFETCH_SCRYFALL_CACHE` set. The witness test now
+  PASSES (was the one soft-skip); only the two documented soft-skips
+  remain (`MultiScaleSweepRiskTests` and `HashCardIdentifierPerformanceTests`
+  when timing-sensitive). Exact counts recorded in the commit-time test
+  run below.
+- `Tests/Integration`: unchanged -- this package touches nothing under
+  `Core/Abstractions`, `Core/Scanning`, `Core/Fakes` or `Tests/Integration`.
+
+### Wording defect noted, not fixed (out of this package's write scope)
+
+`data/index/thresholds.json`'s `notes` field (hand-written during the
+B6-thresholds package, unrelated to this one) says the earlier
+arm64-darwin `RoundTripGateTests` measurement used "the same fixed
+sample" as the win-x64 re-run. That is imprecise: the seed was the same
+(`20260922`), but `RoundTripSampler.SelectStratifiedSample` draws from
+`index.Entries`, and the arm64 run sampled against the pre-digital-only-
+filter 48,750-artwork index while the win-x64 run sampled against the
+rebuilt 47,418-artwork index -- a different population produces a
+different sample even at an identical seed. The phrase should read
+something like "same seed, different index (so a different sample)".
+`data/index/thresholds.json` is outside this package's declared write
+scope (`src/LoreFetch.Lab/**`, `src/LoreFetch.Core/Imaging/**` for part C
+only, `Tests/StreamB/**`, `docs/accuracy.md`, `src/LoreFetch.Lab/README.md`,
+the committed query-hash witness file), so it was left untouched; flagging
+it here per the package brief rather than editing it unilaterally.
+
+Files changed: `src/LoreFetch.Lab/RoundTrip/QueryHashWitness.cs`
+(`BuildForArtworkIds`, `QueryHashRegeneration`, missing/differing
+separation in `QueryHashWitnessDiff`), `Tests/StreamB/RoundTrip/QueryHashWitnessTests.cs`
+(regenerate-by-id instead of resample, new `QueryHashWitnessCompareTests`),
+`Tests/StreamB/RoundTrip/round-trip-witness.json` (regenerated on
+win-x64), `docs/accuracy.md` (this section).

@@ -79,36 +79,53 @@ public class QueryHashWitnessTests
             return;
         }
 
-        var indexSha256 = HashIndexFile.ComputeSha256(indexPath);
-        var fresh = QueryHashWitnessBuilder.Build(
-            index, cacheDir, committed.SampleSize, committed.Seed, indexSha256, DateTimeOffset.UtcNow);
+        // Regenerate query hashes for EXACTLY the artwork ids the committed
+        // witness names -- never a re-sample. Query hashes depend only on
+        // the render bytes and the query transform, not on the index, so
+        // this is unaffected by an index rebuild (different artwork
+        // count/order) -- unlike `QueryHashWitnessBuilder.Build`, which
+        // draws its own seeded sample from whatever index is loaded NOW
+        // and would silently compare a DIFFERENT population the moment the
+        // index changes (see `QueryHashRegeneration`'s own doc comment).
+        var committedArtworkIds = committed.Entries.Select(e => e.ArtworkId).ToList();
+        var regenerated = QueryHashWitnessBuilder.BuildForArtworkIds(cacheDir, committedArtworkIds);
 
-        var diff = QueryHashWitnessBuilder.Compare(committed, fresh);
+        var diff = QueryHashWitnessBuilder.Compare(committed, regenerated);
         var currentToken = ArchitectureProvenance.CurrentToken();
 
         if (string.Equals(currentToken, committed.MeasuredOn, StringComparison.Ordinal))
         {
             // Same architecture that produced the committed witness: this
-            // MUST reproduce bit-exactly. A difference here is a real
-            // regression in the query path, not an expected divergence --
-            // same severity as a golden-hash mismatch.
+            // MUST reproduce bit-exactly, with every artwork's render
+            // present. A missing render OR a differing hash here is a real
+            // regression in the query path (or the local cache), not an
+            // expected divergence -- same severity as a golden-hash
+            // mismatch.
             Assert.True(
-                diff.DifferingCount == 0,
-                $"{diff.DifferingCount}/{diff.TotalCompared} query hashes differ from the committed witness on " +
-                $"the SAME architecture ({currentToken}) that produced it -- this should be bit-exact. " +
-                $"First difference: {diff.Differences.FirstOrDefault()}");
+                diff.MissingCount == 0 && diff.DifferingCount == 0,
+                $"{diff.MissingCount} missing, {diff.DifferingCount}/{diff.TotalCompared} query hashes differ " +
+                $"from the committed witness on the SAME architecture ({currentToken}) that produced it -- this " +
+                $"should be bit-exact with nothing missing. First missing: " +
+                $"{diff.MissingArtworkIds.FirstOrDefault() ?? "(none)"}. First difference: " +
+                $"{diff.Differences.FirstOrDefault()?.ToString() ?? "(none)"}.");
             return;
         }
 
         // Foreign architecture: this IS the measurement. Never a failure,
         // never upgraded by LOREFETCH_REQUIRE_REAL -- a cross-architecture
         // divergence here is expected, documented behaviour (CLAUDE.md
-        // Real risk #2), not "the real path is untested".
+        // Real risk #2), not "the real path is untested". Missing and
+        // differing are reported SEPARATELY, and the bit-distance stats
+        // cover differing hashes only -- conflating "not compared" with
+        // "compared and diverged" is exactly the defect this test used to
+        // have (an index rebuild made every re-sampled miss read as a
+        // hash difference at 0.0 average bit-distance).
         Assert.Skip(
             $"Foreign architecture: witness was measured on \"{committed.MeasuredOn}\", running on " +
-            $"\"{currentToken}\". Informational only, not asserted. {diff.DifferingCount}/{diff.TotalCompared} " +
-            $"query hashes differ; average bit-distance among differences: " +
-            $"{diff.AverageBitDistanceAmongDifferences:F1}.");
+            $"\"{currentToken}\". Informational only, not asserted. Compared {diff.TotalCompared}: " +
+            $"{diff.MissingCount} missing (render not in cache), {diff.DifferingCount} differing; over the " +
+            $"differing hashes -- total bits {diff.TotalDifferingBits}, max bits in one hash " +
+            $"{diff.MaxBitsInOneHash}, average bit-distance {diff.AverageBitDistanceAmongDifferences:F1}.");
     }
 
     /// Regenerating the SAME committed witness a second time, from the
@@ -149,6 +166,109 @@ public class QueryHashWitnessTests
         var second = QueryHashWitnessBuilder.Build(index, cacheDir, SampleSize, Seed, indexSha256, measuredAt);
 
         var diff = QueryHashWitnessBuilder.Compare(first, second);
+        Assert.Equal(0, diff.MissingCount);
         Assert.Equal(0, diff.DifferingCount);
+    }
+}
+
+/// Pure, no-I/O tests of `QueryHashWitnessBuilder.Compare`'s missing-vs-
+/// differing separation -- the defect this package fixed (B2-witness):
+/// "48/50 query hashes differ; average bit-distance among differences:
+/// 0.0" was actually 48 artworks the re-sampled comparison never computed
+/// at all, misreported as differing hashes at zero bit-distance. These
+/// tests pin that separation directly, independent of any real cache or
+/// index, so the distinction cannot silently regress even when the
+/// cache-gated tests above are skipped on a machine without the cache.
+public class QueryHashWitnessCompareTests
+{
+    private static QueryHashWitnessEntry Entry(string artworkId, string hex) => new(artworkId, hex);
+
+    private static readonly DateTimeOffset MeasuredAt = new(2026, 9, 22, 0, 0, 0, TimeSpan.Zero);
+
+    private static QueryHashWitnessDocument Document(params QueryHashWitnessEntry[] entries) =>
+        new("x64-windows", "x64-windows (win-x64, Windows)", "deadbeef", entries.Length, 1, MeasuredAt, entries);
+
+    [Fact]
+    public void Compare_ArtworkAbsentFromRegeneration_IsReportedAsMissingNotDiffering()
+    {
+        var committed = Document(Entry("aaa", "ff00"), Entry("bbb", "00ff"));
+
+        // Regeneration found "aaa" but never even attempted "bbb" (its
+        // render was not in the cache) -- BuildForArtworkIds' own
+        // contract, not a hash that happened to differ.
+        var regenerated = new QueryHashRegeneration(
+            Entries: [Entry("aaa", "ff00")],
+            MissingArtworkIds: ["bbb"]);
+
+        var diff = QueryHashWitnessBuilder.Compare(committed, regenerated);
+
+        Assert.Equal(2, diff.TotalCompared);
+        Assert.Equal(1, diff.MissingCount);
+        Assert.Equal(["bbb"], diff.MissingArtworkIds);
+        Assert.Equal(0, diff.DifferingCount);
+        Assert.Empty(diff.Differences);
+    }
+
+    [Fact]
+    public void Compare_ArtworkPresentWithADifferentHash_IsReportedAsDifferingNotMissing()
+    {
+        var committed = Document(Entry("aaa", "ff00"));
+        var regenerated = new QueryHashRegeneration(
+            Entries: [Entry("aaa", "0f00")], // one hex nibble differs: f (1111) vs 0 (0000) -> 4 bits
+            MissingArtworkIds: []);
+
+        var diff = QueryHashWitnessBuilder.Compare(committed, regenerated);
+
+        Assert.Equal(1, diff.TotalCompared);
+        Assert.Equal(0, diff.MissingCount);
+        Assert.Empty(diff.MissingArtworkIds);
+        Assert.Equal(1, diff.DifferingCount);
+        Assert.Equal(4, diff.Differences[0].BitDistance);
+        Assert.Equal(4, diff.TotalDifferingBits);
+        Assert.Equal(4, diff.MaxBitsInOneHash);
+        Assert.Equal(4.0, diff.AverageBitDistanceAmongDifferences);
+    }
+
+    [Fact]
+    public void Compare_MixOfMissingAndDiffering_KeepsBothCountsAndBitStatsSeparate()
+    {
+        var committed = Document(
+            Entry("aaa", "ff00"),  // will match exactly
+            Entry("bbb", "ff00"),  // will differ
+            Entry("ccc", "ff00")); // will be missing
+
+        var regenerated = new QueryHashRegeneration(
+            Entries: [Entry("aaa", "ff00"), Entry("bbb", "0f00")],
+            MissingArtworkIds: ["ccc"]);
+
+        var diff = QueryHashWitnessBuilder.Compare(committed, regenerated);
+
+        Assert.Equal(3, diff.TotalCompared);
+        Assert.Equal(1, diff.MissingCount);
+        Assert.Equal(["ccc"], diff.MissingArtworkIds);
+        Assert.Equal(1, diff.DifferingCount);
+        Assert.Equal("bbb", diff.Differences[0].ArtworkId);
+        // Bit-distance stats must be computed over the ONE differing hash
+        // only, never diluted or inflated by the missing entry.
+        Assert.Equal(4, diff.TotalDifferingBits);
+        Assert.Equal(4, diff.MaxBitsInOneHash);
+        Assert.Equal(4.0, diff.AverageBitDistanceAmongDifferences);
+    }
+
+    [Fact]
+    public void Compare_EverythingMatches_ReportsNeitherMissingNorDiffering()
+    {
+        var committed = Document(Entry("aaa", "ff00"), Entry("bbb", "00ff"));
+        var regenerated = new QueryHashRegeneration(
+            Entries: [Entry("aaa", "ff00"), Entry("bbb", "00ff")],
+            MissingArtworkIds: []);
+
+        var diff = QueryHashWitnessBuilder.Compare(committed, regenerated);
+
+        Assert.Equal(0, diff.MissingCount);
+        Assert.Equal(0, diff.DifferingCount);
+        Assert.Equal(0, diff.TotalDifferingBits);
+        Assert.Equal(0, diff.MaxBitsInOneHash);
+        Assert.Equal(0.0, diff.AverageBitDistanceAmongDifferences);
     }
 }
