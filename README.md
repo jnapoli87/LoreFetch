@@ -72,7 +72,7 @@ Any webcam that delivers 1080p should work. These are the ones actually run, rat
 
 | Camera | Tested at | Notes |
 |---|---|---|
-| Logitech C920 | 1920×1080, 30 fps, Windows 11 (2026-09) | USB 2.0, so 1080p only reaches 30 fps in MJPG; uncompressed caps at 5. LoreFetch requests MJPG and then reads the setting back to confirm it took, because OpenCV reports success either way. |
+| Logitech C920 | 1920×1080, 30 fps, Windows 11 (2026-09) | USB 2.0, so 1080p only reaches 30 fps in MJPG; uncompressed caps at 5 fps on that bus. Capture negotiates the format explicitly through FlashCap and logs what it got, so a camera that quietly falls back is visible rather than silently slow. |
 
 The lamp matters more than the camera: put it low and off to one side, never beside the lens. Glare is the main way identification fails.
 
