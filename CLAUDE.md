@@ -55,7 +55,7 @@ Why this survives webcam frames when naive pHash doesn't: rectification removes 
 | Rejected | Why |
 |---|---|
 | OCR of the card name | Nothing in this problem space reads text, including SpellTable. The name is ~5 px tall at overhead height. Was the original plan's entire spine. |
-| Embeddings (DINOv2/CLIP/ONNX) | FORB benchmark (NeurIPS 2023) ranks DINOv2 **worst of four** on trading-card retrieval, 24 pts below CLIP. Wants ≥224 px input and degrades at low resolution — fights our constraint where the hash works with it. |
+| Embeddings (DINOv2/CLIP/ONNX) | FORB benchmark (NeurIPS 2023) ranks DINOv2 **worst of four** on trading-card retrieval, ~20.5 pts below CLIP on overall mAP@5 (89.36 vs 68.86). FORB evaluates no perceptual-hash baseline, so this is only a ceiling among embedding methods, not a comparison against our approach. Wants ≥224 px input and degrades at low resolution — fights our constraint where the hash works with it. |
 | `Windows.Media.Ocr` | Officially "only supported for desktop apps with **package identity**" → requires MSIX, killing zip distribution. |
 | Windows AI `TextRecognizer` | Runs "exclusively on devices with an NPU" — Copilot+ PCs only. |
 | Emgu.CV | Free tier is **GPLv3-only**; OpenCvSharp is Apache-2.0 and better maintained. |
