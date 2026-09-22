@@ -1,6 +1,8 @@
 using LoreFetch.App.Diagnostics;
 using LoreFetch.App.Fakes;
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Collection;
+using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
@@ -12,14 +14,25 @@ namespace LoreFetch.App;
 /// Which set of dependencies the composition root wires up. `Fakes` is all
 /// this stream builds — the seven fakes in `Core/Fakes` plus the
 /// `AutoCaptureTrigger` this stream owns — so the app runs end-to-end with
-/// no camera, no hash index and no collection store. `Real` (the webcam via
-/// `LoreFetch.Capture`, the hash index, the CSV store) is added at
-/// integration once streams B, C and D land; this enum exists now precisely
-/// so nothing about `AppComposition`'s shape has to change when that case
-/// is added — a caller already switches on `CompositionMode`.
+/// no camera, no hash index and no collection store.
+///
+/// `Real` (package I1) swaps in the real collection store
+/// (`LoreFetch.Core.Collection.CsvCollectionStore`) and both real export
+/// adapters (`LoreFetch.Core.Export.NativeCsvExporter`,
+/// `LoreFetch.Core.Export.MoxfieldCsvExporter`). The frame source, detector,
+/// rectifier, identifier and catalog stay EXACTLY as Fakes mode composes
+/// them for now — packages I2 (hash index, detector, rectifier) and I3
+/// (webcam) replace those pieces without anything about `Real`'s shape
+/// changing, the same way this enum was added ahead of I1 without changing
+/// `AppComposition`'s shape.
+///
+/// Selected by `LOREFETCH_MODE` (`fakes` | `real`, case-insensitive; see
+/// <see cref="ResolveCompositionMode"/>). The default STAYS `Fakes` in this
+/// package — I3 flips the default once the camera is wired.
 public enum CompositionMode
 {
     Fakes,
+    Real,
 }
 
 /// Everything the app needs once composition is done: the pipeline, the
@@ -206,22 +219,187 @@ public sealed class AppSession : IAsyncDisposable
 /// composition root, but it does not know the wiring"). It only ever calls
 /// the two frozen entry points — `IFrameSourceFactory.CreateAsync` and
 /// `ScanPipelineFactory.Create` — then starts `RunAsync` exactly once.
-/// Global A override: built against fakes only; nothing here ever compares
-/// a distance.
+/// Global A override: the pipeline pieces (frame source, detector,
+/// rectifier, identifier, catalog) are built against fakes only in both
+/// modes for now; nothing here ever compares a distance (I4).
 public static class AppComposition
 {
     public static Task<AppSession> CreateAsync(CompositionMode mode, ILoggerFactory loggers, CancellationToken ct) =>
         mode switch
         {
             CompositionMode.Fakes => CreateFakesAsync(loggers, ct),
+            CompositionMode.Real => CreateRealAsync(loggers, ct),
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported composition mode."),
         };
+
+    /// <summary>
+    /// Resolves <c>LOREFETCH_MODE</c> into a <see cref="CompositionMode"/>.
+    /// Takes the raw env var value as a parameter, rather than reading
+    /// <see cref="Environment.GetEnvironmentVariable"/> itself, so the
+    /// resolution logic is a pure function `Tests/StreamA` can exercise
+    /// without mutating process-global state (the same shape as
+    /// <see cref="ChooseFrameFolder"/>).
+    /// </summary>
+    /// <param name="envVar">
+    /// The raw value of <c>LOREFETCH_MODE</c>, or <c>null</c>/empty/whitespace
+    /// if unset. Matched case-insensitively against <c>"fakes"</c> and
+    /// <c>"real"</c>.
+    /// </param>
+    /// <param name="logger">Receives an error when the value is neither.</param>
+    /// <returns>
+    /// <see cref="CompositionMode.Fakes"/> when unset, empty, or unrecognised
+    /// (logging an error in the unrecognised case); <see cref="CompositionMode.Real"/>
+    /// only for an exact case-insensitive match on <c>"real"</c>. Never throws —
+    /// a typo in an environment variable must not be the reason the app won't
+    /// start, and this package (I1) keeps the default at <c>Fakes</c> regardless
+    /// (I3 flips it once the camera is wired).
+    /// </returns>
+    internal static CompositionMode ResolveCompositionMode(string? envVar, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(envVar))
+        {
+            return CompositionMode.Fakes;
+        }
+
+        if (string.Equals(envVar, "fakes", StringComparison.OrdinalIgnoreCase))
+        {
+            return CompositionMode.Fakes;
+        }
+
+        if (string.Equals(envVar, "real", StringComparison.OrdinalIgnoreCase))
+        {
+            return CompositionMode.Real;
+        }
+
+        logger.LogError(
+            "LOREFETCH_MODE is set to '{Value}', which is neither 'fakes' nor 'real'. Falling back to Fakes.",
+            envVar);
+        return CompositionMode.Fakes;
+    }
 
     private static Task<AppSession> CreateFakesAsync(ILoggerFactory loggers, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(loggers);
 
         var logger = loggers.CreateLogger("LoreFetch.App.AppComposition");
+        var settings = CreateSettingsWithDemoThresholds();
+        var pieces = BuildFakesPipelinePieces(settings, logger);
+
+        // A7: in-memory collection store — the StubCollectionStore has the
+        // real dedup and commit semantics so the full Space → Enter loop
+        // is exercisable against fakes before stream D's CsvCollectionStore
+        // exists. Real mode (I1) uses CsvCollectionStore instead.
+        ICollectionStore store = new StubCollectionStore();
+
+        // A8: two stub exporters — one verified, one deliberately unverified —
+        // so the export picker's IsVerified badge is exercised end-to-end.
+        // The real exporters (native and third-party adapters) live on stream D
+        // and are wired in Real mode (I1) instead — the UI must never name them.
+        IReadOnlyList<ICollectionExporter> exporters = CreateStubExporters();
+
+        return ComposeAsync(
+            pieces.FrameSourceFactory,
+            pieces.Detector,
+            pieces.Rectifier,
+            pieces.Identifier,
+            pieces.Trigger,
+            settings,
+            loggers,
+            ct,
+            catalog: pieces.Catalog,
+            store: store,
+            exporters: exporters,
+            onDisposed: pieces.OnDisposed);
+    }
+
+    /// <summary>
+    /// Package I1: the Real composition path. Per the override in
+    /// docs/orchestration-plan.md, only the collection store and the export
+    /// adapters are real here — the pipeline pieces (frame source, detector,
+    /// rectifier, identifier, catalog) are built EXACTLY the way Fakes mode
+    /// builds them, via the same <see cref="BuildFakesPipelinePieces"/>
+    /// helper, until I2 (hash index, detector, rectifier) and I3 (webcam)
+    /// replace them. That is also why Real mode still uses
+    /// <see cref="DemoThresholds"/> for now: I2 is what loads the genuine
+    /// <c>thresholds.json</c>.
+    /// </summary>
+    private static Task<AppSession> CreateRealAsync(ILoggerFactory loggers, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(loggers);
+
+        var logger = loggers.CreateLogger("LoreFetch.App.AppComposition");
+        var settings = CreateSettingsWithDemoThresholds();
+        var pieces = BuildFakesPipelinePieces(settings, logger);
+
+        var collectionPath = ResolveCollectionPath(
+            Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION"), logger);
+
+        ICollectionStore store = new CsvCollectionStore(collectionPath, loggers.CreateLogger<CsvCollectionStore>());
+
+        // Both v1 export adapters (CONTRACTS.md: "v1 ships exactly two
+        // formats"), in the same order the Fakes-mode stub pair models
+        // (one native/verified, one third-party/verified) — see
+        // NativeCsvExporter/MoxfieldCsvExporter's own doc comments for why
+        // each is IsVerified: true.
+        IReadOnlyList<ICollectionExporter> exporters =
+        [
+            new NativeCsvExporter(),
+            new MoxfieldCsvExporter(),
+        ];
+
+        return ComposeAsync(
+            pieces.FrameSourceFactory,
+            pieces.Detector,
+            pieces.Rectifier,
+            pieces.Identifier,
+            pieces.Trigger,
+            settings,
+            loggers,
+            ct,
+            catalog: pieces.Catalog,
+            store: store,
+            exporters: exporters,
+            onDisposed: pieces.OnDisposed);
+    }
+
+    /// <summary>
+    /// Resolves the collection file's path. Takes the raw env var value as a
+    /// parameter (see <see cref="ResolveCompositionMode"/> for why), so
+    /// <c>Tests/StreamA</c> can exercise the whole resolution — including the
+    /// "create the directory if missing" step — against a temp path, never the
+    /// real Documents folder.
+    /// </summary>
+    /// <param name="envVar">
+    /// The raw value of <c>LOREFETCH_COLLECTION</c> (a full file path), or
+    /// <c>null</c>/empty/whitespace if unset.
+    /// </param>
+    /// <param name="logger">Receives an informational line naming the resolved path.</param>
+    /// <returns>
+    /// <paramref name="envVar"/>, fully qualified, when set; otherwise
+    /// <c>&lt;Environment.SpecialFolder.MyDocuments&gt;/LoreFetch/collection.csv</c>.
+    /// Either way, the containing directory is created first if it does not
+    /// already exist — <see cref="Directory.CreateDirectory"/> is a no-op when
+    /// it does — so <see cref="CsvCollectionStore"/> never has to.
+    /// </returns>
+    internal static string ResolveCollectionPath(string? envVar, ILogger logger)
+    {
+        var path = string.IsNullOrWhiteSpace(envVar)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LoreFetch", "collection.csv")
+            : envVar;
+
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        logger.LogInformation("Real mode collection file: {Path}", fullPath);
+        return fullPath;
+    }
+
+    private static ScanSettings CreateSettingsWithDemoThresholds()
+    {
         var settings = new ScanSettings();
 
         // Item 3 (A10-prep): a fresh ScanSettings defaults GoodDistance and
@@ -229,14 +407,26 @@ public static class AppComposition
         // Unresolved for every tile (best.Distance <= 0 is never true) — the
         // keyboard loop could capture but never commit anything. DemoThresholds
         // is the one place in the App allowed to name a distance literal (see
-        // its own doc comment for why Fakes mode can't load a real
-        // ThresholdsFile); everything else derives from these two numbers.
-        // Must be set before ScanPipelineFactory.Create below, so every tile
-        // the pipeline constructs sees non-zero thresholds from its first
-        // capture.
+        // its own doc comment for why neither mode can load a real
+        // ThresholdsFile yet — that is I2's job); everything else derives
+        // from these two numbers. Must be set before ScanPipelineFactory.Create
+        // runs, so every tile the pipeline constructs sees non-zero thresholds
+        // from its first capture.
         settings.GoodDistance = DemoThresholds.GoodDistance;
         settings.OkDistance = DemoThresholds.OkDistance;
+        return settings;
+    }
 
+    /// <summary>
+    /// Builds the pipeline pieces both <see cref="CompositionMode.Fakes"/>
+    /// and <see cref="CompositionMode.Real"/> compose identically today — the
+    /// frame source, detector, rectifier, identifier and oracle catalog — per
+    /// the I1 override: only the collection store and export adapters differ
+    /// by mode until I2/I3 land. Factored out so neither mode's method has to
+    /// repeat, and risk drifting from, the other's wiring.
+    /// </summary>
+    private static PipelinePieces BuildFakesPipelinePieces(ScanSettings settings, ILogger logger)
+    {
         // A4: when LOREFETCH_FRAMES_DIR is set, use the user's own folder
         // instead of generating a DemoFrames temp folder. A bad env var
         // (missing or empty folder) is logged and falls back gracefully —
@@ -269,32 +459,6 @@ public static class AppComposition
         // plan-finding V16 and stream-a-ui.md §A5.
         IOracleCatalog catalog = new StubOracleCatalog();
 
-        // A7: in-memory collection store — the StubCollectionStore has the
-        // real dedup and commit semantics so the full Space → Enter loop
-        // is exercisable against fakes before stream D's CsvCollectionStore
-        // exists. Stream D replaces this with the real implementation.
-        ICollectionStore store = new StubCollectionStore();
-
-        // A8: two stub exporters — one verified, one deliberately unverified —
-        // so the export picker's IsVerified badge is exercised end-to-end.
-        // The real exporters (native and third-party adapters) live on stream D
-        // and are wired at integration, NOT here. The UI must never name them.
-        IReadOnlyList<ICollectionExporter> exporters =
-        [
-            new StubCollectionExporter(new ExportFormat(
-                "stub-a",
-                "Stub Verified Export",
-                ".txt",
-                IsVerified: true,
-                Notes: null)),
-            new StubCollectionExporter(new ExportFormat(
-                "stub-b",
-                "Stub Unverified Export",
-                ".txt",
-                IsVerified: false,
-                Notes: "Not yet tested with a live tool.")),
-        ];
-
         // Best-effort cleanup of the temp folder DemoFrames created, run
         // from AppSession.DisposeAsync only after the frame source itself
         // (and therefore its decode loop) has stopped. Orchestrator review
@@ -305,20 +469,35 @@ public static class AppComposition
             ? () => DemoFrames.DeleteFolderBestEffort(frameFolder)
             : null;
 
-        return ComposeAsync(
-            frameSourceFactory,
-            detector,
-            rectifier,
-            identifier,
-            trigger,
-            settings,
-            loggers,
-            ct,
-            catalog: catalog,
-            store: store,
-            exporters: exporters,
-            onDisposed: onDisposed);
+        return new PipelinePieces(frameSourceFactory, detector, rectifier, identifier, trigger, catalog, onDisposed);
     }
+
+    private static IReadOnlyList<ICollectionExporter> CreateStubExporters() =>
+    [
+        new StubCollectionExporter(new ExportFormat(
+            "stub-a",
+            "Stub Verified Export",
+            ".txt",
+            IsVerified: true,
+            Notes: null)),
+        new StubCollectionExporter(new ExportFormat(
+            "stub-b",
+            "Stub Unverified Export",
+            ".txt",
+            IsVerified: false,
+            Notes: "Not yet tested with a live tool.")),
+    ];
+
+    /// The pipeline-facing dependencies both composition modes build
+    /// identically today (see <see cref="BuildFakesPipelinePieces"/>).
+    private readonly record struct PipelinePieces(
+        IFrameSourceFactory FrameSourceFactory,
+        ICardDetector Detector,
+        IRectifier Rectifier,
+        ICardIdentifier Identifier,
+        IAutoCaptureTrigger Trigger,
+        IOracleCatalog Catalog,
+        Action? OnDisposed);
 
     /// <summary>
     /// Selects the frame-source folder for the Fakes composition path.
@@ -339,7 +518,7 @@ public static class AppComposition
     /// folder always yields <c>false</c> — never delete the user's data.
     /// </returns>
     /// <remarks>
-    /// Factored out of <see cref="CreateFakesAsync"/> so
+    /// Factored out of <see cref="BuildFakesPipelinePieces"/> so
     /// <c>Tests/StreamA</c> can exercise the three code paths — user
     /// folder with images, user folder with no images, and env var unset —
     /// without launching the full composition stack.

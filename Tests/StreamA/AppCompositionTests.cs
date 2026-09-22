@@ -1,6 +1,8 @@
 using LoreFetch.App;
 using LoreFetch.App.Fakes;
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Collection;
+using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -186,6 +188,58 @@ public class AppCompositionTests
             session.Settings.GoodDistance < session.Settings.OkDistance,
             "GoodDistance must be strictly less than OkDistance, or every " +
             "hash-reachable tile collapses to Unresolved.");
+    }
+
+    /// Package I1: the ONE test in this class that reaches
+    /// <c>CreateAsync(CompositionMode.Real, ...)</c>, which internally reads
+    /// <c>LOREFETCH_COLLECTION</c> directly (it is the actual composition
+    /// root's entry point, not a testable-core seam like
+    /// <see cref="AppComposition.ResolveCollectionPath"/>, which
+    /// <c>CompositionModeAndCollectionPathTests</c> covers without touching
+    /// any env var). Sets and restores that ONE variable around the call —
+    /// nothing else in the suite reads or writes it, so there is nothing for
+    /// a parallel test to race against — and always points it at a fresh
+    /// temp path, never the real Documents folder.
+    [Fact]
+    public async Task CreateAsync_RealMode_ComposesCsvCollectionStoreAndBothRealExporters()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"lorefetch-streamA-real-{Guid.NewGuid():N}");
+        var collectionPath = Path.Combine(tempDir, "collection.csv");
+        var originalEnvVar = Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION");
+        Environment.SetEnvironmentVariable("LOREFETCH_COLLECTION", collectionPath);
+
+        try
+        {
+            await using var session = await AppComposition.CreateAsync(
+                CompositionMode.Real,
+                NullLoggerFactory.Instance,
+                TestContext.Current.CancellationToken);
+
+            Assert.IsType<CsvCollectionStore>(session.Store);
+            Assert.NotNull(session.Exporters);
+            Assert.Equal(2, session.Exporters!.Count);
+            Assert.Contains(session.Exporters, e => e is NativeCsvExporter);
+            Assert.Contains(session.Exporters, e => e is MoxfieldCsvExporter);
+
+            // The pipeline pieces stay exactly as Fakes mode composes them
+            // (the I1 override) — same folder-backed source, same "folder:"
+            // description prefix.
+            Assert.StartsWith("folder:", session.Pipeline.SourceDescription, StringComparison.Ordinal);
+            Assert.False(session.RunTask.IsFaulted);
+
+            Assert.True(Directory.Exists(tempDir), "ResolveCollectionPath must create the collection directory.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("LOREFETCH_COLLECTION", originalEnvVar);
+            try
+            {
+                Directory.Delete(tempDir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 
     private sealed class CountingFrameSource : IFrameSource

@@ -16,6 +16,11 @@ public sealed class FakeImplementationSet : IImplementationSet
         // Always ready — the fakes exist today.
     }
 
+    public void EnsureCollectionAvailable()
+    {
+        // Always ready — StubCollectionStore and StubCollectionExporter exist today.
+    }
+
     public ICardDetector CreateDetector(int cardCount) => new StubCardDetector(cardCount);
 
     public IRectifier CreateRectifier() => new StubRectifier();
@@ -25,7 +30,13 @@ public sealed class FakeImplementationSet : IImplementationSet
 
     public IOracleCatalog CreateOracleCatalog() => new StubOracleCatalog();
 
-    public ICollectionStore CreateCollectionStore() => new StubCollectionStore();
+    public ICollectionStore CreateCollectionStore(string path) => new StubCollectionStore();
+
+    public IReadOnlyList<ICollectionExporter> CreateExporters() =>
+    [
+        new StubCollectionExporter(new ExportFormat("stub-a", "Stub Verified Export", ".txt", IsVerified: true, Notes: null)),
+        new StubCollectionExporter(new ExportFormat("stub-b", "Stub Unverified Export", ".txt", IsVerified: false, Notes: "Not yet tested with a live tool.")),
+    ];
 
     public IFrameSourceFactory CreateFrameSourceFactory(string frameFolder, TimeSpan pollInterval) =>
         new FolderFrameSourceFactory(frameFolder, pollInterval);

@@ -35,18 +35,23 @@ public partial class App : Application
             var logger = loggerFactory.CreateLogger("LoreFetch.App");
             _shutdownCts = new CancellationTokenSource();
 
-            // Fakes only, per the global A override — Real is added at
-            // integration once streams B/C/D land (AppComposition's doc
-            // comment on CompositionMode).
+            // Package I1: LOREFETCH_MODE selects Fakes (default) or Real.
+            // ResolveCompositionMode never throws — an unrecognised value is
+            // logged as an error and falls back to Fakes — so a typo in an
+            // environment variable is never the reason the app won't start.
+            var mode = AppComposition.ResolveCompositionMode(
+                Environment.GetEnvironmentVariable("LOREFETCH_MODE"), logger);
+
             _session = AppComposition
-                .CreateAsync(CompositionMode.Fakes, loggerFactory, _shutdownCts.Token)
+                .CreateAsync(mode, loggerFactory, _shutdownCts.Token)
                 .GetAwaiter()
                 .GetResult();
 
             // The one diagnostic line CONTRACTS.md's Logging section exists
             // for: what was actually negotiated, not what was requested.
             logger.LogInformation(
-                "LoreFetch started (Fakes mode). Source: {SourceDescription}",
+                "LoreFetch started ({Mode} mode). Source: {SourceDescription}",
+                mode,
                 _session.Pipeline.SourceDescription);
 
             desktop.MainWindow = new MainWindow(_session);

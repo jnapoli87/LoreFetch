@@ -54,7 +54,7 @@ public class EndToEndTests
             cohort.Tiles[0].ToggleExcluded();
             Assert.Equal(TileState.Excluded, cohort.Tiles[0].State);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             var cardsCommitted = await store.CommitCohortAsync(cohort, ct);
             var rows = await store.ListAsync(ct);
 
@@ -91,7 +91,7 @@ public class EndToEndTests
                 settings,
                 NullLoggerFactory.Instance);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
 
             // Baseline: commit a real cohort first, so "unchanged" below is
             // a meaningful assertion rather than "the store is still empty"
@@ -152,7 +152,7 @@ public class EndToEndTests
             cohort.Tiles[0].SetManually(manualEntry);
             Assert.Equal(TileState.ManuallySet, cohort.Tiles[0].State);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             await store.CommitCohortAsync(cohort, ct);
             var rows = await store.ListAsync(ct);
 
@@ -212,7 +212,7 @@ public class EndToEndTests
             Assert.Equal(originalChosen, tile.Chosen);
             Assert.Equal(originalDistance, tile.ChosenDistance);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             await store.CommitCohortAsync(cohort, ct);
             var rows = await store.ListAsync(ct);
 
@@ -252,7 +252,7 @@ public class EndToEndTests
                 NullLoggerFactory.Instance);
 
             var cohorts = await RunAndCaptureManyAsync(pipeline, times: 2, ct);
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
 
             var firstCommitted = await store.CommitCohortAsync(cohorts[0]!, ct);
             var secondCommitted = await store.CommitCohortAsync(cohorts[1]!, ct);
@@ -303,7 +303,7 @@ public class EndToEndTests
             Assert.Equal(9, cohort!.ExpectedCount);
             Assert.Equal(7, cohort.Tiles.Count);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             var cardsCommitted = await store.CommitCohortAsync(cohort, ct);
 
             Assert.Equal(7, cardsCommitted);
@@ -364,7 +364,7 @@ public class EndToEndTests
             Assert.Equal(CaptureReason.AutoSettle, autoCohort!.Reason);
             Assert.Equal(1, trigger.NotifyCapturedCount);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             var cardsCommitted = await store.CommitCohortAsync(autoCohort, ct);
             Assert.Equal(1, cardsCommitted);
         }
@@ -423,7 +423,7 @@ public class EndToEndTests
             var firstByte = beforeCommit[0];
             Assert.Contains(beforeCommit, b => b != firstByte);
 
-            var store = set.CreateCollectionStore();
+            var store = set.CreateCollectionStore(NewCollectionStorePath());
             await store.CommitCohortAsync(cohort, ct);
 
             var afterCommit = tile.Image.Pixels.ToArray();
@@ -469,6 +469,19 @@ public class EndToEndTests
         }
 
         return results;
+    }
+
+    /// A fresh `collection.csv` path under a fresh temp directory, for
+    /// `IImplementationSet.CreateCollectionStore`. `Fakes` ignores the path
+    /// entirely (`StubCollectionStore` is in-memory), so this only matters
+    /// once a case actually reaches `Real`'s `CsvCollectionStore` — giving
+    /// every call its own directory means these cases never collide with
+    /// each other, or with a run in progress elsewhere, once that happens.
+    private static string NewCollectionStorePath()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"lorefetch-e2e-collection-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "collection.csv");
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct, int timeoutMs = 5000)

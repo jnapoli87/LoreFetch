@@ -16,19 +16,35 @@ public enum ImplementationSetKind
 
 /// One implementation of every component the end-to-end suite composes
 /// through `ScanPipelineFactory.Create` and `ICollectionStore`. Every method
-/// other than `EnsureAvailable` assumes `EnsureAvailable` already returned —
-/// true for `Fakes` (a no-op) and exactly the gate `Real` uses to skip
-/// before reaching code that doesn't exist yet.
+/// other than `EnsureAvailable`/`EnsureCollectionAvailable` assumes whichever
+/// of those two a case calls has already returned — true for `Fakes` (both
+/// are no-ops) and, as of package I1, true for `Real`'s
+/// `EnsureCollectionAvailable` too: the store and both exporters are real
+/// now, so only `EnsureAvailable` (the whole-pipeline gate — detector,
+/// rectifier, identifier, frame source, all still I2/I3's) keeps skipping.
 public interface IImplementationSet
 {
     /// For test output — e.g. "Fakes", "Real".
     string DisplayName { get; }
 
-    /// Every test case calls this FIRST, before any Create* method.
-    /// `Fakes` returns immediately. `Real` skips (or fails) via
-    /// `RealArtifactGate` and never returns today, so nothing after this
-    /// call is ever reached by the Real set.
+    /// Every case that needs the DETECTOR, RECTIFIER, IDENTIFIER or FRAME
+    /// SOURCE calls this FIRST, before any Create* method. `Fakes` returns
+    /// immediately. `Real` skips (or fails) via `RealArtifactGate` and never
+    /// returns today — those four slots are I2's (detector/rectifier/
+    /// identifier) and I3's (frame source) — so nothing after this call is
+    /// ever reached by the Real set. A case that needs ONLY the collection
+    /// store and/or the exporters must call `EnsureCollectionAvailable`
+    /// instead — calling this one here would wrongly gate it on pipeline
+    /// pieces it never touches.
     void EnsureAvailable();
+
+    /// Every case that needs ONLY the COLLECTION STORE and/or the EXPORT
+    /// ADAPTERS — never the detector, rectifier, identifier or frame source —
+    /// calls this FIRST instead of `EnsureAvailable`. `Fakes` is a no-op, like
+    /// `EnsureAvailable`. `Real` is ALSO a no-op as of package I1:
+    /// `CsvCollectionStore`, `NativeCsvExporter` and `MoxfieldCsvExporter` are
+    /// wired, so such a case must actually run against them rather than skip.
+    void EnsureCollectionAvailable();
 
     ICardDetector CreateDetector(int cardCount);
 
@@ -41,7 +57,18 @@ public interface IImplementationSet
 
     IOracleCatalog CreateOracleCatalog();
 
-    ICollectionStore CreateCollectionStore();
+    /// `path` is where the store keeps its data. `Fakes` ignores it entirely
+    /// — `StubCollectionStore` is in-memory. `Real` opens `CsvCollectionStore`
+    /// there, so give each call its own fresh path unless the case
+    /// deliberately wants two stores to observe the same file.
+    ICollectionStore CreateCollectionStore(string path);
+
+    /// The registered export adapters, in the same relative order
+    /// `AppComposition` registers them (one native/verified-shaped adapter,
+    /// then one third-party adapter). `Fakes` returns two
+    /// `StubCollectionExporter`s; `Real` returns the actual
+    /// `NativeCsvExporter` and `MoxfieldCsvExporter`.
+    IReadOnlyList<ICollectionExporter> CreateExporters();
 
     IFrameSourceFactory CreateFrameSourceFactory(string frameFolder, TimeSpan pollInterval);
 }
