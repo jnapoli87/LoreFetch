@@ -770,7 +770,7 @@ Global overrides for every B brief:
 
   Item text: Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
   **Early real-path smoke (user ruling 2026-09-22):** once B4c exists, build a small labelled subset index that includes those four cards' arts. Sol Ring should then retrieve its own `ArtworkId` through detect → rectify → identify. Record the distance. This is a smoke check, not an accuracy number: B6 still needs the H3 corpus.
-- [ ] **B7** Lab synthetic generator:
+- [x] **B7** Lab synthetic generator:
   - px/inch = 1360/height
   - keystone, blur, noise and JPEG artefacts
   - a bare-mat generator
@@ -778,6 +778,16 @@ Global overrides for every B brief:
   - CI uses procedural card-like images and an index built inside the test (V13)
 
   Accept: an integration test in `Tests/StreamB` confirms that a generated card at 9.75″ retrieves its own artwork.
+
+  *Done 2026-09-22, Mac, `stream/b` `abe9ac8` + `eaf07dc` + `d520d29`. `SyntheticFrameGenerator` (downscale `INTER_AREA` → keystone → mat composite → blur → Gaussian noise → JPEG round trip), `BareMatGenerator` at light/mid/dark, and a `lab synth card|mat` command refusing in-repo output. Noise and JPEG use a seeded `System.Random` rather than OpenCV's RNG, for cross-platform determinism. StreamB 163 → **184** (183 passed, 1 soft-skip); Integration unchanged at 143/8.*
+
+  **Round trip, procedural in-test index (V13), both heights:** 9.75″ rank-1 **64** / rank-2 103; 12″ rank-1 **68** / rank-2 113. Probing all 24 in-index seeds gave **24/24 correct@1** at distances 40–102. The 12″ case was added after the geometry re-ruling; note 12″ costs 4 bits of distance but *gains* 6 bits of margin, so moving the operating height there is free.
+
+  🔴 **Two review rounds, both on reviewer-checklist item 2 ("`INTER_AREA` at every resize, including inside the synthetic generator") — and this is the pattern's third and fourth appearance in stream B.** The implementer's own briefed chaos case reported honestly that swapping the generator's downscale `INTER_AREA`→`INTER_LINEAR` **left all 179 tests green**; sent back and closed with a *differential* pin (`SyntheticFrameOptions.DownscaleInterpolation`, default asserted + a different value must change the pixels) rather than a golden, because only the filter *choice* is at risk here and a differential pin is architecture-independent, where a golden would have to be `WindowsOnly` and generated on the PC. Then **orchestrator chaos on a spot no brief named** found the same hole one step down: keystone warp `Linear`→`Nearest` **left all 182 green**. Closed the same way (`KeystoneInterpolation`). Both pins were verified to actually reach their `Cv2` calls rather than merely being declared.
+
+  **`BorderTypes.Replicate` was examined and deliberately *not* pinned, with reasoning** — the right outcome, not a miss. The composite mask is filled from the destination quad's own geometric corners, and the keystone inset only pulls corners inward, so a border mode can only supply pixels strictly outside the true quad — exactly the region the mask always excludes. A border-mode change is therefore structurally unobservable downstream, not merely untested; swapping to `BorderTypes.Constant` left all 184 green for a provably different and non-actionable reason. Recorded inline at the call site instead of pinned.
+
+  **Independent chaos beyond the brief:** dropping the JPEG round trip was caught by exactly 1 of 179 tests, confirming that test is non-redundant. The standing practice this package produced is now in `docs/TESTING.md` §*pin every interpolation flag and border mode*. Lab production code is ~1,504 lines total, reported against the tripwire and accepted — it is a multi-command dev harness, not one package doing several jobs.
 - [ ] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
 - [ ] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
 - [ ] **B6** Accuracy harness, gated on H3 and B4d:
