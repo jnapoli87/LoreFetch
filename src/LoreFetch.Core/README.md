@@ -13,8 +13,8 @@ Core has **no Avalonia/UI dependency and no FlashCap dependency**, and must stay
 | `Abstractions/` | Frozen contract types and interfaces (frames, detection, identification, cohorts, settings) | Stream 0, frozen |
 | `Scanning/` | `IScanPipeline` and the pipeline that composes source → detector → rectifier → identifier → trigger | Stream 0, frozen |
 | `Fakes/` | The seven stub/fake implementations that unblock stream A | Stream 0, frozen |
-| `Identification/` | Hash port and index lookup (not yet on `main`) | Stream B |
-| `Imaging/` | Card detection and rectification (not yet on `main`) | Stream B |
+| `Identification/` | Hash port and index lookup | Stream B |
+| `Imaging/` | Card detection and rectification | Stream B |
 | `Collection/` | CSV collection store (not yet on `main`) | Stream D |
 | `Export/` | Export adapters (not yet on `main`) | Stream D |
 | `Trigger/` | `IAutoCaptureTrigger` implementation | Stream A |
@@ -24,3 +24,5 @@ Core has **no Avalonia/UI dependency and no FlashCap dependency**, and must stay
 `Abstractions/`, `Scanning/` and `Fakes/` are the frozen contract surface — see [`../../CLAUDE.md`](../../CLAUDE.md) and [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries). A stream that needs a change there stops and asks; it does not edit unilaterally. `.claude/hooks/guard-write.sh` enforces this from inside a linked worktree.
 
 Internals: documented by each owning stream at its done-when step.
+
+**Stream B — `Identification/` and `Imaging/`.** `Imaging/ContourCardDetector` finds card-shaped contours per frame (aspect + area filtered, discard reasons logged) and `PerspectiveRectifier` warps the detected quad to the canonical 488×680 `RectifiedCard`, pinned `INTER_LINEAR` (`warpPerspective` doesn't support `INTER_AREA`). `Imaging/ReferenceTransform` and `QueryTransform` hold the reference-only and shared hash steps respectively — each exists exactly once — and `CardHasher` turns a prepared image into the 1024-bit `CardHash`. `Identification/HashIndexFile` reads and writes the committed `.lfidx` index, and `HashCardIdentifier` implements `ICardIdentifier` over a loaded index, matching by full Hamming distance with no threshold filtering. See [README §B](../../README.md#stream-b--identification) and [`docs/stream-b-identification.md`](../../docs/stream-b-identification.md) for the numbers behind it.

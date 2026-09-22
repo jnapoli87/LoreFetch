@@ -122,7 +122,36 @@ Capture only fills the grid — commit is always the separate Enter. That's what
 
 ## Stream B — Identification
 
-Filled in by Stream B as the hash port, index build and detection/accuracy work land.
+Identification is a C# port of [CardSpotter](https://github.com/relgin/cardspotter)'s 1024-bit perceptual hash (BSD-3-Clause; credited in [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES)). Each card is rectified, then reduced through seven steps to a 1024-bit fingerprint and matched by full Hamming distance against every entry in the index — no early-exit, no threshold pruning, so the ranking it returns is always the true nearest neighbours. The two sides of the pipeline are deliberately asymmetric: building the index blurs and downsamples each Scryfall render before hashing it, while a live query enters the shared steps straight from an already-rectified webcam crop, with no blur of its own. That asymmetry is the point — blurring the reference destroys the fine detail a webcam can never reproduce, which is what lets a photo and a print render converge at all. `ICardIdentifier` itself never filters by threshold; match distance instead drives **emphasis, not gating** one layer up, in the scan pipeline, where it becomes a confident match, a low-confidence highlight, or an unresolved tile.
+
+Detection is freehand — there's no printed tray or registration jig, so every frame is scanned fresh: a contour pass filtered on a card's 63:88 mm aspect ratio and a minimum area. It would rather find nothing than something wrong. A rejected contour is logged with its discard reason rather than guessed into a low-confidence card, because hashing a hand or a sleeve seam produces a fingerprint just as confidently shaped as hashing a real card.
+
+### The index
+
+Built from Scryfall's `unique_artwork` bulk data, pulling the `normal` (488×680) render for every artwork — the same size `RectifiedCard` canonicalises to, so the reference and query sides start from identical geometry. A filter cascade cuts the raw bulk file down: non-English records, records with no top-level `image_uris` (multi-faced cards, whose art lives per face), and token/art-series/emblem layouts are dropped, and then — the filter that mattered most in practice — so are **digital-only cards** (Alchemy, Arena, MTGO). A digital-only printing shares its artwork with its paper twin but can never be the correct answer for a physical scan, so leaving it in the index just plants a confident wrong match. That's exactly what a real test frame caught: a webcam capture of *Young Red Dragon // Bathe in Gold* rank-1-matching its Alchemy rebalance, *A-Young Red Dragon // A-Bathe in Gold*, at a distance well inside the good-match band. After the full cascade, **47,418 arts across 32,743 oracle cards** are indexed.
+
+The index is built and committed on `win-x64` — the ship architecture — because `INTER_AREA`, the resize filter used on both sides of the hash, is not bit-exact across x86-64 and ARM64; an index built elsewhere can silently disagree with queries hashed on the ship target. The index file and its calibrated thresholds are the only artifacts committed here — derived data only, never card imagery, on either side of the hash.
+
+### Measured accuracy
+
+| Measurement | Result |
+|---|---|
+| correct@1 (normal cards) | **70.4%** (38/54) |
+| wrong@1 | **0** |
+| Detection | 91% (49/54 card slots) |
+| `goodDistance` / `okDistance` | 208 / 240 |
+| Round-trip gate | 200/200 rank-1 own-artwork match, reference floor 61 |
+
+Measured against six real Logitech C920 frames of a tight 3×3 grid, cards placed freehand on a light mat, 15″ camera height, normal (non-land) cards only.
+
+`goodDistance` and `okDistance` come straight from that corpus: every correct rank-1 match landed at distance 82–208, and in every slot where rank-1 named a different card than the ground truth — six of them — that distance was ≥272; at `okDistance` 240, those land as Unresolved rather than as a wrong answer. (The five no-detection slots never reach `Identify` at all, so they carry no distance to report.) `okDistance` sits at 240, the midpoint of that untouched 209–271 gap; nothing in the corpus says where exactly inside it the line should fall. Separately, the round-trip gate — every Scryfall render retrieving its own artwork at rank 1 through the full query path — passes 200/200, with a measured reference floor of 61 (not ≈0: that floor is the blur-and-downsample cost, and it's expected).
+
+**70.4% ships, not the 90% this stream originally targeted — stated plainly, not rounded up.** It ships because the number that actually matters, `wrong@1`, is 0: nothing in the corpus was ever a *confident* wrong answer, only a correct match or an honest "don't know." The misses show up as Unresolved tiles in the confirmation grid, exactly where the interaction design already sends your eye. A silent miss costs a right-click to set by hand; a confident wrong answer is bad inventory that looks fine until you notice.
+
+> [!NOTE]
+> **70.4% is not reproducible from a fresh clone.** The fixture frames are Wizards of the Coast artwork and can never be committed, and `test-images/ground-truth.csv` — the hand-validated answer key — is kept uncommitted alongside them, since a label file is meaningless without the images it labels. CI runs the accuracy harness against synthetically generated frames instead. To measure your own setup, drop images at `test-images/fixtures/<height>in/<layout>/` plus a matching `test-images/ground-truth.csv` (one row per card slot), and run `lab accuracy` from `src/LoreFetch.Lab`.
+
+Known limits beyond [Known limitations, by design](#known-limitations-by-design): same-art printings are permanently indistinguishable, since a perceptual hash of the artwork can't see a collector number; foils and glare defeat the local-median bit pattern without diffuse or polarised light; a black-bordered card is hardest to detect on a dark mat, because the card's own edge stops contrasting against what it's sitting on; and every number above was measured at one height and one mat — it hasn't yet been swept across the full height/mat matrix the stream's own accuracy notes anticipate.
 
 ## Stream C — Capture
 
