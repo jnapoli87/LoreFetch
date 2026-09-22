@@ -798,7 +798,7 @@ Global overrides for every D brief:
   - `ListAsync` on a missing file returns an empty list
 
   Accept: the blank-condition round trip yields 1 row with quantity 2; nine Forests return 9; a file locked with `FileShare.None` throws and leaves the original byte-identical; the temp file lives in the target directory.
-- [ ] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors.
+- [x] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors. *(stream/d `68e749f`; also `ed60d6c` marks the write-lock test WindowsOnly — macOS `rename(2)` replaces an open target. 70 StreamD + 143 Integration green on Mac filter; chaos: CRLF flip fails 9 tests, line endings pinned.)*
 - [ ] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`.
 - [ ] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.**
 
