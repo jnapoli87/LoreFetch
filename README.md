@@ -76,7 +76,8 @@ Filled in by Stream C as the webcam capture pipeline lands.
 
 v1 ships two formats: the **native LoreFetch CSV** (source of truth, UTF-8 with BOM so Excel opens it without mangling accented card names) and a **Moxfield** adapter — the one researched tool that provably accepts name-only rows. [Moxfield's importer](https://moxfield.com/help/help-articles/importing-collection) requires only `Name`; we emit `Count` and `Name`, leaving printing columns blank.
 
-**To import into Moxfield:** export the Moxfield CSV from LoreFetch, then go to [moxfield.com/collection](https://moxfield.com/collection) and use the Collection view's CSV upload.
+> [!IMPORTANT]
+> **Import under Collection, not as a decklist.** LoreFetch emits a *collection* CSV (`Count,Name,…`). Export it, then upload it at [moxfield.com/collection](https://moxfield.com/collection) with the Collection view's CSV upload. Do **not** paste or upload it into the decklist import box on Moxfield's home page — that path expects a deck list, not a collection, and will not ingest the file correctly.
 
 Verified by a real import on 2026-09-22 (`IsVerified = true`): a 6-card sample — including `+2 Mace`, `Borrowing 100,000 Arrows`, `Kongming, "Sleeping Dragon"` and `Lim-Dûl's Vault` — imported with every name intact, `Forest` merged to quantity 9, and the blank `Condition` defaulting to **Near Mint**. Moxfield assigns an arbitrary printing per card, as expected for oracle-name-only rows.
 
