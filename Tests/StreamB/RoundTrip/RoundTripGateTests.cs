@@ -46,7 +46,13 @@ public class RoundTripGateTests
     /// implementation report for the chaos verification of this exact
     /// check (a deliberately wrong constant here was confirmed to fail
     /// loudly, then reverted).
-    private const string ExpectedIndexSha256 = "6495314eb3e5f37e3c1bd5830aa506d6efc617e23303c46f87851edef09e4dd3";
+    ///
+    /// Updated by package B6-thresholds for the digital-only-filtered,
+    /// win-x64-built index committed at f6e827f (47,418 arts / 32,743
+    /// oracle ids / 1,852 basic lands) -- see docs/accuracy.md "Results --
+    /// win-x64 committed index rebuild". The prior value
+    /// (6495314e...) pinned the unfiltered 48,750-art index the Mac built.
+    private const string ExpectedIndexSha256 = "b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402";
 
     /// Measured 2026-09-22 on arm64-darwin against the real 48,750-artwork
     /// index and the full real cache: own-distance max was well under 100

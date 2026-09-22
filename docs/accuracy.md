@@ -1127,3 +1127,226 @@ combination) exists on disk. When H3 delivers further batches, re-run
 `lab accuracy` against the committed index and replace both this section
 and the ones above with the complete coverage line, bucket counts,
 breakdown table, margin distribution, and gate result.
+
+## B6-thresholds: win-x64 round-trip gate and the committed thresholds decision, 2026-09-22
+
+Package B6-thresholds (+ B8 item 6), Windows PC, `stream/b` `f6e827f` +
+this session's commits. Re-runs B2's round-trip gate on win-x64 against
+the digital-only-filtered index committed at `f6e827f`
+(`b261cea1...1937402`, 47,418 arts / 32,743 oracle ids / 1,852 basic
+lands), then writes the calibrated `goodDistance`/`okDistance` into
+`data/index/thresholds.json`. `LOREFETCH_SCRYFALL_CACHE=C:\LoreFetchData\scryfall-cache`
+set for every cache-gated run below.
+
+### `RoundTripGateTests.ExpectedIndexSha256` re-pinned
+
+The committed index changed (digital-only filter, rebuilt at `f6e827f`),
+so the test's pinned SHA (`6495314e...`, the Mac's pre-filter index) was
+stale and the gate failed at the `Assert.Equal(ExpectedIndexSha256, ...)`
+line, exactly as designed -- the gate must refuse to measure against an
+index it cannot verify. Updated to `b261cea1...1937402`, verified against
+`sha256sum data/index/cards.lfidx` independently before editing the
+constant.
+
+### `lab round-trip-gate` on win-x64, same fixed sample as the Mac (200: 20 lands + 180 non-lands, seed 20260922)
+
+```
+Index: ...\data\index\cards.lfidx (47418 artworks, 32743 oracle cards)
+Index SHA-256: b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402
+Cache: C:\LoreFetchData\scryfall-cache
+Sample: 20 lands + 180 non-lands, seed 20260922
+Measured on: x64-windows (win-x64, Microsoft Windows 10.0.26200)
+
+Sample size: 200 (200 available, 0 missing image)
+Rank-1 ArtworkId match rate: 100.00% overall (200/200)
+  lands:     100.00% (20/20)
+  non-lands: 100.00% (180/180)
+Own distance (correct matches only): min 8, mean 21.7, median 19, max 61  <- referenceFloor candidate
+Margin to best different artwork (correct matches only): min 130, mean 212.5, median 208, max 350
+```
+
+**100.00% rank-1 rate, well above the 99% stop-and-ask floor** -- no stop
+condition hit.
+
+**Compared against the Mac's arm64-darwin figures** (referenceFloor 55,
+margin min 63, same 200-sample/seed): win-x64 measures referenceFloor 61
+(+6) and margin min 130 (+67). **This is not a clean architecture
+comparison** -- the Mac's numbers were measured against the earlier,
+unfiltered 48,750-art index, and this run is against the rebuilt,
+digital-only-filtered 47,418-art index, so the two runs differ in both
+architecture (`INTER_AREA` on ARM64 vs. x86-64, CLAUDE.md's own risk 2)
+and index contents at once. Both directions moved the numbers in the safe
+way (a slightly higher floor, a much wider margin), consistent with the
+earlier note in this file that the architecture divergence is real but
+small (11 bits of 49.9M index bits) relative to the effect of the filter
+itself.
+
+`RoundTripGateTests.RoundTripGate_RealScryfallRenders_RetrieveTheirOwnArtworkAtRank1`
+now passes against this index (`Passed! - Failed: 0, Passed: 1, Skipped: 0, Total: 1`).
+
+### `round-trip-gate --out` no longer drops `goodDistance`/`okDistance` on a rewrite
+
+`RoundTripThresholdsDocument` deliberately has no `GoodDistance`/
+`OkDistance` properties (B2 does not calibrate them). Before this
+session, `RoundTripThresholdsWriter.Write` serialized that document and
+overwrote the target file outright -- so re-running `round-trip-gate
+--out data/index/thresholds.json` after B6 had already calibrated
+`goodDistance`/`okDistance` into that same file would have silently
+erased them, and the next `ThresholdsFile.Load` would throw "missing
+required field" against a file that loaded fine moments earlier. Fixed to
+a read-merge-write: the fresh B2 fields always come from the current
+measurement, but any key already in the file that this document type does
+not itself own (`goodDistance`, `okDistance`, and any future B6-only
+field) passes through untouched. Regression coverage:
+`Tests/StreamB/RoundTrip/RoundTripThresholdsWriterTests.cs` (3 tests --
+preserves an existing `goodDistance`/`okDistance` across a rewrite, writes
+cleanly with nothing to preserve, and treats an unparsable existing file
+as "nothing to preserve" rather than throwing). Chaos-tested: reverting
+the merge to a blind `JsonSerializer.Serialize` overwrite failed the
+preservation test with `KeyNotFoundException` on `goodDistance` (the
+field was gone), confirmed, then reverted.
+
+### `data/index/thresholds.json` -- final values committed this session
+
+Produced by re-running `round-trip-gate --out` (which wrote the fresh B2
+fields: `referenceFloor` 61, `indexSha256`/`indexArtworkCount` matching
+the rebuilt index, margin stats as above), then hand-writing B6's
+calibration on top per the orchestrator's ruling (the 54-slot 15in-corpus
+distance data, already measured and reported earlier in this file under
+Results -- win-x64 committed index rebuild):
+
+| Field | Value |
+|---|---|
+| `goodDistance` | **208** -- the max of the 38 headline correct@1 rank-1 distances (82-208) |
+| `okDistance` | **240** -- the midpoint of the empty 209-271 window (every raw mismatch landed at 272 or higher: 272, 288, 296, 299, 314, 314) |
+| `referenceFloor` | 61 (this session's win-x64 measurement, promoted from the Mac's provisional 55) |
+| `indexArtworkCount` / `indexSha256` | 47418 / `b261cea1...1937402`, matching the committed index |
+| `provisional` | **false** -- both B2's and B6's numbers are now real win-x64 measurements, not placeholders |
+| `measuredOn` | `x64-windows` (`ArchitectureProvenance.CurrentToken()`) |
+
+`goodDistance` (208) is at or below `okDistance` (240), and
+`referenceFloor` (61) is below `goodDistance` (208) -- both hold,
+confirmed by inspection; no automated sanity check for this relationship
+exists in the codebase today (noted, not added -- out of this package's
+scope). `ThresholdsFile.Load` succeeds against the committed file,
+asserted by the new `Tests/StreamB/CommittedThresholdsFileTests.cs`,
+which also pins `goodDistance`/`okDistance` to 208/240 and asserts the
+notes no longer say PROVISIONAL or NOT YET SET. Chaos-tested: deleting
+the `goodDistance` line from the committed file failed the test with
+`InvalidDataException: ... missing required field 'goodDistance'`,
+confirmed, then the file was restored byte-for-byte.
+
+### `lab accuracy` / `AccuracyHarnessRealCaptureTests` now read `OkDistance` from the committed thresholds file
+
+`AccuracyHarnessOptions.Default.OkDistance` (270, CardSpotter's own
+upstream prior) was hardcoded into both `AccuracyCommand`'s CLI default
+and `AccuracyHarnessRealCaptureTests`, contradicting CONTRACTS.md's rule
+that nothing may hardcode a distance -- the thresholds file is the one
+source of truth. `AccuracyCommand` now resolves its default via the new
+internal `ResolveOkDistance(repoRoot, overrideValue)`: an explicit
+`--ok-distance` still wins, otherwise it loads
+`data/index/thresholds.json`'s own `OkDistance`, falling back to the
+270 default (with a stderr note) only if that file cannot be loaded at
+all. `AccuracyHarnessRealCaptureTests` does the equivalent directly via
+`ThresholdsFile.Load`. Regression coverage:
+`Tests/StreamB/Accuracy/AccuracyCommandOkDistanceTests.cs` (4 tests --
+override wins, reads the committed value, falls back on a missing file,
+falls back on a malformed file). Chaos-tested: reverting
+`ResolveOkDistance` to ignore the thresholds file entirely
+(`overrideValue ?? AccuracyHarnessOptions.Default.OkDistance`) failed
+`ResolveOkDistance_NoOverride_ReadsTheCommittedThresholdsFile` with
+`Expected: 240, Actual: 270`, confirmed, then reverted.
+
+Re-running `lab accuracy` with no `--ok-distance` override now picks up
+240 automatically and reproduces the same headline as before (the
+underlying corpus, index and margins are unchanged -- only where
+`OkDistance` comes from changed):
+
+```
+Ground truth: ...\test-images\ground-truth.csv (6 frame(s), 54 slot(s))
+6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Full corpus -- 6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Options: OkDistance=240, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=38 (70.4%)  wrong@1=0 (0.0%)  no-match=16 (29.6%) [unresolved=11, no-detection=5, dropped-frame=0]  total=54
+
+Lands excluded from the headline: 0
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. NoDetect Dropped)  Total  Correct%
+    15in normal         38      0       16       11        5         0     54     70.4%
+
+Margin distribution (rank-1 vs. best different OracleId), n=49: min=0, mean=79.3, median=83, max=174.
+
+Gate: PASS -- wrong@1 = 0 (headline: non-land, normal-rung slots), within the bound of 0 at OkDistance=240.
+```
+
+Matches the expected, unchanged headline: **correct@1 38 (70.4%), wrong@1
+0**, now at `OkDistance=240` instead of the old hardcoded 270.
+
+### B8 item 6 -- `IOracleCatalog.All` against the real committed index
+
+New `Tests/StreamB/HashCardIdentifierRealIndexCatalogTests.cs`, loading
+the real committed `data/index/cards.lfidx` through `HashCardIdentifier`
+(not artifact-gated -- the index is committed data, present on every
+checkout). Asserts:
+
+- `identifier.All.Count` equals the number of distinct `OracleId`s across
+  `index.Entries` (32,743, pinned to this session's committed index).
+- `All` itself has no duplicate `OracleId`.
+- Every distinct `OracleId` referenced by the index's own entries has a
+  matching catalog row.
+- No catalog entry has a blank `OracleName`.
+
+Chaos-tested twice against `src/LoreFetch.Core/Identification/HashCardIdentifier.cs`
+(temporary edit, build, run only this test, confirm the right failure,
+revert -- confirmed byte-identical via `git diff --stat` afterward, never
+committed):
+1. Truncating `All` by one (`_oracleTable.Take(_oracleTable.Count - 1)`)
+   failed with `Expected: 32743, Actual: 32742`.
+2. Appending a duplicate entry (`_oracleTable.Concat(new[] { _oracleTable[0] })`)
+   failed with `Expected: 32743, Actual: 32744`.
+
+**Freya/Sol Ring diagnostic** (for stream A's "Set card manually..." does
+nothing, reported here, not fixed -- out of this package's scope): a
+case-insensitive prefix search over `IOracleCatalog.All` for "Freya"
+and for "Sol Ring" **both find a match** against the real committed
+index (`HashCardIdentifierRealIndexCatalogTests.All_RealCommittedIndex_CaseInsensitivePrefixSearchFindsKnownCards`
+passes). The catalog data itself is not the cause of stream A's bug --
+whatever is wrong sits in stream A's own search wiring, not in what
+`IOracleCatalog.All` returns.
+
+### Test suite status after this package
+
+- `Tests/StreamB`: **0 failed, 289 passed, 1 skipped, 290 total**
+  (`LOREFETCH_SCRYFALL_CACHE` set, `Category!=Hardware`). The one skip is
+  `QueryHashWitnessTests.RegeneratedWitness_MatchesOrExplainsTheCommittedOne`
+  -- "Foreign architecture: witness was measured on ..., running on
+  x64-windows" -- the committed query-hash witness file was captured on a
+  different architecture than this machine, and that test is designed to
+  assert bit-exactness only when running on the SAME architecture that
+  produced it (a separate, later package regenerates the witness on
+  win-x64; untouched here per this package's own brief -- "Do NOT touch
+  the QueryHashWitness code or its committed witness file"). Everything
+  else, including `RoundTripGateTests` and `AccuracyHarnessRealCaptureTests`,
+  RUNS (not skipped) and passes, since the cache and the real H3 corpus
+  are both present on this machine.
+- `Tests/Integration`: **0 failed, 155 passed, 8 skipped, 163 total** --
+  unchanged, confirming the frozen contract surface was not touched
+  (`Tests/Integration`, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`,
+  every `.csproj`/`.slnx`/`Directory.*.props`/`global.json` all untouched
+  by this package).
+
+Files changed: `Tests/StreamB/RoundTrip/RoundTripGateTests.cs` (SHA pin),
+`src/LoreFetch.Lab/RoundTrip/RoundTripThresholdsDocument.cs`
+(read-merge-write), `Tests/StreamB/RoundTrip/RoundTripThresholdsWriterTests.cs`
+(new), `data/index/thresholds.json` (calibrated, final),
+`Tests/StreamB/CommittedThresholdsFileTests.cs` (new),
+`src/LoreFetch.Lab/AccuracyCommand.cs` (`OkDistance` from thresholds
+file), `Tests/StreamB/Accuracy/AccuracyCommandOkDistanceTests.cs` (new),
+`Tests/StreamB/Accuracy/AccuracyHarnessRealCaptureTests.cs` (`OkDistance`
+from thresholds file), `Tests/StreamB/HashCardIdentifierRealIndexCatalogTests.cs`
+(new), `docs/accuracy.md` (this section).

@@ -1,5 +1,6 @@
 using LoreFetch.Core.Identification;
 using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Scanning;
 using LoreFetch.Lab.Accuracy;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -53,6 +54,8 @@ public static class AccuracyCommand
             Console.Error.WriteLine($"accuracy: index not found at \"{indexPath}\".");
             return 1;
         }
+
+        var okDistance = ResolveOkDistance(repoRoot!, parsed.OkDistance);
 
         var groundTruthPath = Path.Combine(repoRoot!, AccuracyCorpusLoader.GroundTruthRelativePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(groundTruthPath))
@@ -119,7 +122,7 @@ public static class AccuracyCommand
 
         var options = new AccuracyHarnessOptions
         {
-            OkDistance = parsed.OkDistance,
+            OkDistance = okDistance,
             MaxWrongAt1AtOkDistance = parsed.MaxWrong,
         };
 
@@ -144,12 +147,43 @@ public static class AccuracyCommand
         return gate.Passed ? 0 : 1;
     }
 
-    private sealed record AccuracyArgs(string? IndexPath, int OkDistance, int MaxWrong);
+    private sealed record AccuracyArgs(string? IndexPath, int? OkDistance, int MaxWrong);
+
+    /// `--ok-distance` wins when given. Otherwise, the committed
+    /// `data/index/thresholds.json`'s own `okDistance` (B6's calibrated
+    /// value, real-corpus-derived) -- CLAUDE.md/CONTRACTS.md: "nothing may
+    /// hardcode a distance; the thresholds file is the one source of
+    /// truth." Falls back to `AccuracyHarnessOptions.Default.OkDistance`
+    /// (the documented CardSpotter-prior placeholder, 270) only when the
+    /// thresholds file cannot be loaded at all -- e.g. a checkout that
+    /// predates B6's calibration, or a corrupted file -- and says so on
+    /// stderr rather than silently substituting a different number than
+    /// the one the committed file names.
+    internal static int ResolveOkDistance(string repoRoot, int? overrideValue)
+    {
+        if (overrideValue.HasValue)
+        {
+            return overrideValue.Value;
+        }
+
+        var thresholdsPath = Path.Combine(repoRoot, "data", "index", "thresholds.json");
+        try
+        {
+            return ThresholdsFile.Load(thresholdsPath).OkDistance;
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or InvalidDataException)
+        {
+            Console.Error.WriteLine(
+                $"accuracy: could not load OkDistance from \"{thresholdsPath}\" ({ex.Message}); " +
+                $"falling back to the documented default {AccuracyHarnessOptions.Default.OkDistance}.");
+            return AccuracyHarnessOptions.Default.OkDistance;
+        }
+    }
 
     private static AccuracyArgs ParseArgs(string[] args)
     {
         string? indexPath = null;
-        var okDistance = AccuracyHarnessOptions.Default.OkDistance;
+        int? okDistance = null;
         var maxWrong = AccuracyHarnessOptions.Default.MaxWrongAt1AtOkDistance;
 
         for (var i = 0; i < args.Length; i++)
@@ -160,11 +194,12 @@ public static class AccuracyCommand
                     indexPath = args[++i];
                     break;
                 case "--ok-distance" when i + 1 < args.Length:
-                    if (!int.TryParse(args[++i], out okDistance))
+                    if (!int.TryParse(args[++i], out var parsedOkDistance))
                     {
                         throw new ArgumentException("accuracy: --ok-distance must be an integer.");
                     }
 
+                    okDistance = parsedOkDistance;
                     break;
                 case "--max-wrong" when i + 1 < args.Length:
                     if (!int.TryParse(args[++i], out maxWrong) || maxWrong < 0)
@@ -193,6 +228,12 @@ public static class AccuracyCommand
             wrong@1/no-match per height and per rung, the margin
             distribution, and the lands-excluded count. Never writes
             thresholds.json -- see ThresholdsCalibration.
+
+            --ok-distance defaults to the committed
+            data/index/thresholds.json's own okDistance (falling back to
+            the documented CardSpotter-prior placeholder if that file
+            cannot be loaded); pass --ok-distance to override it for a
+            one-off run.
             """);
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace LoreFetch.Lab.RoundTrip;
 
@@ -139,13 +140,50 @@ public static class RoundTripThresholdsWriter
     /// from `RoundTripThresholdsDocument.FromStatistics` because
     /// `RoundTripGateStatistics` itself does not carry the seed that
     /// produced its sample -- only `RoundTripGateSummary` does.
+    ///
+    /// Read-merge-write, not a blind overwrite: this type deliberately does
+    /// NOT declare `goodDistance`/`okDistance` (see this type's own doc
+    /// comment -- those are B6's job, calibrated from the real fixture
+    /// corpus). B6 writes them into the SAME file, via
+    /// `ThresholdsCalibration.Write`'s own read-merge-write. Without this
+    /// merge, re-running `round-trip-gate --out data/index/thresholds.json`
+    /// after B6 had already calibrated would silently DROP
+    /// `goodDistance`/`okDistance` from the committed file -- the freshly
+    /// serialized `RoundTripThresholdsDocument` simply has no such
+    /// properties -- and the next `ThresholdsFile.Load` would throw
+    /// "missing required field" against a file that, moments earlier,
+    /// loaded fine. So: read whatever is already at `path` first, then
+    /// layer every property THIS document owns on top (always the fresh
+    /// measurement -- referenceFloor, indexSha256, margin stats, etc. must
+    /// never be stale), while any key already present that this document
+    /// does not know about (`goodDistance`, `okDistance`, and any future
+    /// B6-only field) passes through untouched. A target that does not
+    /// exist yet, or is not valid JSON, is treated as empty -- there is
+    /// nothing to preserve in either case, and B2 runs before B6 on a fresh
+    /// checkout, so "file does not exist yet" is the common case, not an
+    /// error.
     public static void Write(string path, RoundTripThresholdsDocument document, int seed)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(document);
 
         var withSeed = document with { Seed = seed };
-        var json = JsonSerializer.Serialize(withSeed, SerializerOptions);
+        var freshNode = JsonSerializer.SerializeToNode(withSeed, SerializerOptions)?.AsObject()
+            ?? new JsonObject();
+
+        var preserved = ReadExistingObject(path);
+        foreach (var property in preserved)
+        {
+            if (!freshNode.ContainsKey(property.Key))
+            {
+                // Deep-clone: a JsonNode can only ever be attached to one
+                // parent, so the node read from `preserved` must be
+                // detached (or cloned) before it can be re-attached here.
+                freshNode[property.Key] = property.Value?.DeepClone();
+            }
+        }
+
+        var json = freshNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(directory))
@@ -156,5 +194,27 @@ public static class RoundTripThresholdsWriter
         var tempPath = path + ".tmp";
         File.WriteAllText(tempPath, json);
         File.Move(tempPath, path, overwrite: true);
+    }
+
+    /// Best-effort read of whatever JSON object currently sits at `path` --
+    /// an absent file or unparsable content both mean "nothing to
+    /// preserve" rather than an error, since B2 legitimately runs before
+    /// any B6 calibration has ever written to this path.
+    private static JsonObject ReadExistingObject(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return new JsonObject();
+        }
+
+        try
+        {
+            var existingJson = File.ReadAllText(path);
+            return JsonNode.Parse(existingJson)?.AsObject() ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            return new JsonObject();
+        }
     }
 }

@@ -1,5 +1,6 @@
 using LoreFetch.Core.Identification;
 using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Scanning;
 using LoreFetch.Lab;
 using LoreFetch.Lab.Accuracy;
 using LoreFetch.Tests.StreamB;
@@ -80,7 +81,15 @@ public class AccuracyHarnessRealCaptureTests
             return;
         }
 
-        var options = AccuracyHarnessOptions.Default;
+        // OkDistance comes from the committed thresholds.json (B6's real-
+        // corpus-calibrated value), not the AccuracyHarnessOptions.Default
+        // CardSpotter-prior placeholder (270) -- CLAUDE.md/CONTRACTS.md:
+        // "nothing may hardcode a distance; the thresholds file is the one
+        // source of truth." The committed index exists by this point
+        // (checked above), and thresholds.json ships alongside it, so this
+        // is expected to load for real here, not fall back.
+        var thresholdsPath = Path.Combine(repoRoot!, "data", "index", "thresholds.json");
+        var options = AccuracyHarnessOptions.Default with { OkDistance = ThresholdsFile.Load(thresholdsPath).OkDistance };
         var detector = new ContourCardDetector(NullLogger<ContourCardDetector>.Instance);
         var rectifier = new PerspectiveRectifier();
 
