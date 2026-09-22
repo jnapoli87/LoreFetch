@@ -17,6 +17,12 @@ public sealed class HeadlessTestApp : Application
 {
     public override void Initialize()
     {
+        // A10-fix bug 3: match the real App.axaml's RequestedThemeVariant="Dark"
+        // so headless screenshot/visual-tree tests see the same themed chrome
+        // (DataGrid header, ContextMenu, etc.) the live exe does, rather than
+        // Fluent's light default.
+        RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
+
         // Add the Fluent theme so compiled-AXAML controls in MainWindow have
         // styles and can participate in layout. Without it, controls have no
         // size and CaptureRenderedFrame returns a blank surface.

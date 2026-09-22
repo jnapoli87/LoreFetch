@@ -31,6 +31,7 @@ namespace LoreFetch.App.ViewModels;
 public sealed class CollectionViewModel : ObservableObject
 {
     private readonly ICollectionStore? _store;
+    private readonly TimeZoneInfo _displayTimeZone;
 
     /// <param name="store">
     /// Collection store to read from. When <c>null</c>, <see cref="LoadAsync"/>
@@ -41,11 +42,19 @@ public sealed class CollectionViewModel : ObservableObject
     /// The exporters to populate <see cref="ExporterItems"/>. Optional;
     /// defaults to an empty list.
     /// </param>
+    /// <param name="displayTimeZone">
+    /// The time zone <see cref="CollectionRowItem.LastScannedLocalText"/> is
+    /// rendered in (A10-fix bug 3). Defaults to <see cref="TimeZoneInfo.Local"/>;
+    /// tests pass a fixed zone so the assertion does not depend on the
+    /// machine running it.
+    /// </param>
     public CollectionViewModel(
         ICollectionStore? store = null,
-        IReadOnlyList<ICollectionExporter>? exporters = null)
+        IReadOnlyList<ICollectionExporter>? exporters = null,
+        TimeZoneInfo? displayTimeZone = null)
     {
         _store = store;
+        _displayTimeZone = displayTimeZone ?? TimeZoneInfo.Local;
         ExporterItems = (exporters ?? [])
             .Select(e => new ExporterItem(e))
             .ToList();
@@ -63,7 +72,7 @@ public sealed class CollectionViewModel : ObservableObject
     /// Rows from the collection store, bound to the DataGrid. Populated by
     /// <see cref="LoadAsync"/>; empty until that is called.
     /// </summary>
-    public ObservableCollection<CollectionRow> Rows { get; }
+    public ObservableCollection<CollectionRowItem> Rows { get; }
 
     /// <summary>
     /// True when <see cref="Rows"/> is empty. Bound to the empty-collection
@@ -101,7 +110,7 @@ public sealed class CollectionViewModel : ObservableObject
         var rows = await _store.ListAsync(ct);
         Rows.Clear();
         foreach (var row in rows)
-            Rows.Add(row);
+            Rows.Add(new CollectionRowItem(row, _displayTimeZone));
     }
 
     /// <summary>

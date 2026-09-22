@@ -193,24 +193,34 @@
                                 SortMemberPath="OracleName" />
             <DataGridTextColumn Header="Qty"
                                 Binding="{Binding Quantity}"
-                                Width="45"
+                                Width="70"
                                 SortMemberPath="Quantity" />
             <DataGridTextColumn Header="Condition"
                                 Binding="{Binding Condition}"
-                                Width="78"
+                                Width="105"
                                 SortMemberPath="Condition" />
             <DataGridTextColumn Header="Source"
                                 Binding="{Binding Source}"
-                                Width="66"
+                                Width="90"
                                 SortMemberPath="Source" />
             <DataGridTextColumn Header="Dist"
                                 Binding="{Binding BestMatchDistance}"
-                                Width="50"
+                                Width="75"
                                 SortMemberPath="BestMatchDistance" />
+            <!--
+              A10-fix bug 3: bind the LOCAL-time display projection
+              (CollectionRowItem.LastScannedLocalText, "yyyy-MM-dd HH:mm:ss")
+              rather than the raw CollectionRow.LastScannedAt DateTimeOffset —
+              the latter renders in whatever offset it was stored with (UTC)
+              formatted with the culture's default pattern, which is neither
+              local nor unambiguous. The stored value itself stays UTC; only
+              this column's display text changes. Width fits the fixed-width
+              19-character format at this font without clipping.
+            -->
             <DataGridTextColumn Header="Last Scanned"
-                                Binding="{Binding LastScannedAt}"
-                                Width="148"
-                                SortMemberPath="LastScannedAt" />
+                                Binding="{Binding LastScannedLocalText}"
+                                Width="170"
+                                SortMemberPath="LastScannedLocalText" />
           </DataGrid.Columns>
         </DataGrid>
 
