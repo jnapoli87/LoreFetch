@@ -55,6 +55,79 @@ public class SyntheticFrameGeneratorTests
         }
     }
 
+    /// Reviewer finding (2026-09-22): `SyntheticFrameOptions.Default` must
+    /// use `INTER_AREA` for the downscale -- CLAUDE.md's own "by choice,
+    /// not by fidelity" reasoning for `ReferenceTransform`'s equivalent
+    /// step applies identically here (see `DownscaleInterpolation`'s own
+    /// doc comment). Paired with `Generate_AreaVsLinearDownscale_
+    /// ProducesDifferentPixels_AndDefaultMatchesArea` below: together they
+    /// pin the DEFAULT by observable behaviour, not just by reading the
+    /// property initializer, so an edit to the call site that stops
+    /// reading `options.DownscaleInterpolation` (chaos case (b)) is caught
+    /// even though this declaration-level check alone would not catch it.
+    [Fact]
+    public void Default_UsesAreaForDownscale()
+    {
+        Assert.Equal(InterpolationFlags.Area, SyntheticFrameOptions.Default.DownscaleInterpolation);
+    }
+
+    /// Chaos case (b) (brief-mandated, closed per reviewer direction
+    /// 2026-09-22): closes the gap the round-trip test's own chaos
+    /// experiment found -- swapping `Generate`'s hardcoded downscale
+    /// filter from `INTER_AREA` to `INTER_LINEAR` left all 179 tests
+    /// green, because nothing asserted on the FILTER CHOICE itself, only
+    /// on end-to-end identification (which the mild 9.75in downscale
+    /// apparently survives either way). This closes it differentially --
+    /// architecture-independent, unlike a golden hash, because both sides
+    /// of the comparison are computed on whatever machine runs the test:
+    ///   1. `Area` and `Linear`, same source/seed/height, must produce
+    ///      DIFFERENT pixels (proves the option is real, not a no-op).
+    ///   2. The DEFAULT output must be BYTE-IDENTICAL to the explicit
+    ///      `Area` output (pins which of the two the default actually is).
+    /// Together, an unintended edit to the `Cv2.Resize` call at line ~162
+    /// -- whether it stops reading `options.DownscaleInterpolation`, or
+    /// starts ignoring it via a hardcoded literal -- fails (2), which is
+    /// the actual risk this reviewer finding is closing.
+    [Fact]
+    public void Generate_AreaVsLinearDownscale_ProducesDifferentPixels_AndDefaultMatchesArea()
+    {
+        using var source = MakeSourceCard(seed: 7);
+
+        var areaOptions = new SyntheticFrameOptions { DownscaleInterpolation = InterpolationFlags.Area };
+        var linearOptions = new SyntheticFrameOptions { DownscaleInterpolation = InterpolationFlags.Linear };
+
+        var areaResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f, areaOptions);
+        var linearResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f, linearOptions);
+        var defaultResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f);
+
+        using (areaResult.Frame)
+        using (linearResult.Frame)
+        using (defaultResult.Frame)
+        {
+            using var areaMat = Core.Imaging.FrameMat.ToMat(areaResult.Frame);
+            using var linearMat = Core.Imaging.FrameMat.ToMat(linearResult.Frame);
+            using var defaultMat = Core.Imaging.FrameMat.ToMat(defaultResult.Frame);
+
+            using var areaVsLinearDiff = new Mat();
+            Cv2.Absdiff(areaMat, linearMat, areaVsLinearDiff);
+            var areaVsLinearDiffering = Cv2.CountNonZero(ToSingleChannelAny(areaVsLinearDiff));
+
+            Assert.True(
+                areaVsLinearDiffering > 0,
+                "Area and Linear downscale produced byte-identical frames -- DownscaleInterpolation is not " +
+                "actually reaching Generate's Cv2.Resize call.");
+
+            using var defaultVsAreaDiff = new Mat();
+            Cv2.Absdiff(defaultMat, areaMat, defaultVsAreaDiff);
+            var defaultVsAreaDiffering = Cv2.CountNonZero(ToSingleChannelAny(defaultVsAreaDiff));
+
+            Assert.True(
+                defaultVsAreaDiffering == 0,
+                "Generate's default output does not byte-match its own explicit Area output -- the default " +
+                "downscale filter has drifted away from Area.");
+        }
+    }
+
     /// Chaos case (e) (my own): what if `Generate` stopped calling the JPEG
     /// round trip -- e.g. someone "simplifies" it away, or the quality
     /// option silently stops being wired through? Two frames built from

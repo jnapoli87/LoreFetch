@@ -56,6 +56,24 @@ public sealed record SyntheticFrameOptions
     /// is a `System.Random` guarantee and not an OpenCV-RNG one.
     public int Seed { get; init; } = 1;
 
+    /// The filter `Generate`'s own downscale (step 1: `sourceCardBgr` down
+    /// to the camera-observed card size) uses. Defaults to `INTER_AREA` --
+    /// **by choice, not by fidelity**, the same reasoning CLAUDE.md gives
+    /// for `ReferenceTransform`'s own 96px resize: `INTER_AREA` is the
+    /// correct filter for what is always a downscale here (a ~5.1x
+    /// downscale from a 488px-wide Scryfall `normal` render at the 9.75in
+    /// mount height), and upstream CardSpotter only ends up on
+    /// `INTER_LINEAR` at its own equivalent step by accident, via a
+    /// positional-argument bug (`CardData.cpp:130` passes `INTER_AREA` as
+    /// `resize`'s `fx`, not its `interpolation`). Exposed as a real,
+    /// documented knob rather than a literal buried in `Generate` because
+    /// B5c is itself a filter-and-scale experiment -- a caller genuinely
+    /// may want to sweep this. Changing it makes frames generated under
+    /// the new value **not pixel-comparable** with ones generated before
+    /// the change, the same caution CLAUDE.md gives for any resize filter
+    /// in this codebase.
+    public InterpolationFlags DownscaleInterpolation { get; init; } = InterpolationFlags.Area;
+
     public static SyntheticFrameOptions Default { get; } = new();
 }
 
@@ -97,11 +115,15 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 /// "Identification") -- nothing here touches `ReferenceTransform`,
 /// `QueryTransform` or `CardHasher`:
 ///   1. Downscale `sourceCardBgr` (any size; a Scryfall `normal` render is
-///      488x680) to the camera-observed card size at `heightInches`,
+///      488x680) to the camera-observed card size at `heightInches`, via
+///      `SyntheticFrameOptions.DownscaleInterpolation` (default
 ///      `INTER_AREA` -- the correct filter for what is always a downscale
-///      at any realistic camera height (CLAUDE.md's own ladder tops out at
+///      at any realistic camera height; CLAUDE.md's own ladder tops out at
 ///      9.75" for the 3x3 grid, where a card is already smaller than
-///      488x680; a taller/farther camera only downscales further).
+///      488x680, and a taller/farther camera only downscales further; see
+///      that option's own doc comment for why it is a named knob rather
+///      than a literal, and why swapping it is a real, tested risk rather
+///      than a hypothetical one).
 ///   2. A mild keystone: `Cv2.WarpPerspective` with `InterpolationFlags.Linear`
 ///      and `BorderTypes.Replicate` -- the SAME interpolation and border
 ///      mode `PerspectiveRectifier` is pinned to (see that type's own doc
@@ -159,7 +181,7 @@ public static class SyntheticFrameGenerator
         }
 
         using var downscaled = new Mat();
-        Cv2.Resize(sourceCardBgr, downscaled, new Size(cardWidthPx, cardHeightPx), 0, 0, InterpolationFlags.Area);
+        Cv2.Resize(sourceCardBgr, downscaled, new Size(cardWidthPx, cardHeightPx), 0, 0, options.DownscaleInterpolation);
 
         using var keystoned = ApplyKeystone(downscaled, options.KeystoneAmount, out var mask);
         using (mask)

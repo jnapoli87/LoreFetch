@@ -81,6 +81,46 @@ public class SyntheticFrameGeneratorRoundTripTests
         }
     }
 
+    /// The project's recorded operating height moved to 12in after this
+    /// package's brief was written (9.75in leaves a 3x3 grid 0.04in of
+    /// margin -- a geometric floor, not a usable height; 12in leaves
+    /// 1.83in). Camera orientation is also now landscape, unrotated. Kept
+    /// alongside -- not in place of -- the 9.75in test above, which stays
+    /// the package's own stated acceptance criterion and untouched.
+    [Fact]
+    public void RoundTrip_GeneratedCardAtTwelveInches_RetrievesItsOwnArtwork()
+    {
+        const int cardCount = 24;
+        const int querySeed = 5;
+
+        var cards = BuildProceduralCards(cardCount);
+        var index = BuildIndex(cards);
+        var identifier = new HashCardIdentifier(index);
+
+        var queryCard = cards[querySeed];
+        var result = SyntheticFrameGenerator.Generate(queryCard.Bgr, heightInches: 12f);
+
+        using (result.Frame)
+        {
+            var detector = new ContourCardDetector(Microsoft.Extensions.Logging.Abstractions.NullLogger<ContourCardDetector>.Instance);
+            var detected = detector.Detect(result.Frame, maxCards: 1);
+            Assert.Single(detected);
+
+            var rectifier = new PerspectiveRectifier();
+            var rectified = rectifier.Rectify(result.Frame, detected[0]);
+
+            var candidates = identifier.Identify(rectified, maxCandidates: 5);
+            Assert.NotEmpty(candidates);
+
+            var top = candidates[0];
+            _output.WriteLine(
+                $"RoundTrip@12in: expected ArtworkId={queryCard.ArtworkId}, got rank-1 ArtworkId={top.ArtworkId}, " +
+                $"Distance={top.Distance} (rank-2 distance: {(candidates.Count > 1 ? candidates[1].Distance.ToString() : "n/a")})");
+
+            Assert.Equal(queryCard.ArtworkId, top.ArtworkId);
+        }
+    }
+
     /// Chaos case (a) (brief-mandated): "hash the generated image directly
     /// instead of going through detect -> rectify". Taken literally: wrap
     /// the generator's own OUTPUT `CameraFrame` -- the whole 1920x1080
