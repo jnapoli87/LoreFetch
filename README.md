@@ -41,7 +41,17 @@ That approach isn't novel here: it's a port of [CardSpotter](https://github.com/
 
 ### After v0.1.0
 
-Stretch goals, roughly in order: a flag for cards worth sleeving whatever their condition, foils, set and printing detection from the collector number, double-faced cards, a supported macOS release, and the 3D-printed mount. The sleeve flag is aimed at card shops sorting bulk, where the person at the scanner may know Pokémon but not Magic. Details and the reasoning are in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-v010).
+Stretch goals, roughly in order:
+
+- **Worth-sleeving flag:** marks cards worth pulling out of bulk, whatever their condition. Aimed at card shops, where the person at the scanner may know Pokémon but not Magic.
+- **Update card data in the app:** add new sets without waiting for a release.
+- **Foils**
+- **Set and printing detection** from the collector number
+- **Double-faced cards**
+- **A supported macOS release**
+- **The 3D-printed mount**
+
+Details and reasoning are in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-v010).
 
 ## Documentation
 
