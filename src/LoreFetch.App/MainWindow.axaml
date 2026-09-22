@@ -21,11 +21,18 @@
       A2: the live preview. ONE WriteableBitmap, allocated and mutated by
       MainWindow.axaml.cs from IScanPipeline.FrameProcessed frames.
       Stretch="Uniform" letterboxes a 16:9 (or rotated) frame rather than
-      distorting it to fill the control. The quad overlay (A3), expected-
-      count selector (A4) and cohort grid (A5) land in later packages.
+      distorting it to fill the control — which is exactly what the quad
+      overlay's frame->control transform (A3) has to account for.
+
+      A3: quads are drawn as vector children on QuadOverlayCanvas, layered
+      over the Image in the same Grid cell — never baked into its pixels.
+      IsHitTestVisible="False" keeps the overlay from stealing input from
+      anything placed above it in a later package. The expected-count
+      selector (A4) and cohort grid (A5) land in later packages.
     -->
     <Grid>
       <Image x:Name="PreviewImage" Stretch="Uniform" />
+      <Canvas x:Name="QuadOverlayCanvas" IsHitTestVisible="False" />
     </Grid>
   </DockPanel>
 </Window>

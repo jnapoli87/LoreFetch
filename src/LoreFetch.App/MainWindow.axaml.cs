@@ -1,8 +1,11 @@
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Scanning;
 
@@ -40,6 +43,7 @@ public partial class MainWindow : Window
     private int _pendingHeight;
     private int _pendingStride;
     private PixelLayout _pendingLayout;
+    private IReadOnlyList<CardQuad> _pendingQuads = [];
     private bool _hasPendingFrame;
 
     // --- UI-thread-only fields --------------------------------------------
@@ -60,7 +64,6 @@ public partial class MainWindow : Window
     private byte[]? _convertedBuffer;
     private int _convertedBufferRowBytes;
 
-    private TopLevel? _topLevel;
     private long _renderScheduled;
     private DateTime _lastRenderRequestUtc = DateTime.MinValue;
 
@@ -117,6 +120,7 @@ public partial class MainWindow : Window
             _pendingHeight = frame.Height;
             _pendingStride = frame.Stride;
             _pendingLayout = frame.Layout;
+            _pendingQuads = snapshot.Quads;
             _hasPendingFrame = true;
         }
 
@@ -128,17 +132,12 @@ public partial class MainWindow : Window
     /// synthetic folder source on a short timer, or a real 30 fps camera),
     /// so both gates are needed: the time check limits how often a render is
     /// asked for, and the CompareExchange stops a second ask piling up
-    /// before the render loop gets to the first one. Safe to call from the
-    /// background thread — TopLevel.RequestAnimationFrame is the recommended
-    /// marshal point precisely because it is (docs/stream-a-ui.md A1).
+    /// before the render loop gets to the first one. Called from the
+    /// background thread — see the Dispatcher.UIThread.Post below for why
+    /// the actual RequestAnimationFrame call still has to cross to the UI
+    /// thread.
     private void ScheduleRenderIfDue()
     {
-        var topLevel = _topLevel ??= TopLevel.GetTopLevel(this);
-        if (topLevel is null)
-        {
-            return; // Not attached to a TopLevel yet; the next frame retries.
-        }
-
         var now = DateTime.UtcNow;
         if (now - _lastRenderRequestUtc < RenderInterval)
         {
@@ -151,7 +150,16 @@ public partial class MainWindow : Window
         }
 
         _lastRenderRequestUtc = now;
-        topLevel.RequestAnimationFrame(OnRenderFrame);
+
+        // RequestAnimationFrame itself asserts UI-thread access
+        // (Dispatcher.VerifyAccess), so the CALL has to be marshalled there
+        // even though this method runs on the pipeline's background thread —
+        // `MainWindow` is itself a `TopLevel`, so no separate lookup is
+        // needed. This still coalesces: `_renderScheduled` gates it to at
+        // most one outstanding Post (and, once that runs, one outstanding
+        // RequestAnimationFrame) at a time, so a frame source faster than
+        // ~15 fps cannot queue a backlog of either.
+        Dispatcher.UIThread.Post(() => RequestAnimationFrame(OnRenderFrame));
     }
 
     /// Runs on the UI thread. Order matters and is exactly
@@ -167,6 +175,7 @@ public partial class MainWindow : Window
         byte[] staging;
         int width, height, stride;
         PixelLayout layout;
+        IReadOnlyList<CardQuad> quads;
 
         lock (_frameLock)
         {
@@ -180,6 +189,7 @@ public partial class MainWindow : Window
             height = _pendingHeight;
             stride = _pendingStride;
             layout = _pendingLayout;
+            quads = _pendingQuads;
             _hasPendingFrame = false;
         }
 
@@ -193,6 +203,48 @@ public partial class MainWindow : Window
         }
 
         PreviewImage.InvalidateVisual();
+
+        DrawQuadOverlay(quads, width, height);
+    }
+
+    /// Draws each detected quad as a vector `Polygon` child of
+    /// `QuadOverlayCanvas` — over the `Image`, never baked into its pixel
+    /// buffer (A3). `quads` are in FRAME coordinates (CONTRACTS.md
+    /// `CardQuad`), so they are mapped through `FrameToControlTransform`
+    /// using `PreviewImage`'s own rendered bounds, which is what accounts
+    /// for the `Stretch="Uniform"` letterboxing. The canvas is cleared and
+    /// rebuilt each call rather than diffed — at ~15 fps and at most a
+    /// handful of quads, a handful of small control allocations costs
+    /// nothing next to the bitmap blit above it.
+    private void DrawQuadOverlay(IReadOnlyList<CardQuad> quads, int frameWidth, int frameHeight)
+    {
+        QuadOverlayCanvas.Children.Clear();
+
+        var bounds = PreviewImage.Bounds;
+        if (frameWidth <= 0 || frameHeight <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var transform = FrameToControlTransform.Compute(frameWidth, frameHeight, bounds.Width, bounds.Height);
+
+        foreach (var quad in quads)
+        {
+            var polygon = new Polygon
+            {
+                Stroke = Brushes.LimeGreen,
+                StrokeThickness = 2,
+                Points =
+                [
+                    transform.Apply(quad.TL),
+                    transform.Apply(quad.TR),
+                    transform.Apply(quad.BR),
+                    transform.Apply(quad.BL),
+                ],
+            };
+
+            QuadOverlayCanvas.Children.Add(polygon);
+        }
     }
 
     /// Reallocates the ONE `WriteableBitmap` only when the frame's
