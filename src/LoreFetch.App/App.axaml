@@ -1,6 +1,17 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="LoreFetch.App.App">
+             x:Class="LoreFetch.App.App"
+             RequestedThemeVariant="Dark">
+  <!--
+    A10-fix bug 3: the whole window is hand-painted dark (#181818/#1E1E1E/
+    #2D2D2D throughout MainWindow.axaml), but nothing told the Fluent theme
+    (or the separately-included DataGrid Fluent theme) to resolve its OWN
+    brushes — DataGridColumnHeader, ContextMenu, AutoCompleteBox, RadioButton
+    chrome, etc. — against the dark variant, so they fell back to Fluent's
+    light default and visibly clashed (the collection header rendering light
+    against a dark table was the reported symptom). RequestedThemeVariant
+    make every themed control agree with the rest of the window.
+  -->
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
