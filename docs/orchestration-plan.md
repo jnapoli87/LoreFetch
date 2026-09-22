@@ -1202,7 +1202,23 @@ Global overrides for every B brief:
   (4) The harness hardcoded `OkDistance` 270. It now reads it from `thresholds.json`.
   StreamB **290 total, 288 passed / 2 skipped** (the witness, and the perf soft-skip). Integration on `stream/b` is 155/8, because that branch predates `37734b0`. Every new test was chaos-tested.
   **B8 item 6 closed as well:** `IOracleCatalog.All` over the real committed index has exactly 32,743 entries, one per oracle id, with truncation and duplication each chaos-failing. A prefix search finds "Freya" and "Sol Ring". The A session had already root-caused its bug independently (`PlacementTarget`, fixed at `5d1bbb4`).
-- [ ] **B8** 🧭 Done-when review against stream-b §Done when. Then README §B. **Merge gate, then P3.**
+- [x] **B8** 🧭 Done-when review against stream-b §Done when. Then README §B. **Merge gate, then P3.**
+
+  *Done 2026-09-22 on the Windows PC.* The scorecard above closes as follows:
+  - Items 1, 3, 4, 7 ✅.
+  - Item 2 is waived (70.4%).
+  - Item 5 ✅: 208/240, with the margin data, in `thresholds.json`.
+  - Item 6 ✅: `HashCardIdentifierRealIndexCatalogTests`.
+  - Item 8 ✅: `docs/accuracy.md` holds the filtered-index run.
+
+  **Also closed this session:**
+  - **Query-side x64-vs-ARM64 divergence, measured in isolation for the first time: 0 differing bits across 50 query hashes** (`f5ed74a`). The recorded 11 bits of 49.9M was the reference side over the whole index. Risk 2's open question is answered: for the query side on this sample, the transforms agree bit-for-bit.
+  - The witness had been re-sampling from the current index, so the rebuild made it report "48/50 differ, 0.0 bits", which were really 48 *unsampled* ids. It now compares by its own ids, and it was regenerated on win-x64, where it asserts bit-exact.
+  - `round-trip-gate` derives `provisional` from the architecture instead of hardcoding `true` (`4c136d9`).
+  - `CropScaleTransform` moved from `Core/Imaging` to `Lab` (`cf65256`); `lab crop-scale` output is byte-identical.
+  - README §B, the Lab/StreamB/Core "Internals" lines, and Core's folder map flipped for `Identification/` and `Imaging/` (`3af2cba`, `9f6b4b4`).
+
+  **Merged** at `dc3636a` (`--no-ff`). Suites on `main`, orchestrator-run with `LOREFETCH_SCRYFALL_CACHE` set: build 0 warnings / 0 errors; StreamA **132**; StreamB **296 passed / 2 skipped / 298** (the real-capture accuracy test, because `main`'s checkout has no `test-images/fixtures/`, and the perf soft-skip); StreamC **39**; StreamD **71**; Integration **158 / 8**. **P3 is due.**
 
 ### Stream C — Capture · worktree `stream-c` · scope `src/LoreFetch.Capture/**`, `Tests/StreamC/**`, README §C
 Global overrides for every C brief:
