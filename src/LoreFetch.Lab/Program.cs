@@ -23,6 +23,8 @@ return await (command switch
     "detect" => DetectCommand.RunAsync(rest),
     "identify" => IdentifyCommand.RunAsync(rest),
     "synth" => SynthCommand.RunAsync(rest),
+    "round-trip-gate" => RoundTripGateCommand.RunAsync(rest),
+    "query-hash-witness" => QueryHashWitnessCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -87,5 +89,20 @@ static void PrintUsage()
                      [--noise F] [--seam]
                                    Build a card-free mat frame at the given
                                    contrast (Risk 3).
+          round-trip-gate --cache <dir> [--index <path>]
+                           [--out <thresholds.json>] [--lands N]
+                           [--non-lands N] [--seed N] [--min-rank1-rate F]
+                                   Package B2: sample artworks from the
+                                   committed index, run each cached render
+                                   through Identify, report the rank-1
+                                   ArtworkId match rate and the distance/
+                                   margin distributions. --out writes
+                                   referenceFloor + margin stats into a
+                                   thresholds.json.
+          query-hash-witness --cache <dir> [--index <path>] --out <path>
+                              [--sample-size N] [--seed N]
+                                   Package B2: writes a fixed sample of
+                                   query-side hashes for later
+                                   cross-architecture comparison.
         """);
 }
