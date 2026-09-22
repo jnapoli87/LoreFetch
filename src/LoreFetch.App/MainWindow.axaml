@@ -104,13 +104,33 @@
                   border overlays sit on top without intercepting clicks — A6
                   attaches its handlers to the outermost Grid.
 
+                  A6 interactions:
+                    Left-click (Tapped)     → OnTileTapped → ToggleExcludedFromUi
+                    Right-click ContextMenu → "Set card manually…" / "Clear"
+                    AutoCompleteBox overlay → shown when IsTypeAheadOpen is true
+
                   State visuals:
                     IsLowConfidence → amber border (on Included tiles)
                     IsUnresolved    → red border, blank DisplayName
                     IsExcluded      → grey border + dark overlay + ✕ text
                     IsManuallySet   → blue border + M badge
                 -->
-                <Grid Width="80" Height="141" Margin="4,4,0,0">
+                <Grid Width="80" Height="141" Margin="4,4,0,0"
+                      Tapped="OnTileTapped">
+                  <!--
+                    A6: Context menu — two items as specified:
+                      1. "Set card manually…" → opens the type-ahead overlay (IsTypeAheadOpen = true)
+                      2. "Clear"              → reverts a manual pick to the hash's own proposal
+                    PlacementTarget is implicitly the Grid that owns this ContextMenu, whose
+                    DataContext is the TileViewModel — so the Click handlers find the VM via
+                    ((MenuItem)sender).Parent as ContextMenu → PlacementTarget.DataContext.
+                  -->
+                  <Grid.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Set card manually…" Click="OnTileSetManuallyClick" />
+                      <MenuItem Header="Clear" Click="OnTileClearClick" />
+                    </ContextMenu>
+                  </Grid.ContextMenu>
 
                   <!-- Base card background -->
                   <Border Background="#2D2D2D" CornerRadius="3" />
@@ -179,6 +199,28 @@
                           BorderBrush="#4488FF"
                           IsVisible="{Binding IsManuallySet}"
                           IsHitTestVisible="False" />
+
+                  <!--
+                    A6: Type-ahead overlay for "Set card manually…".
+                    Shown only when IsTypeAheadOpen = true (the "Set card manually…"
+                    ContextMenu item sets this). The AutoCompleteBox fits in the
+                    tile's name strip area; its dropdown popup extends outside the
+                    tile bounds. ZIndex=200 keeps it above all state-border overlays.
+
+                    MinimumPrefixLength, MinimumPopulateDelay and AsyncPopulator are
+                    all set in code-behind via OnTypeAheadLoaded — setting them here
+                    would require XAML TypeSpan / delegate conversion that is less
+                    predictable than explicit C# assignment.
+
+                    Loaded="OnTypeAheadLoaded"     — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
+                    SelectionChanged="…"           — calls SetManuallyFromUi + closes overlay
+                  -->
+                  <AutoCompleteBox IsVisible="{Binding IsTypeAheadOpen}"
+                                   PlaceholderText="Set card manually…"
+                                   VerticalAlignment="Bottom"
+                                   ZIndex="200"
+                                   Loaded="OnTypeAheadLoaded"
+                                   SelectionChanged="OnTypeAheadSelectionChanged" />
 
                 </Grid>
               </DataTemplate>

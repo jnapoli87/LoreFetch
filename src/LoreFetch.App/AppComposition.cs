@@ -4,6 +4,7 @@ using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging;
 
+
 namespace LoreFetch.App;
 
 /// Which set of dependencies the composition root wires up. `Fakes` is all
@@ -29,11 +30,23 @@ public sealed class AppSession : IAsyncDisposable
     private readonly Action? _onDisposed;
     private int _disposed;
 
+    /// <param name="pipeline">The scan pipeline. Must not be null.</param>
+    /// <param name="source">The frame source. Must not be null.</param>
+    /// <param name="runTask">The task returned by the one <c>RunAsync</c> call. Must not be null.</param>
+    /// <param name="settings">Shared scan settings. Must not be null.</param>
+    /// <param name="catalog">
+    /// Oracle catalog for the "Set card manually…" type-ahead. Optional so
+    /// that existing test constructors
+    /// (<c>new AppSession(pipeline, source, Task.CompletedTask, settings)</c>)
+    /// continue to compile without change.
+    /// </param>
+    /// <param name="onDisposed">Optional cleanup action run after the frame source is closed.</param>
     public AppSession(
         IScanPipeline pipeline,
         IFrameSource source,
         Task runTask,
         ScanSettings settings,
+        IOracleCatalog? catalog = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -45,6 +58,7 @@ public sealed class AppSession : IAsyncDisposable
         Source = source;
         RunTask = runTask;
         Settings = settings;
+        Catalog = catalog;
         _onDisposed = onDisposed;
     }
 
@@ -69,6 +83,15 @@ public sealed class AppSession : IAsyncDisposable
     public Task RunTask { get; }
 
     public ScanSettings Settings { get; }
+
+    /// <summary>
+    /// The oracle catalog for the "Set card manually…" type-ahead. May be
+    /// null when composition does not supply one (e.g. tests that construct
+    /// <see cref="AppSession"/> directly). <c>MainWindow</c> passes this to
+    /// <see cref="LoreFetch.App.ViewModels.MainViewModel"/> so each tile's
+    /// populator can search it.
+    /// </summary>
+    public IOracleCatalog? Catalog { get; }
 
     /// Disposes the pipeline (which cancels and drains its loop), awaits the
     /// run task, then disposes the frame source itself — only at that point
@@ -151,6 +174,12 @@ public static class AppComposition
         ICardIdentifier identifier = new StubCardIdentifier();
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
 
+        // A6: oracle catalog for the "Set card manually…" type-ahead. The
+        // StubOracleCatalog defaults to ~33,000 entries (the size where
+        // AutoCompleteBox's uncapped defaults become a real problem) — see
+        // plan-finding V16 and stream-a-ui.md §A5.
+        IOracleCatalog catalog = new StubOracleCatalog();
+
         // Best-effort cleanup of the temp folder DemoFrames created, run
         // from AppSession.DisposeAsync only after the frame source itself
         // (and therefore its decode loop) has stopped. Orchestrator review
@@ -170,6 +199,7 @@ public static class AppComposition
             settings,
             loggers,
             ct,
+            catalog: catalog,
             onDisposed: onDisposed);
     }
 
@@ -253,6 +283,7 @@ public static class AppComposition
         ScanSettings settings,
         ILoggerFactory loggers,
         CancellationToken ct,
+        IOracleCatalog? catalog = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(frameSourceFactory);
@@ -267,7 +298,7 @@ public static class AppComposition
         var pipeline = ScanPipelineFactory.Create(source, detector, rectifier, identifier, trigger, settings, loggers);
         var runTask = pipeline.RunAsync(ct);
 
-        return new AppSession(pipeline, source, runTask, settings, onDisposed);
+        return new AppSession(pipeline, source, runTask, settings, catalog, onDisposed);
     }
 
     // A4: image extensions that FolderFrameSource can decode. Must stay in

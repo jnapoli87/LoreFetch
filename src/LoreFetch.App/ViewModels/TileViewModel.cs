@@ -7,6 +7,7 @@ using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.App.ViewModels;
 
+
 /// <summary>
 /// View model wrapping one <see cref="CohortTile"/> for the cohort grid (A5).
 /// Exposes bindable properties derived from the tile's current state. The VM
@@ -26,21 +27,32 @@ namespace LoreFetch.App.ViewModels;
 /// </para>
 /// <para>
 /// A6 provides the click handlers and context menus that call the tile's
-/// mutators. A5 exposes only <see cref="Tile"/> (so A6 can reach the mutators)
-/// and <see cref="Refresh"/> (the hook A6 calls after each mutation). No
-/// interaction code belongs here.
+/// mutators and is the only consumer of <see cref="ToggleExcludedFromUi"/>,
+/// <see cref="SetManuallyFromUi"/> and <see cref="ClearFromUi"/>. Each of
+/// those methods calls the tile's own mutator and then <see cref="Refresh"/>
+/// so INPC fires — the UI never assigns <c>State</c> or <c>Chosen</c>
+/// directly.
 /// </para>
 /// </remarks>
 public sealed class TileViewModel : ObservableObject
 {
     private readonly CohortTile _tile;
+    private readonly IOracleCatalog? _catalog;
 
-    public TileViewModel(CohortTile tile)
+    /// <param name="tile">The underlying domain tile. Must not be null.</param>
+    /// <param name="catalog">
+    /// The oracle catalog for the "Set card manually…" type-ahead. When
+    /// <c>null</c> the populator returns only the tile's own runner-up
+    /// candidates (or nothing) — it never throws.
+    /// </param>
+    public TileViewModel(CohortTile tile, IOracleCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(tile);
         _tile = tile;
+        _catalog = catalog;
         Tile = tile;
         Thumbnail = BuildThumbnail(tile.Image);
+        TypeAheadPopulator = BuildPopulator(tile, catalog);
     }
 
     // ------------------------------------------------------------------
@@ -156,6 +168,127 @@ public sealed class TileViewModel : ObservableObject
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(DistanceText));
         OnPropertyChanged(nameof(IsLowConfidence));
+    }
+
+    // ------------------------------------------------------------------
+    // A6: Mouse-interaction methods — each = tile mutator + Refresh()
+    // The UI NEVER assigns State or Chosen directly (reviewer point 5).
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Left-click handler: toggles the X exclusion marker on and off.
+    /// The opt-out default is <see cref="TileState.Included"/> — this method
+    /// never flips that default (reviewer point 6).
+    /// </summary>
+    public void ToggleExcludedFromUi()
+    {
+        _tile.ToggleExcluded();
+        Refresh();
+    }
+
+    /// <summary>
+    /// "Set card manually…" selection handler: applies the user's chosen
+    /// entry and updates state to <see cref="TileState.ManuallySet"/>.
+    /// </summary>
+    public void SetManuallyFromUi(OracleEntry entry)
+    {
+        _tile.SetManually(entry);
+        Refresh();
+    }
+
+    /// <summary>
+    /// "Clear" menu-item handler: reverts a manual choice back to the
+    /// hash's own proposal (<see cref="TileState.Included"/> or
+    /// <see cref="TileState.Unresolved"/>). Does NOT remove the tile —
+    /// that is the X's job.
+    /// </summary>
+    public void ClearFromUi()
+    {
+        _tile.Clear();
+        Refresh();
+    }
+
+    // ------------------------------------------------------------------
+    // A6: Type-ahead for "Set card manually…"
+    // ------------------------------------------------------------------
+
+    private bool _isTypeAheadOpen;
+
+    /// <summary>
+    /// Whether the inline type-ahead AutoCompleteBox is visible. Set to
+    /// <c>true</c> when the user clicks "Set card manually…"; set back to
+    /// <c>false</c> after a selection is made.
+    /// </summary>
+    public bool IsTypeAheadOpen
+    {
+        get => _isTypeAheadOpen;
+        set => SetProperty(ref _isTypeAheadOpen, value);
+    }
+
+    /// <summary>
+    /// The <c>AsyncPopulator</c> delegate for the "Set card manually…"
+    /// <c>AutoCompleteBox</c>. Assigned once in the constructor via
+    /// <see cref="BuildPopulator"/>; the code-behind reads it via
+    /// <c>OnTypeAheadLoaded</c> and sets it on the control directly.
+    /// </summary>
+    /// <remarks>
+    /// The populator:
+    /// <list type="bullet">
+    ///   <item>Yields to a background thread before scanning.</item>
+    ///   <item>Honours the <see cref="CancellationToken"/> — keystroke N cancels N−1.</item>
+    ///   <item>Returns <see cref="CohortTile.Candidates"/> runners-up first, then
+    ///   <see cref="IOracleCatalog.All"/> matches, deduped by OracleId.</item>
+    ///   <item>Filters by <c>StartsWithOrdinal</c> (no culture work).</item>
+    ///   <item>Caps results at 20 regardless of catalog size.</item>
+    ///   <item>Returns an empty sequence — never throws — when the catalog is null.</item>
+    /// </list>
+    /// </remarks>
+    public Func<string?, CancellationToken, Task<IEnumerable<object>>> TypeAheadPopulator { get; }
+
+    private static Func<string?, CancellationToken, Task<IEnumerable<object>>> BuildPopulator(
+        CohortTile tile, IOracleCatalog? catalog)
+    {
+        return async (prefix, ct) =>
+        {
+            if (string.IsNullOrEmpty(prefix) || prefix.Length < 2)
+            {
+                return Array.Empty<object>();
+            }
+
+            // Filter off the UI thread so the 33k scan never blocks renders.
+            await Task.Yield();
+            ct.ThrowIfCancellationRequested();
+
+            var results = new List<CatalogItem>(20);
+            var seen = new HashSet<string>(StringComparer.Ordinal); // dedupe by OracleId
+
+            // --- Runners-up first: the identifier's ranked candidate list ---
+            foreach (var c in tile.Candidates)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (c.OracleName.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(c.OracleId))
+                {
+                    results.Add(new CatalogItem(c.OracleId, c.OracleName));
+                    if (results.Count >= 20) return results;
+                }
+            }
+
+            // --- Then catalog matches, deduped against the runners-up already in results ---
+            if (catalog != null)
+            {
+                foreach (var e in catalog.All)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (e.OracleName.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(e.OracleId))
+                    {
+                        results.Add(new CatalogItem(e.OracleId, e.OracleName));
+                        if (results.Count >= 20) return results;
+                    }
+                }
+            }
+
+            return results;
+        };
     }
 
     // ------------------------------------------------------------------

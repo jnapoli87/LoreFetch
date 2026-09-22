@@ -3,6 +3,8 @@ using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -106,7 +108,8 @@ public partial class MainWindow : Window
         // AXAML RadioButton / CheckBox bindings find MainViewModel via
         // the standard Avalonia binding path. The VM holds a reference to
         // ScanSettings and writes through on each property change.
-        DataContext = new MainViewModel(session.Settings);
+        // A6: pass the oracle catalog so each tile's type-ahead can search it.
+        DataContext = new MainViewModel(session.Settings, session.Catalog);
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -297,5 +300,88 @@ public partial class MainWindow : Window
 
         _convertedBuffer = new byte[needed];
         _convertedBufferRowBytes = rowBytes;
+    }
+
+    // -----------------------------------------------------------------------
+    // A6: Mouse-interaction handlers
+    //
+    // All handlers reach the TileViewModel through the control's DataContext
+    // (for tile-level events) or through ContextMenu.PlacementTarget (for
+    // ContextMenu item events), and then call the VM's own methods so the tile
+    // state is never mutated directly from the view.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Left-click (Tapped) on a tile's outer Grid → toggle the X opt-out.
+    /// </summary>
+    private void OnTileTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Grid { DataContext: TileViewModel vm })
+        {
+            vm.ToggleExcludedFromUi();
+        }
+    }
+
+    /// <summary>
+    /// "Set card manually…" context-menu item click → open the type-ahead
+    /// overlay by setting <see cref="TileViewModel.IsTypeAheadOpen"/> = true.
+    /// </summary>
+    private void OnTileSetManuallyClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem mi &&
+            mi.Parent is ContextMenu cm &&
+            cm.PlacementTarget?.DataContext is TileViewModel vm)
+        {
+            vm.IsTypeAheadOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// "Clear" context-menu item click → revert a manual pick to the hash's
+    /// own proposal via <see cref="TileViewModel.ClearFromUi"/>.
+    /// </summary>
+    private void OnTileClearClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem mi &&
+            mi.Parent is ContextMenu cm &&
+            cm.PlacementTarget?.DataContext is TileViewModel vm)
+        {
+            vm.ClearFromUi();
+        }
+    }
+
+    /// <summary>
+    /// Wires the <c>AutoCompleteBox</c>'s <c>AsyncPopulator</c> and
+    /// per-control settings once it is loaded (XAML binding cannot reliably
+    /// assign a delegate-type property). Called for every tile in the grid
+    /// because each tile in the <c>ItemsControl</c> gets its own
+    /// <c>AutoCompleteBox</c> instance from the <c>DataTemplate</c>.
+    /// </summary>
+    private void OnTypeAheadLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is AutoCompleteBox acb && acb.DataContext is TileViewModel vm)
+        {
+            acb.AsyncPopulator = vm.TypeAheadPopulator;
+            acb.MinimumPrefixLength = 2;
+            acb.MinimumPopulateDelay = TimeSpan.FromMilliseconds(150);
+        }
+    }
+
+    /// <summary>
+    /// AutoCompleteBox selection changed → apply the chosen entry via
+    /// <see cref="TileViewModel.SetManuallyFromUi"/> and close the overlay.
+    /// Fires for both selection and de-selection; guards against a null
+    /// <c>SelectedItem</c> (de-selection sets it to null).
+    /// </summary>
+    private void OnTypeAheadSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (sender is AutoCompleteBox acb &&
+            acb.DataContext is TileViewModel vm &&
+            acb.SelectedItem is CatalogItem item)
+        {
+            vm.SetManuallyFromUi(item.ToEntry());
+            vm.IsTypeAheadOpen = false;
+            acb.Text = string.Empty; // reset text for next use
+        }
     }
 }

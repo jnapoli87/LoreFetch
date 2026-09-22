@@ -27,11 +27,20 @@ namespace LoreFetch.App.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly ScanSettings _settings;
+    private readonly IOracleCatalog? _catalog;
 
-    public MainViewModel(ScanSettings settings)
+    /// <param name="settings">Shared scan settings. Must not be null.</param>
+    /// <param name="catalog">
+    /// Oracle catalog for the "Set card manually…" type-ahead. When null,
+    /// each tile's populator returns only its own runner-up candidates.
+    /// Optional so that existing test constructors
+    /// (<c>new MainViewModel(settings)</c>) continue to compile without change.
+    /// </param>
+    public MainViewModel(ScanSettings settings, IOracleCatalog? catalog = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
+        _catalog = catalog;
 
         // Mirror whatever defaults ScanSettings came with so the initial
         // display is consistent with the pipeline's own state.
@@ -131,6 +140,8 @@ public sealed partial class MainViewModel : ObservableObject
     /// <paramref name="cohort"/>'s tiles, in order. A7 (Space / auto-capture)
     /// calls this when a new cohort arrives; A5 provides it so the grid and
     /// its tests can bind without wiring capture logic.
+    /// Each <see cref="TileViewModel"/> receives the catalog so its
+    /// <c>TypeAheadPopulator</c> can scan <see cref="IOracleCatalog.All"/>.
     /// </summary>
     public void LoadCohort(Cohort cohort)
     {
@@ -138,7 +149,7 @@ public sealed partial class MainViewModel : ObservableObject
         _tiles.Clear();
         foreach (var tile in cohort.Tiles)
         {
-            _tiles.Add(new TileViewModel(tile));
+            _tiles.Add(new TileViewModel(tile, _catalog));
         }
     }
 }
