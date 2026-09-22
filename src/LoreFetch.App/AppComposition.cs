@@ -212,7 +212,14 @@ public static class AppComposition
 
         IFrameSourceFactory frameSourceFactory = new FolderFrameSourceFactory(frameFolder, TimeSpan.FromMilliseconds(250));
 
-        ICardDetector detector = new StubCardDetector(settings.ExpectedCount);
+        // Item 4a (A10-prep): wrap the stub so switching the 1/3/9 selector
+        // at runtime actually changes how many quads the NEXT frame yields —
+        // StubCardDetector.CardCount is otherwise set once here and never
+        // touched again. See LayoutFollowingCardDetector's own doc comment
+        // for the threading argument (ICardDetector.Detect is only ever
+        // called from ScanPipeline's single loop thread).
+        ICardDetector detector = new LayoutFollowingCardDetector(
+            new StubCardDetector(settings.ExpectedCount), settings);
         IRectifier rectifier = new StubRectifier();
         ICardIdentifier identifier = new StubCardIdentifier();
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
