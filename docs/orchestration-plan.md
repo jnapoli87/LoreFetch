@@ -402,6 +402,22 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Machine split — ruled 2026-09-22 (user)
+
+**At the start of each session the user says which machine it is on, and whether they have overridden this split for that session.** Do not infer the machine from paths or from this table; ask if the user has not said. **An override from the user beats this table** for that session. If the user says which machine but gives no override, this table decides the work.
+
+| Machine | Owns | Why |
+|---|---|---|
+| **Windows PC** | **All of stream B** (B7, B2, B5c, B6, B8) · **C2** (FlashCap shim, tested against the real camera) · **C4** · **A10** · **I6** · **E1, E2** | B needs the 5.1 GB image cache, which lives only here. The committed index must be built on win-x64. Every committed threshold (B2's `referenceFloor`, B6's `goodDistance`/`okDistance`) must be measured on win-x64, because `INTER_AREA` is not bit-exact on ARM64 and that includes the query side's 32×32 resize. The C920 is attached here, and A10, I6 and the E items are win-x64 runs by nature (see *Platform switch*). |
+| **Mac** | **A4–A9** · **D4, D6** · **C3** | All are built and tested against fakes or plain files, with no camera, image cache or measured threshold involved. |
+| **Either** (the user's hands) | D5 (the real Moxfield import), H items | These need the user, not a particular machine. |
+
+Rules that follow from the split:
+1. **Tick only your own machine's items, and pull `main` before committing a tick.** Both machines tick in this file. The checklist is split by stream, so pull-then-commit keeps rebases trivial. Never resolve a conflict in this file by dropping the other machine's lines.
+2. **Work moves between machines only through GitHub**, so every hand-off needs a push, and every push needs the user's approval (§3). Push a stream branch when its machine's session ends.
+3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
+4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
+
 ### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
 
 **Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
