@@ -762,7 +762,7 @@ Global overrides for every C brief:
   - `Description` reports what was negotiated
 
   Accept: unit tests of the selection logic over plain descriptor data objects.
-- [ ] **C3** ∥ README §C (including the macOS compile-only note).
+- [x] **C3** ∥ README §C (including the macOS compile-only note). *(stream/c `7bf2632`; README-only. §C covers the FlashCap→`IFrameSource` pipeline (`WebcamFrameSourceFactory` entry point, DropOldest single-frame, `ArrayPool` no-garbage, first-frame/mid-stream watchdogs), the C920 USB-2 MJPG-30fps negotiation asserted from `EnumerateDescriptors()`, MJPEG decode as this stream's job (`Cv2.ImDecode`→BGR24, in-source `Cv2.Rotate`), and a `> [!IMPORTANT]` win-x64-only callout (FlashCap #182 native crash → macOS compile-only in CI). Verified: scope README-only; API refs fact-checked against ScanSettings (`FirstFrameTimeoutMs`=10s, `FrameWatchdogMs`=2s, `CameraRotationDegrees` default 90°) and the contract-pinned factory name.)*
 - [ ] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
 
 ### Stream D — Collection & export · worktree `stream-d` · scope `src/LoreFetch.Core/Collection/**`, `src/LoreFetch.Core/Export/**`, `Tests/StreamD/**`, README §D
