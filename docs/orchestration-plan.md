@@ -47,6 +47,38 @@ A proposal raised after Stream 0's contract work: identification already produce
 
 **The fold rule is agree-or-null, never last-write-wins.** A non-null `ArtworkId` must be trustworthy; a value that is right sometimes and wrong sometimes, with nothing able to tell which, is worse than null for a field whose purpose is price resolution. Same reasoning as *Condition is blank in v1*.
 
+### Contract change — cohort tiles in grid (reading) order, requested 2026-09-22 by the user, not yet executed
+
+**The problem (seen in the user's live A10 run, 9-card layout):** the cohort grid does not match the physical 3×3 grid. `ScanPipeline` builds tiles in detector order, and `ICardDetector` returns quads **by descending area**. That is correct for choosing the top N, but meaningless as an order: with nine near-equal cards it is effectively arbitrary. The user's verdict: "a terrible experience without fixing this". The user also noted that **the nine cards will sit about 10 px apart in the frame**, a much tighter grid than the stub's widely spaced layout.
+
+**Why the fix belongs in the pipeline, not the UI:** `CohortTile` does not carry its quad, so the App cannot re-sort tiles. Area order must stay, because it selects which N quads survive when more are detected. **The order has to be imposed after selection and before tiles are built**, in `ScanPipeline`, which is frozen `Core/Scanning`. So this is a contract change: **land it on `main`, then merge `main` into every stream branch**, following the `ArtworkId` precedent above.
+
+**The rule — reading order as the preview displays it** (post-rotation frame coordinates, which is what the user sees):
+1. Take the selected quads and compute each one's centroid and height.
+2. Sort by centroid Y. Start a new row when a centroid's Y differs from the current row's mean Y by more than **half the median quad height**. Cards are about 483 px tall at the locked height, so a 10 px gap or a slight skew cannot split or merge rows.
+3. Sort within each row by centroid X, left to right, then concatenate the rows top to bottom.
+4. This covers 1, a 3-in-a-line in either orientation, a 3×3, and **partial Space captures** (e.g. 7 of 9, which keep their relative order).
+5. Write it once, as a pure function in `Core/Scanning` (e.g. `QuadOrdering.ReadingOrder`). Tiles, keys 1–9 (if ever added) and commit order all follow from it.
+6. **Optionally** add `CardQuad Quad` to `CohortTile`, so the UI can highlight which outline a tile came from. Decide at execution; it is not needed for the ordering itself.
+
+**Tests (Integration + unit):**
+- a 3×3 of quads with ~10 px gaps, supplied in shuffled/area order, comes out row-major;
+- a ±3° skew and ±5 px jitter per card does not change the order;
+- 3-in-a-row and 3-in-a-column both work;
+- a partial capture of 7 keeps its relative order;
+- geometry rotated 1080×1920 works.
+
+Chaos cases: sort by X before Y; set the row threshold to 0 (every card becomes its own row); skip the sort entirely. Each must fail.
+
+**The knock-on for stream B — tight spacing is a detection risk, not only an ordering one.** `ContourCardDetector` runs a 5×5 Gaussian and a 5×5 morphological close (B5a). At ~10 px gaps, glare, shadow or a bridging sleeve edge can merge neighbours into one contour. That contour then fails the aspect filter, and **cards silently vanish from a 9-card capture.** Add to B's remaining work:
+- a synthetic B5a-style test of a 3×3 with 10 px (and 6 px) gaps that must yield 9 distinct quads;
+- a tight 3×3 in the H3 fixture corpus and B6's layouts;
+- E1 measures the minimum reliable gap at the locked height.
+
+If the close bridges gaps, the fix is the kernel size or its removal, measured rather than guessed. The stub detector's widely spaced layout (`Core/Fakes`, frozen) does not model this, so any tight-grid fake case goes into the new ordering tests instead.
+
+**Sequencing:** A's merge gate does not depend on this change; A10 can pass without it. Execute it on `main` **right after stream A merges** (it touches `Core/Scanning`, which A's branch does not), then merge `main` into `stream/b` and `stream/d`. It needs no stream-A UI change unless the optional `Quad` field is taken.
+
 ## 0. How the orchestrator uses this file
 
 **Roles**
@@ -417,6 +449,24 @@ Rules that follow from the split:
 2. **Work moves between machines only through GitHub**, so every hand-off needs a push, and every push needs the user's approval (§3). Push a stream branch when its machine's session ends.
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
+
+### Handoff — end of the A10 session, 2026-09-22, Windows PC
+
+**Newest handoff.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
+
+**State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**. **The user's hands-on run failed on two points: *Set card manually…* does nothing, and Enter does not commit** (see A10's note). Memory and fps pass.
+
+**Next, in order:**
+1. **A10-fix package** (Sonnet, `stream/a`): reproduce both bugs through the real `MainWindow` in failing headless tests, then fix them. Then the user re-runs the live exe: `LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/ad-hoc` plus `.claude/worktrees/stream-a/src/LoreFetch.App/bin/Release/net10.0/LoreFetch.App.exe`. Tick A10 only on the user's confirmation.
+2. **Merge gate:** `git merge --no-ff stream/a` into `main`, then the full suite on `main`. The expected baseline is StreamA 119/119 and Integration 143 passed / 8 skipped. Merging stream/a after main was merged into it should be conflict-free.
+3. **P2:** show the summary, and push only on approval. **Watch the macOS CI leg.** The two screenshot tests lost their `WindowsOnly` trait at A10-prep; if they fail on macOS, re-trait them with the real reason.
+4. **Contract change: cohort tiles in reading order** (the section near the top of this file, requested by the user). Execute on `main` right after A merges, then merge `main` into `stream/b` and `stream/d`. It also adds tight-grid (~10 px gap) detection tests to B's remaining work.
+5. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
+
+**Learned this session.**
+1. **A memory soak with zero GCs proves nothing.** On a quiet app, "rising memory" is just uncollected garbage. Force the question: `DOTNET_GCgen0size` shows gen0 behaviour, and `DOTNET_GCHeapHardLimit` forces gen2. Size the cap at about 2× the idle floor; at 1.5× it OOMs on a legitimate 8 MiB allocation.
+2. **An exclusion rationale ("fails on macOS ARM64") was never tested on the other platform.** The first Windows run showed the tests failed everywhere. When a test is traited out, verify the stated reason on the platform where it still runs.
+3. **A green unit suite can hide an app that can't be used.** Fakes mode left every tile Unresolved and the layout fixed at 1. Every view-model test passed because the tests set their own thresholds. Only launching the real exe exposed it.
 
 ### Handoff — end of the Mac A/D session, 2026-09-22
 
@@ -800,6 +850,32 @@ Global overrides for every A brief:
 
   Record the fps and memory results. Then README §A. **Merge gate, then P2.**
 
+  **A10-prep, done 2026-09-22 on the Windows PC**, `stream/a` `7311e87`…`866b3ea`. The first Windows run of `stream/a` found that A10 could not be performed as written:
+  1. **The screenshot tests had never passed anywhere.** `TestApp` set `UseHeadlessDrawing = true`, which is Avalonia's no-op renderer, so `CaptureRenderedFrame()` returns null on Windows too. The A4/A5 notes blaming macOS ARM64 were wrong. Fixed with `UseSkia()` plus `UseHeadlessDrawing = false`, and the `WindowsOnly` trait was removed from both tests. **The macOS CI leg must confirm at P2;** if it fails, re-trait them with the real reason.
+  2. **Fakes mode never set `GoodDistance`/`OkDistance`.** Both were 0, so every tile came up Unresolved and the keyboard loop could commit nothing.
+  3. **The fake detector ignored the 1/3/9 selector.** It was fixed at `CardCount = 1` from startup, so the 3- and 9-card layouts were unreachable.
+  4. **Nothing measured fps or memory.**
+
+  The fixes: `LayoutFollowingCardDetector` and `DemoCardIdentifier`. The demo identifier cycles confident → low-confidence → Unresolved per `Identify` call, with distances derived from the loaded good/ok values; the cycle runs across captures, so the 1-card layout also walks all three states. A `Diagnostics:` log line every 10 s reports preview fps (frames rendered), pipeline fps, managed memory, working set and GC counts. The 9 `xUnit1051` warnings are gone, and there is a new `A10-cohort-9.png` screenshot test. StreamA 106 + 2 failing → **119/119**, Integration 143/8, 0 warnings. All 6 briefed chaos cases fail correctly. **Independent chaos:** putting the low-confidence distance on the `good` boundary fails 2 tests.
+  **Ruling (orchestrator, 2026-09-22): demo thresholds live in `src/LoreFetch.App/Fakes/DemoThresholds.cs` (good 100, ok 200).** The frozen `App.csproj` ships only `data/index/**`, stream B's scope, so a demo JSON file cannot ship from stream A. This is the one sanctioned App file with distance literals, it is used by Fakes mode only, and **I4 exempts it**. Real mode (I2) loads `DataFiles.ThresholdsPath`.
+  **A10 run, 2026-09-22 on the Windows PC.** Fakes mode, `LOREFETCH_FRAMES_DIR` = the 12 ad-hoc captures.
+  - **The user's hands-on run:** the 1/3/9 layouts and the Space/Enter/Escape loop. The user's verdict was "looks great".
+  - **fps:** preview 4.0 and pipeline 4.0. That is the folder source's 250 ms frame interval, not a limit in the app; real camera throughput waits for I3/E1.
+  - **Memory, four soaks, raw data in the session scratchpad only.**
+    1. **Plain soak:** managed memory 53 → 108 MB, but **zero GCs in 5 minutes**. Uncollected garbage, so inconclusive.
+    2. **`DOTNET_GCgen0size=0x200000`:** gen0 GCs ran and the small-object heap stayed flat. The **LOH grew 45 → 95 MB in 8 MiB steps**, which is `ArrayPool<byte>.Shared` rounding a 1920×1080×3 frame up to 2²³ bytes. The fake folder source's pooled buffer occasionally misses the pool, and a gen2 GC had yet to run.
+    3. **`DOTNET_GCHeapHardLimit` = 80 MB:** gen2 GCs reclaimed memory (73 → 60 MB), so the buffers are garbage, not retained. An 8 MiB decode then OOM'd because the cap was too tight against a 53 MB idle floor. It surfaced cleanly as `FrameSourceException` through `SourceFailed`, with no crash, which incidentally confirms A9.
+    4. **112 MB cap, 5.7 minutes, PASS:** no OOM and exit 0. Managed memory is a sawtooth from 69 to 78 MB that returns to 69 after every GC, and working set plateaus at about 233 MB from minute 2.5. **Memory is flat.**
+  - **A10 FAILED on two points in the user's hands-on run** (live exe, Fakes mode, ad-hoc frames). Space captures ✅ and left-click toggles Excluded ✅.
+    1. **Right-click → *Set card manually…* does nothing.** No type-ahead appears, so ManuallySet cannot be reached by hand.
+    2. **The collection view doesn't reload after Enter.** The commit works: the user confirmed that A8's manual Refresh shows the rows. **Ruling (user + orchestrator, 2026-09-22):** reload the collection view automatically after a *successful* `CommitAsync` (Enter), not on capture, because capture writes nothing. Do not reload on `CollectionStoreException`, where the retry banner and the retained cohort apply. Keep the Refresh button for changes made to the file outside the app. Test: Enter through the real `MainWindow` makes the new row appear with no Refresh call.
+    3. **The collection table needs polish** (user screenshot of the live exe, 2026-09-22). The `Qty` header does not render at all, and `Condition`, `Source` and `Dist` are clipped ("Condi", "Sou", "D"). `Name` takes about half the width. **Last Scanned read "9/22/2026 6:11:10" during the user's afternoon (EDT)**: it looks like UTC with no AM/PM. Fix it: every header fully visible at the default window size, and Name sized to share the space. Show `LastScannedAt` in local time with an unambiguous format (24-hour or with AM/PM); the stored value stays UTC. The header row should also match the dark theme; in the headless render it showed light. Verify with a headless screenshot, then in the user's live re-run.
+    4. **Relabel the layout selector (user ruling, 2026-09-22).** The radio buttons read **"1 card"**, **"3 × 1"** and **"3 × 3"**, replacing "1 / 3 / 9". The prefix label becomes "Layout:" instead of "Count:". The values written to `ScanSettings.ExpectedCount` stay 1, 3 and 9, so the change is labels only and no contract changes. Still no `IsDefault`. Update any test that finds a button by its text, and README §A's "count selector (1 / 3 / 9)" wording.
+    A6 and A7's headless tests pass, so they drive the view models or keys in a way the real window does not. **The fix package must first reproduce each bug in a headless test that fails through the real `MainWindow`** (actual right-click → menu item; Enter after focusing a selector control), then fix it, then have the user re-run the live exe. Do not tick A10 until the user confirms both by hand.
+  - **README §A** and the stream A internals are done on `stream/a`: `0b445ec` + `e9f4a59` (low-confidence wording fixed on review).
+  - `main` was merged into `stream/a` at `700347e` with no conflicts.
+  Adjacent finds for E2 polish, not blocking: **the idle heap holds about 45 MB of LOH at startup** (suspects: the 33k `StubOracleCatalog`, demo setup), plus the two below. the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
+
 ### Stream B — Identification (critical path) · worktree `stream-b` · scope `src/LoreFetch.Core/Identification/**`, `src/LoreFetch.Core/Imaging/**`, `src/LoreFetch.Lab/**`, `Tests/StreamB/**`, `data/index/**`, `docs/accuracy.md`, README §B
 Global overrides for every B brief:
 - Steps 2–3 run on the **reference side only**.
@@ -1034,7 +1110,7 @@ Global overrides for every D brief:
 - [ ] **I1** After D merges: implement `Real` in `Tests/Integration` for the store and exporters, and switch `AppComposition` to use them.
 - [ ] **I2** After A and B merge: `Real` gets the detector, rectifier, identifier and catalog, loaded from `DataFiles`. B7's synthetic frames take the `FolderFrameSource` slot. `AppComposition` gets a `Real` mode that loads the index and thresholds.
 - [ ] **I3** After C merges: `WebcamFrameSourceFactory` goes into `AppComposition`, with a switch between the demo folder and the camera.
-- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none.
+- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none. **Exempt:** `src/LoreFetch.App/Fakes/DemoThresholds.cs`, Fakes-mode demo values (ruled at A10-prep).
 - [ ] **I5** `THIRD-PARTY-NOTICES`: an entry for every package, so the hook's advisory list is empty. Chase down the FFmpeg notices in the OpenCvSharp runtimes (PLAN risk 7).
 - [ ] **I6** 🧭👤 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on the **Windows PC** with every artifact present gives **0 skipped**. Then P6.
 
