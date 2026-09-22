@@ -2,7 +2,7 @@
 
 Turn any webcam into a Magic: The Gathering collection scanner. Fully offline, no subscription, no phone.
 
-LoreFetch turns a webcam on a desk mount into a Magic: The Gathering collection scanner. Lay out one card or nine, tap space, and it identifies them by image — then exports your inventory to CSV. Everything runs locally: it ships its own card fingerprint index, so after install it never needs the network. Free and GPLv3, because the paid apps shouldn't be the only option.
+Cataloging Magic cards shouldn't mean a monthly subscription or holding your phone over one card at a time. LoreFetch turns a webcam into a scanner for players and independent game stores: lay down up to nine cards, and it identifies them offline, for free, and exports your collection to Moxfield.
 
 > [!NOTE]
 > **Status: in progress, v0.1.0 not yet released.** Implementation is under way in four parallel streams; [`docs/orchestration-plan.md`](docs/orchestration-plan.md) records exactly what has landed. The plan has been public from the start because the interesting part is the reasoning, not just the code.
