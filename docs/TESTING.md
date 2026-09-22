@@ -140,6 +140,19 @@ Also check a new test doesn't just duplicate an existing one's coverage. If an e
 
 ---
 
+## Standing practice: pin every interpolation flag and border mode
+
+Behavioural and invariant tests cannot see an interpolation flag or border mode — they only see whether the output is roughly right, and a wrong filter still produces a roughly-right image. This has bitten Stream B four times: swapping the hash's step-5 resize from `INTER_AREA` to `INTER_LINEAR` left all 29 invariant tests green (B1a) and was only caught by committed golden hashes (B1b, the reason goldens exist at all); swapping the synthetic generator's downscale filter left all 179 tests green (B7); swapping that same generator's keystone warp from `Linear` to `Nearest` left all 182 tests green (B7 again, found by chaos-testing a spot no brief had named). Every one of those reports — "I ran the chaos case and nothing failed" — is the desired signal, not noise to tidy away; it's what exposed the gap each time.
+
+Two techniques, and picking the wrong one is the trap:
+
+- **Golden hashes**, when the *pixel values themselves* must be stable across machines. These must be generated on `win-x64` and traited `[Trait("Category","WindowsOnly")]` — `INTER_AREA` is not bit-exact on ARM64, and the macOS CI leg is ARM64, so a shared golden cannot pass there.
+- **A differential pin**, when only the *filter choice* is at risk: expose the flag, assert the default is the intended value, and assert a different value produces different pixels. This is architecture-independent — both sides of the comparison are computed on whichever machine runs the test — so it works on the Mac, where a golden cannot even be generated.
+
+Every interpolation flag and border mode in an image pipeline needs one of these two, chosen deliberately rather than defaulted to whichever is easier to write.
+
+---
+
 ## Things deliberately not tested automatically
 
 - **UI rendering.** Headless Avalonia testing exists but is fiddly and slow to write. View-model logic is unit-tested; visual correctness is verified by running the app on the Mac. In a 24-hour budget this is the right trade.
