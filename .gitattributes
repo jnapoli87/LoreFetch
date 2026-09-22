@@ -1,0 +1,9 @@
+# core.autocrlf is on, and this repo had no .gitattributes at all — the
+# committed hash index survived its first round trip only because git's
+# NUL-byte heuristic happened to guess binary. Pin it explicitly so a
+# rebuilt index can't be corrupted by line-ending translation.
+*.lfidx binary
+
+# Raster formats are not pinned here: none are tracked yet (Assets/ and
+# docs/img/ don't exist on main), so a rule for them would be speculative.
+# Add one when the first raster asset actually lands.

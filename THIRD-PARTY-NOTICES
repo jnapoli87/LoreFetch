@@ -81,6 +81,81 @@ before promoting a release widely.
 
 
 -------------------------------------------------------------------------------
+Runtime dependencies — confirmed at I5 (2026-09-22)
+-------------------------------------------------------------------------------
+
+Every remaining package actually referenced by a tracked .csproj, verified
+against its .nuspec (and, for AvaloniaUI.DiagnosticsSupport and the OpenCvSharp
+native runtimes, the package's bundled files) in the local NuGet cache
+(~/.nuget/packages/<id>/<version>/), not assumed from the vendor's reputation.
+
+  Avalonia.Desktop ............................ MIT
+  Avalonia.Headless.XUnit ..................... MIT
+  Avalonia.Themes.Fluent ...................... MIT
+  CsvHelper ................................... Apache-2.0 *
+  Microsoft.Extensions.Logging ................ MIT
+  Microsoft.Extensions.Logging.Abstractions ... MIT
+  Microsoft.Extensions.Logging.Console ........ MIT
+  Microsoft.NET.Test.Sdk ...................... MIT
+  OpenCvSharp4.runtime.osx.arm64 .............. Apache-2.0 **
+  xunit.runner.visualstudio ................... Apache-2.0
+  xunit.v3 .................................... Apache-2.0
+
+  * CsvHelper 33.1.0's .nuspec declares a dual licence expression,
+    "MS-PL OR Apache-2.0". LoreFetch elects Apache-2.0 (see the comment
+    beside its PackageVersion entry in Directory.Packages.props).
+
+  ** OpenCvSharp4.runtime.osx.arm64 and OpenCvSharp4.runtime.win: the wrapper
+     package itself declares Apache-2.0 (verified via .nuspec, both
+     4.13.0.20260627). Both bundle statically-linked native third-party
+     code beyond OpenCV itself, confirmed by extracting build-configuration
+     strings and copyright strings from the shipped binaries themselves
+     (`strings runtimes/*/native/*`), since neither nupkg bundles a
+     LICENSE/COPYING/NOTICE file for any of this — only README.runtime.md:
+
+       - FFmpeg. Statically linked into libOpenCvSharpExtern.dylib on
+         osx-arm64 (per README.runtime.md: "macOS ... packages include
+         FFmpeg ... statically linked"); shipped as a separate, dynamically
+         loaded opencv_videoio_ffmpeg4130_64.dll on win-x64. Embedded
+         configure strings show NEITHER --enable-gpl NOR --enable-nonfree
+         on either platform, and the osx-arm64 build explicitly
+         --disable-libx264 --disable-libx265 (the two codecs that force
+         FFmpeg to GPL); win-x64 only enables --enable-libopenh264
+         --enable-libvpx --enable-libaom, all permissively (BSD-style)
+         licensed. That is consistent with this same package family's own
+         README.runtime.md statement for its Linux variant — "the full
+         (non-slim) package includes FFmpeg (LGPL v2.1) ... statically
+         linked" — and is the basis for calling FFmpeg here LGPL-2.1+
+         rather than GPL. UNDETERMINED WITH CERTAINTY: no FFmpeg
+         LICENSE.md/COPYING text is bundled in either nupkg, so this rests
+         on binary-string inspection plus the vendor's parallel statement,
+         not on a first-party licence file — flagged rather than smoothed
+         over, per PLAN risk 7. Static linking under LGPL-2.1 also carries
+         a relinking obligation (§6) that this notice does not yet resolve.
+       - libjpeg-turbo (IJG-style/BSD, "Copyright (C) 1991-2025 The
+         libjpeg-turbo Project and many others") and libpng (the
+         libpng/zlib licence, "Copyright (c) 1998-2002,2004,2006-2018 Glenn
+         Randers-Pehrson" et al.) are also statically linked, per copyright
+         strings found the same way. Both are permissive and do not affect
+         GPLv3 compatibility.
+
+     Chase the LGPL-2.1 relinking obligation and a citable FFmpeg licence
+     text before a wide release; nothing above blocks GPLv3 as currently
+     built.
+
+AvaloniaUI.DiagnosticsSupport (2.2.3) declares NO licence at all — its
+.nuspec has no <license>/<licenseUrl> element, and the package contains no
+LICENSE/COPYING file (only README.md, an icon, and build props/targets),
+confirmed by inspecting both directly in the NuGet cache. This is not an
+oversight in this notices file; the package itself ships unlicensed. It is
+referenced unconditionally by src/LoreFetch.App/App.csproj and would
+therefore ship in the single-file publish as built today. A separate,
+already-approved plan makes the reference Debug-only; until that lands,
+LoreFetch is redistributing a package with no stated redistribution rights
+whenever it publishes a Release build.
+
+
+-------------------------------------------------------------------------------
 Data
 -------------------------------------------------------------------------------
 

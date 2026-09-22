@@ -605,6 +605,30 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 | `InternalsVisibleTo` Capture → Tests.StreamC is declared but unprovable — `Capture` has no code yet | **C1a** should replace StreamC's placeholder with a real internal-touching test |
 | `THIRD-PARTY-NOTICES` advisory is non-empty by design until **I5** | the hook prints it, deduplicated, on every commit |
 
+### Approved frozen-surface change — `AvaloniaUI.DiagnosticsSupport` Debug-only, 2026-09-22 (user)
+
+`src/LoreFetch.App/LoreFetch.App.csproj` is frozen; the user approved this change explicitly, which is what the freeze process requires. Landed on `main` as `fb78c66`.
+
+**Why:** the package (2.2.3) declares **no licence at all** — no `<license>` element in its `.nuspec`, no licence file in the package. No licence means no grant to redistribute, which is worse than a restrictive licence because the terms are simply absent. It was referenced unconditionally, so it would have shipped inside the `win-x64` single-file exe, contradicting RECONCILIATION's "nothing is redistributed".
+
+**Why Debug-only rather than removal:** there are **no `AttachDevTools()` call sites anywhere in `src/`**, so the package is currently unused and could have been deleted outright. It is kept under `Condition="'$(Configuration)' == 'Debug'"` because A10 is a hands-on UI run where DevTools is exactly the tool you would want, and the condition costs nothing.
+
+**Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
+
+⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+
+### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
+
+**Measured, not inferred: all 8 of B1b's `WindowsOnly`-traited golden hashes, generated on win-x64, pass bit-exact on this arm64-darwin Mac** (`--filter Category=WindowsOnly` → 8 passed, 0 failed).
+
+That **contradicts the premise behind the trait**, which CLAUDE.md states as "since `macos-latest` is ARM64, a shared golden cannot pass there, so the leg would be permanently red". On this machine it passes.
+
+**Likely mechanism, worth stating because it is reassuring rather than lucky:** the hash is a *thresholded* bit pattern — each bit is "pixel > the median of its own 8×8 cell". A sub-LSB interpolation difference only flips a bit if that pixel straddles its cell median. So the 1024-bit quantisation absorbs precisely the class of error `INTER_AREA`'s ARM64 divergence produces. 8 goldens × 1024 bits = 8,192 bit observations in agreement.
+
+**Evidence, not proof** — a pixel sitting exactly on its cell median could still flip, and OpenCV #24163 is a real confirmed bug. So `thresholds.json` stays `provisional` until win-x64 re-measurement. But two consequences are worth acting on:
+1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
+2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
@@ -621,19 +645,52 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
 **Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
 
+### Geometry — re-ruled 2026-09-22 (user), superseding the ~9.75″ locked height and the camera-rotation requirement
+
+**The camera stays landscape and unrotated. The operating height is 12″, and the accuracy sweep is 12″ and 20″. The 3×3 layout is laid out with its cards rotated**, long edge across the frame.
+
+Why the old numbers changed — both were arithmetic, re-derived rather than assumed. Frame coverage at height *h* is `1920/(1360/h)` × `1080/(1360/h)` inches; the 3×3 footprint is 7.7″ × 10.7″.
+
+1. **`CLAUDE.md` locks the mount at "about 9.75″" because that is where a 3×3 *first* fits. It fits with 0.04″ of margin — one millimetre.** That is a geometric floor, not an operating height: a card leaves the frame if the mat shifts. 10″ is only 0.24″. **12″ gives 1.83″.**
+2. **The "1920 axis along the table's depth" requirement, and the 38%-resolution-loss warning behind it, silently assumed the 3×3 is laid out with its cards portrait** — footprint 7.7″ across × 10.7″ deep. Rotating the cards makes it 10.7″ × 7.7″, which fits a landscape frame at 12″ with 1.83″ to spare **at identical pixel resolution**: the card is 283×397 px either way, because px/inch is the same on both axes. So rotating the *layout* substitutes for rotating the *camera*, and the 38% loss never occurs. This is a third option the doc did not consider, and it is strictly simpler than twisting the camera.
+
+Fit matrix, landscape, computed:
+
+| Layout at 12″ | needs (across × deep) | result |
+|---|---|---|
+| 1 card | 2.5 × 3.5 | fits, +6.03″ |
+| 3 in a line, running across | 10.7 × 2.5 | fits, +6.24″ |
+| 3×3, cards portrait | 7.7 × 10.7 | **does not fit, −1.17″** |
+| 3×3, cards **rotated** | 10.7 × 7.7 | fits, +1.83″ |
+
+At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×238 px — still inside SpellTable's proven 130–215 px range, which is the point of shooting it as the stress bound).
+
+**Consequence — `ScanSettings.CameraRotationDegrees` = 0**, which closes the rotation-direction question C4 left open ("whether 90° or 270° is upright is decided at H1 mount time"). The property already accepts 0, so this is a composition-time value at I3 and **not** a frozen-surface edit. The `ScanSettings` default remains 90° and is not changed.
+
+**Derive each fixture's height from its frame, not from a tape measure:** `height_inches = 1360 × 2.5 / card_pixel_width`. It runs through the real optics and hands E1 its "predicted X, measured Y" calibration for free. **Evidence this matters:** the 12 ad-hoc frames are recorded as shot at "~12″", but their ~260 × 370 px card implies **13.1″** from the width and 12.9″ from the height — both axes agree, and 13″ predicts 262×366 against the measured 260×370. The tape was an inch out; the `1360` constant is vindicated, not suspect. A mislabelled height does not fail loudly — it reads as mysteriously poor accuracy in B6's per-height table, which is why `capture-fixtures.sh` makes the label a validated argument.
+
+**Fixtures are `.png`, not `.jpg`** (ruled 2026-09-22). The Stream C hardware harness saves a lossless PNG of the decoded BGR frame, and the camera's own MJPG artifacts are already baked into those pixels — re-encoding to JPEG to satisfy `test-images/README.md`'s stated extension would stack a second lossy generation on top for nothing.
+
+**Follow-ups owed on `main`, not yet done:** `CLAUDE.md` §Geometry still states the ~9.75″ lock, the "1920 axis along the table's depth" requirement and the 38% warning; `docs/PLAN.md` may repeat them; and `test-images/README.md` still says `.jpg`. All three need correcting to match this ruling.
+
 ### Human track H (parallel, may start at G0)
-- [ ] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth.
+- [x] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth. — *done 2026-09-22. Mount printed and adjustable to any height in range. **Superseded in part by the geometry re-ruling below:** the height is not locked at 9.75″ and the camera is not rotated. Operating height **12″**, sweep **12″ and 20″**, camera **landscape, unrotated**.*
 - [ ] **H2** 👤 Lighting and mat:
   - put the SAD lamp off-axis at a shallow angle
   - check a blank frame for PWM banding
   - try light, mid and dark mats, and record which one detects best
 - [ ] **H3** 👤 Capture the fixture corpus:
-  - heights 8, 10, 12, 14 and 20″
-  - 1, 3 and 9 layouts, some rotated
+  - heights **12″ and 20″** (re-ruled 2026-09-22, was 8/10/12/14/20 — see the geometry ruling below)
+  - 1, 3 and 9 layouts. **The 9 layout is laid out with its cards rotated**, long edge across the frame — portrait does not fit at 12″
   - lands, normal cards and stretch cards
   - store them in the gitignored `test-images/fixtures/<height>in/<layout>/…jpg` (same relative path on the Mac and the PC; see `test-images/README.md`)
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
+
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
+  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
+  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
+  ruling below.
 
   Gates B6.
 - [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
@@ -813,7 +870,7 @@ Global overrides for every B brief:
 
   Item text: Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
   **Early real-path smoke (user ruling 2026-09-22):** once B4c exists, build a small labelled subset index that includes those four cards' arts. Sol Ring should then retrieve its own `ArtworkId` through detect → rectify → identify. Record the distance. This is a smoke check, not an accuracy number: B6 still needs the H3 corpus.
-- [ ] **B7** Lab synthetic generator:
+- [x] **B7** Lab synthetic generator:
   - px/inch = 1360/height
   - keystone, blur, noise and JPEG artefacts
   - a bare-mat generator
@@ -821,8 +878,60 @@ Global overrides for every B brief:
   - CI uses procedural card-like images and an index built inside the test (V13)
 
   Accept: an integration test in `Tests/StreamB` confirms that a generated card at 9.75″ retrieves its own artwork.
-- [ ] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
-- [ ] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+
+  *Done 2026-09-22, Mac, `stream/b` `abe9ac8` + `eaf07dc` + `d520d29`. `SyntheticFrameGenerator` (downscale `INTER_AREA` → keystone → mat composite → blur → Gaussian noise → JPEG round trip), `BareMatGenerator` at light/mid/dark, and a `lab synth card|mat` command refusing in-repo output. Noise and JPEG use a seeded `System.Random` rather than OpenCV's RNG, for cross-platform determinism. StreamB 163 → **184** (183 passed, 1 soft-skip); Integration unchanged at 143/8.*
+
+  **Round trip, procedural in-test index (V13), both heights:** 9.75″ rank-1 **64** / rank-2 103; 12″ rank-1 **68** / rank-2 113. Probing all 24 in-index seeds gave **24/24 correct@1** at distances 40–102. The 12″ case was added after the geometry re-ruling; note 12″ costs 4 bits of distance but *gains* 6 bits of margin, so moving the operating height there is free.
+
+  🔴 **Two review rounds, both on reviewer-checklist item 2 ("`INTER_AREA` at every resize, including inside the synthetic generator") — and this is the pattern's third and fourth appearance in stream B.** The implementer's own briefed chaos case reported honestly that swapping the generator's downscale `INTER_AREA`→`INTER_LINEAR` **left all 179 tests green**; sent back and closed with a *differential* pin (`SyntheticFrameOptions.DownscaleInterpolation`, default asserted + a different value must change the pixels) rather than a golden, because only the filter *choice* is at risk here and a differential pin is architecture-independent, where a golden would have to be `WindowsOnly` and generated on the PC. Then **orchestrator chaos on a spot no brief named** found the same hole one step down: keystone warp `Linear`→`Nearest` **left all 182 green**. Closed the same way (`KeystoneInterpolation`). Both pins were verified to actually reach their `Cv2` calls rather than merely being declared.
+
+  **`BorderTypes.Replicate` was examined and deliberately *not* pinned, with reasoning** — the right outcome, not a miss. The composite mask is filled from the destination quad's own geometric corners, and the keystone inset only pulls corners inward, so a border mode can only supply pixels strictly outside the true quad — exactly the region the mask always excludes. A border-mode change is therefore structurally unobservable downstream, not merely untested; swapping to `BorderTypes.Constant` left all 184 green for a provably different and non-actionable reason. Recorded inline at the call site instead of pinned.
+
+  **Independent chaos beyond the brief:** dropping the JPEG round trip was caught by exactly 1 of 179 tests, confirming that test is non-redundant. The standing practice this package produced is now in `docs/TESTING.md` §*pin every interpolation flag and border mode*. Lab production code is ~1,504 lines total, reported against the tripwire and accepted — it is a multi-command dev harness, not one package doing several jobs.
+- [x] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
+
+  *Done 2026-09-22, **Mac (arm64-darwin)**, `stream/b` `ce5d407`. Ran against the full 48,750-artwork committed index and the complete real cache (48,750 renders re-pulled on the Mac from the ported manifest in 738 s at 66/s, 0 failures). Fixed sample of 200, seed `20260922`. StreamB 184 → **197**; Integration unchanged 143/8. `data/index/thresholds.json` written at the path Stream 0 already froze, with `goodDistance`/`okDistance` deliberately absent so `ThresholdsFile.Load` throws "missing required field" until B6 sets them — loud, not a fabricated placeholder.*
+
+  | Measure | Value |
+  |---|---|
+  | **referenceFloor** | **55** (own distance min 9, mean 22.3, median 21) |
+  | Margin to best *different* artwork | min **63**, mean 204.1, median 203, max 322 |
+  | **Rank-1 `ArtworkId` rate** | **100.00% (200/200)** — lands 20/20, non-lands 180/180 |
+
+  The worst margin (63) exceeds the floor (55), so every sampled artwork is separated from its nearest impostor by more than the whole spread of own-distances. Far above the 99% stop-and-ask bar. **Marked `provisional: true` / `measuredOn: arm64-darwin`** per Machine split rule 4; the PC promotes it. The thresholds file now records its own provenance (architecture, OS, index SHA-256, sample size, seed), which turns rule 4 from a rule someone must remember into a mechanism.
+
+  🔴 **The gate has a structural limit, found by the implementer's briefed chaos case and worth understanding before anyone trusts it further than it goes.** Swapping the query transform for the reference transform on the query side **did not fail** the rank-1 or bound assertions — the reported distance *improved to 0*. Cause: the queried render's own index entry was built by that same reference pipeline from the same bytes, so forcing the two sides into symmetry only makes a self-match better. **A render-self-match gate is therefore biased toward passing when the two sides converge, even wrongly, and cannot by itself guard reference/query divergence.** Closed as far as it can be by cross-checking `Identify`'s reported distance against an independent raw-scan distance (catches the mutation: expected 17, actual 0). The real guards on divergence remain B1b's goldens and B2's new witness — which is what CLAUDE.md's "golden hashes **plus** a round-trip test" already implies; the risk was reading the round-trip gate as doing more than it does.
+
+  **Query-hash witness (orchestrator addition to the brief).** 50 query-side 1024-bit hashes for a fixed seed, committed as text. **Its trait choice is better than the brief asked for:** rather than copying B1b's `WindowsOnly`, it reads the runtime architecture and compares against the witness's recorded `measuredOn` — same architecture asserts bit-exact, foreign architecture skips with the measured bit-difference count in the message. That matters concretely: `scripts/lorefetch.sh` filters `WindowsOnly` out on macOS, so the goldens are *not* run in a script-driven Mac run, while the witness is. **Orchestrator chaos confirms it:** mutating `QueryTransform`'s `BGR2GRAY` to `RGB2GRAY` is caught by exactly two tests — a golden and the witness — and the witness is the one that survives the macOS filter.
+- [x] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+
+  *Done 2026-09-22, Mac, `stream/b` `65b9e54`. StreamB 197 → **213**; Integration unchanged 143/8; 0 warnings. `lab crop-scale`, `CropScaleTransform`, and the curve + findings in `docs/accuracy.md`. **`HashCardIdentifier`, `ContourCardDetector` and `PerspectiveRectifier` are provably untouched** (verified by an empty diff against those paths).*
+
+  **The curve — 150 non-land renders, isotropic crop error, full 48,750-artwork index:**
+
+  | Crop error | Rank-1 rate |
+  |---|---|
+  | ±0–4% | **98–100%** |
+  | +6% | 75.3% |
+  | +8% | 31.3% |
+
+  **Rank-1 starts breaking at ~5–6% crop error**, and the outset direction degrades roughly symmetrically. That is the number the package existed to produce.
+
+  **`plains_black`'s real inset is 10.1% width / 6.9% height** — measured from actual detector geometry against the `plains_white`/`plains_brown` ground truth, and **worse than B5b's by-eye "5% / 3–4%" estimate**. So the observed failure sits well past the tolerance, which explains the confident wrong match. A compensating correction at −8% to −10% **recovers Plains to rank 1** (distance 221); −3% and −5% are insufficient, so the fraction has to be in the right neighbourhood rather than merely nonzero. Note the doc's own caveat: crop error alone was **not** sufficient to produce a wrong match in the synthetic population, so `plains_black` is crop error *compounding* with black-on-black contrast loss, not crop error by itself.
+
+  **DECISION: DEFERRED to after B6, deliberately — not "no".** The 3-scale sweep works and is safe (0/150 false positives on well-framed queries, negligible margin cost) but costs **~6×: 53 ms → 295 ms for a 9-card cohort**, against B3b's 50 ms soft budget — which the *baseline* already exceeds on this Mac (the PC measured 28–35 ms, so the budget comparison belongs on win-x64). The implementer correctly hit the brief's stop condition and changed no production code.
+
+  **Why deferring is right rather than lazy:** B5c measured 150 *synthetic* crops plus exactly **one** real failing frame. What decides the fix is how often real captures actually exceed 5% inset, and H3's corpus supplies that — 30 real frames across three mats. If insets only appear on dark mats with black-bordered cards, then "use a light mat", documented with numbers, is a **zero-cost** fix and the honest one. If light mats inset too, the sweep earns its cost.
+
+  **Sequencing that keeps B6's number honest:** run B6 **without** the sweep first and record that figure; only then decide. If the sweep is adopted, re-measure and report **both** numbers. Choosing an architecture from corpus failure rates is mild fitting to the test set, and reporting both is what keeps the headline accuracy meaningful.
+
+  **The four options on the table, for the record:**
+  1. **Light mat + documented limitation** — zero cost, matches the user's own stated fallback, and B5c's data supports it precisely.
+  2. **Unconditional 3-scale sweep** — 6× query cost. Worth noting 295 ms is *inside* the interaction budget: the 50 ms figure was a soft budget proving brute force beats the rejected early-rejection optimisation, not a UI requirement, and auto mode already waits a **500 ms** count-gated settle. Identification runs once per cohort on Space, not per frame.
+  3. **Conditional sweep**, escalating only when confidence is low — ~1× typical cost. ⚠ Needs a contract ruling first: CLAUDE.md rejected upstream's early rejection as "threshold-keyed and inadmissible", and although a conditional *escalation* never prunes or reorders (so it is not the same defect), it does make identifier behaviour threshold-dependent when `ICardIdentifier` says thresholds belong to the pipeline.
+  4. **Detector fix** — find the true outer edge on a dark mat. Addresses the cause rather than the symptom, but is a materially harder vision problem and was not attempted.
+
+  **Contingent cleanup:** `CropScaleTransform` (93 lines) sits in `Core/Imaging`, so it ships in the product assembly although it is diagnostic-only. That placement is correct *if* option 2 or 3 is adopted, since the sweep would live in `HashCardIdentifier` and use it. **If the sweep is rejected, move it to `Lab`.**
 - [ ] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
   - the margin distribution
