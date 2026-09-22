@@ -178,6 +178,7 @@ v0.1.0 ships with modern-frame English cards (single-faced, non-foil), captures 
 | Stretch | What it needs |
 |---|---|
 | **"Worth sleeving" flag** | Detailed below. It needs a price column in the index, but not printing detection, which is why it's first. |
+| "Update card data" in the app | New sets need a new index. The Lab can already build one (`bulk` → `images` → `build-index`), but it's a developer tool that isn't shipped. Ship it with the app, or add the command to the app, so the index is always built by the same hashing code the app runs. The lighter alternative: publish just a new `cards.lfidx` per set, if the app loads the index from a file and rejects one built by a different hashing version. |
 | Foils | Polarized or diffuse light. Glare defeats the hash (Risk 6). |
 | Set and printing | OCR of the collector line and a lower mount (the v2 path under *Identification*). This unlocks exact prices, ManaBox and other export targets that need a set. |
 | Double-faced cards | Per-face images. The 3,440 objects without a top-level `image_uris` are skipped today. |
