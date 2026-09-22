@@ -170,6 +170,87 @@ public class QuadOrderingTests
         Assert.Equal(expected, result);
     }
 
+    // -- Real-capture regression: same-row Y jitter must not scramble X order ---
+
+    /// **Real-capture regression.** Centroids and quad size for the first
+    /// row are lifted directly from a real captured 3x3 frame, as pinned in
+    /// stream B's independently-built inference at
+    /// `Tests/StreamB/Accuracy/SlotMapperTests.cs`
+    /// (`SortRowMajor_RealCapturedTopRowWithYJitter_StillOrdersByXAscending`):
+    /// three real detected centroids, (593,92), (839,99), (1109,96), each
+    /// ~216x303 px -- card size at the ~15in height that frame was shot at,
+    /// via CLAUDE.md's `px/inch = 1360/height_inches`. Y spans only 7 px
+    /// across the row, which is enough to put the rightmost card ahead of
+    /// the middle one under a strict `OrderBy(centroid Y).ThenBy(centroid X)`
+    /// -- exactly the naive algorithm `ReadingOrder`'s own doc comment warns
+    /// against. A synthetic grid with perfectly aligned rows (the tests
+    /// above) cannot catch this; it only shows up when same-row centroids
+    /// differ slightly in Y, which is every real frame. The second row
+    /// (same source, its own small per-card jitter) proves the fix holds
+    /// across more than one row, not just the one row pinned upstream.
+    [Fact]
+    public void ReadingOrder_RealCapturedRowsWithYJitter_OrdersLeftToRightThenTopToBottom()
+    {
+        var q1 = MakeQuad(593f, 92f, 216f, 303f);
+        var q2 = MakeQuad(839f, 99f, 216f, 303f);
+        var q3 = MakeQuad(1109f, 96f, 216f, 303f);
+        var q4 = MakeQuad(593f, 400f, 216f, 303f);
+        var q5 = MakeQuad(839f, 395f, 216f, 303f);
+        var q6 = MakeQuad(1109f, 410f, 216f, 303f);
+
+        var expected = new[] { q1, q2, q3, q4, q5, q6 };
+        var shuffled = Shuffle(expected, seed: 71);
+
+        var result = QuadOrdering.ReadingOrder(shuffled);
+
+        Assert.Equal(expected, result);
+    }
+
+    // -- Short row (one missing card) must not disturb the other rows -----
+
+    /// A single card missing from the MIDDLE row (index 4, the row's own
+    /// centre) must not shift row 1 or row 3's members, and the now
+    /// two-member middle row must not merge into a neighbouring row.
+    /// `ReadingOrder_PartialCaptureOf7Of9_KeepsRelativeOrder` above drops
+    /// one card from the first row and one from the last, leaving the
+    /// middle row always full -- it never exercises a short MIDDLE row, so
+    /// this test fills that gap. Mirrors stream B's own
+    /// `SlotMapperTests.SortRowMajor_ShortRowMissingOneMember_DoesNotShiftOtherRows`,
+    /// pinned here directly against `ReadingOrder`'s algorithm rather than
+    /// `SlotMapper`'s.
+    [Fact]
+    public void ReadingOrder_ShortMiddleRow_KeepsRelativeOrder()
+    {
+        var rowMajor = BuildGrid(rows: 3, cols: 3, gap: 10f);
+
+        // Drop index 4 -- the middle row's own middle card.
+        var remainingIndices = new[] { 0, 1, 2, 3, 5, 6, 7, 8 };
+        var expected = remainingIndices.Select(i => rowMajor[i]).ToList();
+        var shuffled = Shuffle(expected, seed: 17);
+
+        var result = QuadOrdering.ReadingOrder(shuffled);
+
+        Assert.Equal(expected, result);
+    }
+
+    /// Same shape of gap, but in the FIRST row instead of the middle --
+    /// proves a short row is handled at either end of the grid, not only
+    /// when it has a full row on both sides to anchor against.
+    [Fact]
+    public void ReadingOrder_ShortFirstRow_KeepsRelativeOrder()
+    {
+        var rowMajor = BuildGrid(rows: 3, cols: 3, gap: 10f);
+
+        // Drop index 1 -- the first row's own middle card.
+        var remainingIndices = new[] { 0, 2, 3, 4, 5, 6, 7, 8 };
+        var expected = remainingIndices.Select(i => rowMajor[i]).ToList();
+        var shuffled = Shuffle(expected, seed: 23);
+
+        var result = QuadOrdering.ReadingOrder(shuffled);
+
+        Assert.Equal(expected, result);
+    }
+
     // -- Rotated portrait geometry ------------------------------------------
 
     [Fact]
