@@ -24,7 +24,11 @@ namespace LoreFetch.Tests.StreamB;
 ///   is that upright and flipped hash to different values.
 ///
 /// Chaos-tested per docs/TESTING.md "Standing practice" -- see the B3b
-/// hand-off report for the five mutations exercised and their outcomes.
+/// hand-off reports for the seven mutations exercised across this file's
+/// history (dropped orientation search, no per-oracle dedup, worst-instead
+/// of-best art, an early-rejection threshold, a truncated word sum, a
+/// reversed tie-break, and the bounded top-K buffer comparing against its
+/// own best slot instead of its worst) and their outcomes.
 public class HashCardIdentifierTests
 {
     private const int CardWidth = RectifiedCard.CanonicalWidth;
@@ -112,6 +116,121 @@ public class HashCardIdentifierTests
 
         Assert.Equal(["oracle-T0", "oracle-T1"], result.Select(c => c.OracleId));
         Assert.Equal([40, 40], result.Select(c => c.Distance));
+    }
+
+    /// Targets a specific bug shape in the bounded top-K buffer: comparing
+    /// a new candidate against the buffer's BEST kept slot instead of its
+    /// WORST. Five oracles in table order at distances [100, 90, 80, 20,
+    /// 50], `maxCandidates: 3`. The buffer fills with the first three
+    /// (100, 90, 80) -- all "poor" relative to what arrives later. The
+    /// fourth (20) correctly displaces the worst (100). The fifth (50) is
+    /// worse than the buffer's best (20) but better than its current worst
+    /// (90) -- a correct implementation displaces 90; a "compare against
+    /// best" implementation rejects 50 outright, silently losing a
+    /// candidate that belongs in the top 3.
+    [Fact]
+    public void Identify_MidQualityCandidateArrivingAfterBufferFills_DisplacesTheWorstKept_NotRejectedAgainstTheBest()
+    {
+        var baseHash = SymmetricQueryHash(seed: 1012);
+
+        var entries = new List<HashIndexEntry>
+        {
+            MakeEntry("oracle-A100", "Card A100", "art-A100", HashFixtures.FlipFirstNBits(baseHash, 100)),
+            MakeEntry("oracle-B90", "Card B90", "art-B90", HashFixtures.FlipFirstNBits(baseHash, 90)),
+            MakeEntry("oracle-C80", "Card C80", "art-C80", HashFixtures.FlipFirstNBits(baseHash, 80)),
+            MakeEntry("oracle-D20", "Card D20", "art-D20", HashFixtures.FlipFirstNBits(baseHash, 20)),
+            MakeEntry("oracle-E50", "Card E50", "art-E50", HashFixtures.FlipFirstNBits(baseHash, 50)),
+        };
+        var identifier = BuildIdentifier(entries);
+
+        var result = identifier.Identify(SymmetricQueryCard(seed: 1012), maxCandidates: 3);
+
+        Assert.Equal(["oracle-D20", "oracle-E50", "oracle-C80"], result.Select(c => c.OracleId));
+        Assert.Equal([20, 50, 80], result.Select(c => c.Distance));
+    }
+
+    /// Property test: `Identify` against a from-scratch naive reference for
+    /// many random oracles, many arts per oracle (so dedup and "best art"
+    /// selection are both exercised) and several `maxCandidates` values,
+    /// including one bigger than the oracle count. The reference is
+    /// deliberately NOT the production code path -- it recomputes best-
+    /// per-oracle distance by brute force in the test and does a plain
+    /// full sort by (Distance, OracleIndex) -- so this test only agrees
+    /// with `HashCardIdentifier` if the bounded top-K selection actually
+    /// picks the same set a full sort would. Random entries (not bit-flips
+    /// off a known base) land near the ~512-bit binomial peak of a 1024-bit
+    /// space, which concentrates a few hundred samples into a much smaller
+    /// range of integer distances -- ties across DIFFERENT oracles are
+    /// therefore common without needing to force them, exercising the tie-
+    /// break at scale rather than only in the single hand-built case above.
+    [Fact]
+    public void Identify_MatchesNaiveFullSortReference_AcrossManyRandomOraclesAndCandidateCounts()
+    {
+        const int oracleCount = 300;
+        const int maxArtsPerOracle = 4;
+        var random = new Random(20260922);
+
+        var queryHash = SymmetricQueryHash(seed: 20260922);
+        var card = SymmetricQueryCard(seed: 20260922);
+
+        var entries = new List<HashIndexEntry>();
+        for (var oracleIndex = 0; oracleIndex < oracleCount; oracleIndex++)
+        {
+            var oracleId = $"oracle-{oracleIndex:D4}";
+            var oracleName = $"Random Card {oracleIndex}";
+            var artCount = random.Next(1, maxArtsPerOracle + 1);
+
+            for (var art = 0; art < artCount; art++)
+            {
+                var words = new ulong[CardHash.WordCount];
+                for (var w = 0; w < words.Length; w++)
+                {
+                    words[w] = unchecked((ulong)random.NextInt64());
+                }
+
+                entries.Add(new HashIndexEntry(
+                    new CardHash(words), oracleId, oracleName, $"art-{oracleIndex:D4}-{art}", IsBasicLand: false));
+            }
+        }
+
+        var identifier = BuildIdentifier(entries);
+
+        // Naive reference, computed independently of HashCardIdentifier:
+        // best (distance, artwork) per oracle by brute force, oracle-table
+        // index by first-seen order (matching HashFixtures.BuildIndexData),
+        // then a plain full sort.
+        var bestByOracle = new Dictionary<string, (int Distance, string ArtworkId)>(StringComparer.Ordinal);
+        var oracleTableIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            if (!oracleTableIndex.ContainsKey(entry.OracleId))
+            {
+                oracleTableIndex[entry.OracleId] = oracleTableIndex.Count;
+            }
+
+            var distance = entry.Hash.HammingDistance(queryHash);
+            if (!bestByOracle.TryGetValue(entry.OracleId, out var current) || distance < current.Distance)
+            {
+                bestByOracle[entry.OracleId] = (distance, entry.ArtworkId);
+            }
+        }
+
+        var naiveRanked = bestByOracle
+            .Select(kv => (OracleId: kv.Key, kv.Value.Distance, kv.Value.ArtworkId, OracleIndex: oracleTableIndex[kv.Key]))
+            .OrderBy(x => x.Distance)
+            .ThenBy(x => x.OracleIndex)
+            .ToList();
+
+        foreach (var maxCandidates in new[] { 1, 3, 9, oracleCount + 50 })
+        {
+            var expected = naiveRanked.Take(maxCandidates).ToList();
+            var actual = identifier.Identify(card, maxCandidates);
+
+            Assert.Equal(expected.Count, actual.Count);
+            Assert.Equal(expected.Select(x => x.OracleId), actual.Select(c => c.OracleId));
+            Assert.Equal(expected.Select(x => x.Distance), actual.Select(c => c.Distance));
+            Assert.Equal(expected.Select(x => x.ArtworkId), actual.Select(c => c.ArtworkId));
+        }
     }
 
     // ---- Distinctness -------------------------------------------------
