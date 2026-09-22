@@ -88,7 +88,7 @@ scripts/lorefetch.sh test
 
 ## Stream A — UI
 
-The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a count selector (1 / 3 / 9) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented in [Stream D](#stream-d--collection--export).
+The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a layout selector (1 card / 3 × 1 / 3 × 3) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented in [Stream D](#stream-d--collection--export).
 
 Every interaction has a keyboard path, and the happy path never touches the mouse:
 
