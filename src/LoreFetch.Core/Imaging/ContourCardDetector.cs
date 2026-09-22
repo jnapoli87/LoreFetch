@@ -115,6 +115,22 @@ public sealed record ContourDetectorOptions
     /// bridges small gaps in the Canny edge map before contour-finding.
     public int MorphCloseKernelSize { get; init; } = 5;
 
+    /// `findContours`'s retrieval mode. CLAUDE.md "Card detection" pins
+    /// `RETR_EXTERNAL` -- a settled decision, not renegotiated here -- so
+    /// the default MUST stay `RetrievalModes.External`. This knob exists
+    /// only to make the alternative (`RetrievalModes.List`, which also
+    /// returns nested/inner contours) measurable for the H1 "board outline
+    /// nests the nine cards" investigation; see
+    /// `LoreFetch.Lab RetrievalExperimentCommand` and docs/accuracy.md.
+    /// `List` is expected to raise false positives from a card's own inner
+    /// frame/art-box border re-detected as a second contour -- that is
+    /// exactly what `DedupeAndTakeTopN`'s nested-duplicate check exists to
+    /// suppress, and B5a recorded that check as dead code under
+    /// `External` because `External` structurally never returns a nested
+    /// contour in the first place. Switching to `List` is the one thing
+    /// that can actually exercise it end-to-end.
+    public RetrievalModes RetrievalMode { get; init; } = RetrievalModes.External;
+
     /// `approxPolyDP`'s epsilon, as a fraction of the contour's own
     /// perimeter -- the standard scale-independent way to pick it.
     public double ApproxPolyEpsilonFraction { get; init; } = 0.02;
@@ -254,7 +270,7 @@ public sealed class ContourCardDetector : ICardDetector
         using var closed = new Mat();
         Cv2.MorphologyEx(edges, closed, MorphTypes.Close, kernel);
 
-        Cv2.FindContours(closed, out var contours, out _, RetrievalModes.External, ContourApproximationModes.ApproxSimple);
+        Cv2.FindContours(closed, out var contours, out _, _options.RetrievalMode, ContourApproximationModes.ApproxSimple);
 
         var rejected = new List<RejectedContour>();
         var candidates = new List<CardQuad>();

@@ -26,6 +26,7 @@ return await (command switch
     "round-trip-gate" => RoundTripGateCommand.RunAsync(rest),
     "query-hash-witness" => QueryHashWitnessCommand.RunAsync(rest),
     "crop-scale" => CropScaleCommand.RunAsync(rest),
+    "retrieval-experiment" => RetrievalExperimentCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -110,5 +111,12 @@ static void PrintUsage()
                                    scale error over sampled non-land
                                    renders and reports the rank-1 rate and
                                    distance/margin distributions per level.
+          retrieval-experiment dump-contours <dir>
+          retrieval-experiment run <dir> [--index <path>]
+                                   H1/H2/H3 real-frame investigation: the
+                                   RETR_EXTERNAL/RETR_LIST x full/cropped
+                                   2x2 sweep over test-images/a_corpus/,
+                                   plus the identify pass on the best
+                                   cell. See docs/accuracy.md.
         """);
 }
