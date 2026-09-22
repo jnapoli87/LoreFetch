@@ -46,6 +46,21 @@
 #
 # This runs the real capture only on the Windows PC (the C920 is attached
 # there); --help and --dry-run work anywhere.
+#
+# Height/layout are cross-checked against each other, not just against
+# their own allowed sets: the C920's frame at height h covers only
+# (1920/ppi) x (1080/ppi) inches (ppi = 1360/h), so a 3x3 grid's 7.7"x10.7"
+# footprint does not fit at every height on HEIGHTS. A combination whose
+# margin is negative is refused outright, and one under 0.5" is filed with
+# a warning — the frame looks fine either way, which is exactly what makes
+# a bad fit a silent-corruption risk rather than an obvious one.
+#
+# NOT implemented (follow-up once stream/b merges): a cross-check of the
+# REQUESTED height against the frame's own content, by deriving the true
+# height from a detected card's pixel width (height = 1360 * 2.5 /
+# card_pixel_width). That needs Lab's `detect` command, which lives on
+# stream/b and has not merged to main — this script only checks the
+# requested height against geometry, never against what the camera saw.
 
 set -eu
 
@@ -63,6 +78,11 @@ HEIGHTS="8 10 12 14 20"
 LAYOUTS="1 3 9"
 MATS="light mid dark"
 RUNGS="land normal stretch"
+
+# 9.75" is deliberately absent from HEIGHTS: it is where a 3x3 grid FIRST
+# fits (0.04" of margin — one millimetre), a geometric floor rather than a
+# usable operating height. The project's recorded operating height is
+# moving to 12" (1.83" of margin) — see compute_fit below.
 
 STREAMC_CSPROJ="$REPO/Tests/StreamC/LoreFetch.Tests.StreamC.csproj"
 # Narrow enough to select exactly ONE test: the single frame-saving Hardware
@@ -95,6 +115,37 @@ native_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
 
+# Does this height/layout combination physically fit the C920's frame?
+# ppi = 1360/h (CLAUDE.md's "Geometry" table); the frame then covers
+# 1920/ppi x 1080/ppi inches, long axis x short axis. Footprints below are
+# short x long, from the same table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7,
+# 3x3 grid 7.7x10.7). The margin is the TIGHTER of the two axes — a grid
+# can lose on either one — and awk does the arithmetic because 1360/h is
+# fractional and this is /bin/sh, where integer arithmetic would round it
+# away entirely (e.g. 1360/8 truncating to a different answer than 170).
+#
+# Prints "<STATUS> <margin> <axis> <frame_short> <frame_long> <foot_short> <foot_long>"
+# — STATUS is FAIL (margin < 0), WARN (0 <= margin < 0.5) or OK; <axis> is
+# "short" or "long", whichever axis the margin came from.
+compute_fit() {  # $1 = height (inches), $2 = layout
+  h=$1
+  case "$2" in
+    1) fs=2.5;  fl=3.5 ;;
+    3) fs=2.5;  fl=10.7 ;;
+    9) fs=7.7;  fl=10.7 ;;
+  esac
+  awk -v h="$h" -v fs="$fs" -v fl="$fl" 'BEGIN {
+    frame_short = 1080 * h / 1360
+    frame_long  = 1920 * h / 1360
+    margin_short = frame_short - fs
+    margin_long  = frame_long  - fl
+    if (margin_short < margin_long) { margin = margin_short; axis = "short" }
+    else                            { margin = margin_long;  axis = "long" }
+    status = (margin < 0) ? "FAIL" : (margin < 0.5) ? "WARN" : "OK"
+    printf "%s %.2f %s %.2f %.2f %.2f %.2f\n", status, margin, axis, frame_short, frame_long, fs, fl
+  }'
+}
+
 # --------------------------------------------------------------------------
 # Arguments
 # --------------------------------------------------------------------------
@@ -107,7 +158,7 @@ while [ $# -gt 0 ]; do
     --card)   shift; [ $# -gt 0 ] || die "--card needs a value"; add_card "$1" ;;
     --force)   FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '3,48p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         die "unknown argument: $1  (try --help)" ;;
   esac
   shift
@@ -128,6 +179,26 @@ in_set "$HEIGHT" "$HEIGHTS" || die "invalid --height '$HEIGHT' (expected one of:
 in_set "$LAYOUT" "$LAYOUTS" || die "invalid --layout '$LAYOUT' (expected one of: $LAYOUTS)"
 in_set "$MAT" "$MATS"       || die "invalid --mat '$MAT' (expected one of: $MATS)"
 in_set "$RUNG" "$RUNGS"     || die "invalid --rung '$RUNG' (expected one of: $RUNGS)"
+
+# Height and layout are also validated AGAINST EACH OTHER: a layout can be
+# geometrically too big for a height even though both are individually
+# allowed (a 3x3 grid does not fit the C920's frame at every height on
+# HEIGHTS). A frame that is too small still looks like a normal photo — it
+# just crops cards off the edge — which is exactly the silent-corruption
+# failure this whole script exists to prevent, so a negative margin is
+# refused outright rather than filed and discovered later in B6.
+fit=$(compute_fit "$HEIGHT" "$LAYOUT")
+set -- $fit
+FIT_STATUS=$1; FIT_MARGIN=$2; FIT_AXIS=$3; FIT_FRAME_SHORT=$4; FIT_FRAME_LONG=$5; FIT_FOOT_SHORT=$6; FIT_FOOT_LONG=$7
+
+if [ "$FIT_STATUS" = FAIL ]; then
+  die "height $HEIGHT\" cannot fit layout $LAYOUT: needs ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\" (short x long), the frame at ${HEIGHT}\" only covers ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" — short by ${FIT_MARGIN}\" on the $FIT_AXIS axis"
+fi
+FIT_WARNING=""
+if [ "$FIT_STATUS" = WARN ]; then
+  FIT_WARNING="margin is only ${FIT_MARGIN}\" on the $FIT_AXIS axis — no tolerance for the mat shifting"
+  note "WARNING: $FIT_WARNING"
+fi
 
 # Split CARDS on newline only, so spaces inside a card name (e.g. "Birds of
 # Paradise") stay part of one slot. `set -f` blocks pathname expansion on
@@ -159,12 +230,12 @@ for c in "$@"; do
   if [ -z "$slug_all" ]; then slug_all=$s; else slug_all="${slug_all}_${s}"; fi
 done
 
-# .png, not .jpg: HardwareCameraTests saves the decoded BGR frame as a PNG.
-# test-images/README.md's fixture tree names .jpg — that's a spec mismatch
-# to raise with the orchestrator, not something to paper over here by
-# re-encoding. Re-encoding a PNG to JPEG would stack a second generation of
-# lossy compression on top of the camera's own MJPG artifacts, which are
-# already baked into the decoded pixels.
+# .png, not .jpg: HardwareCameraTests saves the decoded BGR frame as a PNG,
+# and that lossless dump is the faithful artifact — the camera's own MJPG
+# artifacts are already baked into those pixels, so re-encoding to JPEG
+# would stack a second lossy generation on top for no reason. Ruled by the
+# orchestrator 2026-09-22; test-images/README.md's .jpg is being corrected
+# separately (out of this script's scope).
 FILENAME="${HEIGHT}in-L${LAYOUT}-${MAT}-${RUNG}-${slug_all}.png"
 DEST_DIR="$REPO/test-images/fixtures/${HEIGHT}in/${LAYOUT}"
 DEST_FILE="$DEST_DIR/$FILENAME"
@@ -184,6 +255,8 @@ done
 if [ "$DRY_RUN" -eq 1 ]; then
   say "Dry run — nothing touched"
   note "destination : $DEST_FILE"
+  note "fit margin  : ${FIT_MARGIN}\" on the $FIT_AXIS axis (frame ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" vs footprint ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\", short x long)"
+  [ -n "$FIT_WARNING" ] && note "WARNING: $FIT_WARNING"
   note "would refuse to overwrite unless --force (existing-file check skipped in --dry-run)"
   note "ground-truth rows to append to $GT_CSV:"
   printf '%s\n' "$ROWS" | sed 's/^/      /'
@@ -262,5 +335,6 @@ printf '%s\n' "$ROWS" >> "$GT_CSV"
 
 say "Filed"
 note "$CARD_COUNT card(s), height=${HEIGHT}in layout=$LAYOUT mat=$MAT rung=$RUNG"
+note "fit margin  : ${FIT_MARGIN}\" on the $FIT_AXIS axis (frame ${FIT_FRAME_SHORT}\"x${FIT_FRAME_LONG}\" vs footprint ${FIT_FOOT_SHORT}\"x${FIT_FOOT_LONG}\", short x long)"
 note "frame -> ${DEST_FILE#"$REPO"/}"
 note "ground-truth -> ${GT_CSV#"$REPO"/} (+$CARD_COUNT row(s))"
