@@ -402,6 +402,104 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Machine split — ruled 2026-09-22 (user)
+
+**At the start of each session the user says which machine it is on, and whether they have overridden this split for that session.** Do not infer the machine from paths or from this table; ask if the user has not said. **An override from the user beats this table** for that session. If the user says which machine but gives no override, this table decides the work.
+
+| Machine | Owns | Why |
+|---|---|---|
+| **Windows PC** | **All of stream B** (B7, B2, B5c, B6, B8) · **C2** (FlashCap shim, tested against the real camera) · **C4** · **A10** · **I6** · **E1, E2** | B needs the 5.1 GB image cache, which lives only here. The committed index must be built on win-x64. Every committed threshold (B2's `referenceFloor`, B6's `goodDistance`/`okDistance`) must be measured on win-x64, because `INTER_AREA` is not bit-exact on ARM64 and that includes the query side's 32×32 resize. The C920 is attached here, and A10, I6 and the E items are win-x64 runs by nature (see *Platform switch*). |
+| **Mac** | **A4–A9** · **D4, D6** · **C3** | All are built and tested against fakes or plain files, with no camera, image cache or measured threshold involved. |
+| **Either** (the user's hands) | D5 (the real Moxfield import), H items | These need the user, not a particular machine. |
+
+Rules that follow from the split:
+1. **Tick only your own machine's items, and pull `main` before committing a tick.** Both machines tick in this file. The checklist is split by stream, so pull-then-commit keeps rebases trivial. Never resolve a conflict in this file by dropping the other machine's lines.
+2. **Work moves between machines only through GitHub**, so every hand-off needs a push, and every push needs the user's approval (§3). Push a stream branch when its machine's session ends.
+3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
+4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
+
+### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
+
+**Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
+
+**State.** B4a, B4b, B4c, B4d, B5a and B5b are ticked. `stream/b` is at `9679148`, **not pushed**, with a clean worktree. StreamB has 163 tests; Integration is 143 passed / 8 skipped / 151. `main` holds the ticks. **The full index is committed on `stream/b`** (`data/index/cards.lfidx`, SHA `6495314e…`), so it reaches `main` only when B merges. Streams A, C and D are untouched since the first session.
+
+**Next for B, in order:** **B7** (synthetic generator) → **B2** (round-trip gate) → **B5c** (crop-scale curve) → B6, which is gated on H3 → B8. B2 is **unblocked now**: the cache and the committed index both exist on this PC. B7 before B2 is only a suggestion; they are independent. B5c now has concrete evidence to start from (B5b's note). It should measure the floor against the inset *and* decide whether the fix belongs in the detector (finding the outer edge) or in the identifier (a scale sweep).
+
+**Where things live on this PC. Everything below is outside git by design.**
+
+| Path | Contents |
+|---|---|
+| `C:\LoreFetchData\scryfall-cache\` | 48,750 `normal` renders, `<ArtworkId>.jpg`, 5.1 GB |
+| `C:\LoreFetchData\index-out\` | `cards.lfidx` (the committed one), `subset-5000.lfidx`, `.build.json` sidecars |
+| `C:\LoreFetchData\detect-out\` | B5a/B5b overlays and rectified crops |
+| `.claude\worktrees\stream-b\scryfall-bulk\` | bulk `.jsonl.gz` files and `filtered-artworks.jsonl`, the manifest (gitignored) |
+| `.claude\worktrees\stream-b\test-images\ad-hoc\` | **a copy** of main's 12 ad-hoc frames (gitignored). Tests resolve `test-images/` from the checkout they run in, so every worktree needs its own copy. |
+
+**What this session learned**
+
+1. **The image pull is minutes, not hours.** 48,750 images took 10.7 min (76/s, 0 failures), and building the index takes 40 s. Rebuilding the index is cheap, which makes "rebuild on any transform change" a practical rule rather than a threat.
+2. **Lab finds the repo by walking up from its own exe or the cwd.** A build copied outside the repo cannot run `bulk` or `images` without explicit paths. B4c fixed the crash. Run Lab from the worktree's `bin/`, and **do not rebuild the Lab while a long Lab run is using it**: Windows locks the dll, and the implementer's build fails.
+3. **"Exactly one detection" is a weak real-capture assertion.** It passed on Plains on black while the quad sat on the wrong edge, and the result was a confident wrong identification. Only looking at the overlay and crop caught it. For real-capture checks, look at the pictures. B5b's `identify` table is the better check.
+4. **Chaos cases the brief named left tests green 3 times in B5a** (min-area, ordering, dedupe), and the implementer strengthened each. The escape-valve clause is still earning its place.
+5. **B3b's 50 ms timing test soft-skips** when the full suite runs alongside CPU-heavy tests. Read that number only from an isolated run.
+6. **`core.autocrlf` is on and there is no `.gitattributes`.** `cards.lfidx` survived byte-identical only because git's NUL-byte heuristic flags it as binary. Add `*.lfidx binary` on `main` (a `main`-only file, not frozen) before the index merges.
+7. **The user asked whether a white mat without sleeves is best.** The answer given: it is the safest default for detection on this evidence (4/4 detected and correct), but it is not settled. Sol Ring on black gave the best distance of all (94). Black fails only when a card's border merges into the mat. With one sleeved card, sleeve and card cannot be separated. B6 on H3 decides.
+
+### Handoff — end of the B3b session, 2026-09-22, Windows PC
+
+**The two older handoffs below still apply.** State: B3b ticked. `stream/b` is at `1b4f8d3`, **not pushed**, with a clean worktree. `main` holds this tick. Every other stream is untouched since the first session. **Next: B4a**, then B4b → B4c, and start B4d's full image pull as early as possible so it runs unattended.
+
+B4a brief notes, already worked out, so the brief can be written straight from them:
+- **Lab has only a stub `Program.cs`.** B4a adds the command dispatch (hand-rolled argument parsing; no new package, since `.csproj`s are frozen) and uses `System.Text.Json` for the JSONL.
+- **The cascade applied is stream-b §B4's table through the set-type step:** 48,713 arts over 33,578 oracle ids, which matches CLAUDE.md's index count. The `frame == "2015"` row (31,684) is **printed as information only, not applied**: CLAUDE.md's index figure excludes it, and older-frame cards identify just as well. Print the count after every step, and skip entries without top-level `image_uris` explicitly, with that count shown too.
+- **Output:** a filtered manifest (id, oracle_id, name, type_line, `image_uris.normal`, `IsBasicLand` = `type_line` starts with `Basic Land`) for B4b and B4c to consume. The downloads go in gitignored `scryfall-bulk/`. The cache path is a parameter.
+- **The unit test's JSONL sample is synthetic:** records shaped like Scryfall's schema, with made-up names and no real oracle text. It covers one record per cascade branch, including a multi-faced object with no top-level `image_uris`.
+- **Open question (single-printing fraction):** a separate `printings` subcommand over `default_cards`. It keys in-scope printings (English, has a `nonfoil` finish, single-faced, 2015 frame) by `illustration_id` and reports the fraction of in-scope arts with exactly one. Report the exact filter used alongside the number.
+- The standard brief additions apply: quote the test summary lines verbatim; name the chaos cases (e.g. drop the `image_uris` skip, which should crash or miscount; invert the `lang` filter); and rebuild rather than `--no-build` when chaos-testing.
+
+### Per-project READMEs — ruled 2026-09-22
+
+Each of the nine projects has a `README.md` on `main` (`b0a295b`) that holds **orientation only**: purpose, owner, dependency rules, freeze, how to run its tests, and links into `docs/`. **Streams do not edit these files mid-stream.** `Core`'s README is shared by A, B and D, so concurrent edits would be exactly the multi-way conflict the freeze exists to prevent. Each stream fills in the "Internals" line of its own projects' READMEs **at its done-when step** (A10, B8, C4, D6), next to the root README section it already owes. The same step flips its "(not yet on `main`)" markers in `Core`'s folder map.
+
+### Handoff — end of the first stream session, 2026-09-21 ~23:55, Windows PC
+
+**Read this first; the S0.8 handoff below is older and still applies.** The checkboxes are the truth. This section holds only what the session learned that is not already recorded against an item.
+
+#### State
+
+- **13 packages ticked:** A0–A3, B1a, B1b, B3a, C1a–C1c, D1–D3. Each one was independently verified (§0 steps plus one orchestrator chaos case) before its tick.
+- **Everything is pushed:** `main` at `50c1214` with CI green on both legs, and `stream/a`–`stream/d` on GitHub. No stream is merged: none has finished its list, which the merge gate requires. **Stream code has only been proven on this PC**; CI runs on `main` alone, so the macOS leg first sees stream code at each merge.
+- **Worktrees on this PC** (`.claude/worktrees/stream-<x>`) are clean, each at its pushed branch tip. The stale `agent-arch-review-plan-f0e4ed` worktree holds pre-rewrite history and can be removed.
+- **Next per stream:** A4 · **B3b** · C2 · D4. Remaining: 25 stream packages, 9 integration/endgame, 4 human items.
+
+#### Next session: stream B, solo, on this PC
+
+Stream B is the critical path: about 12 serial packages, plus B4d's multi-hour image pull. This PC is the right machine, because B1b's goldens, B4d's index and every golden run are win-x64 by nature.
+
+- **Order:** B3b (the identifier, over the B3a index), then **B4a → B4b → B4c, and start B4d's full run as early as possible** so the ~6 GB pull runs unattended while B5a/B5b/B7 proceed. The cache lives outside the repo at `C:\LoreFetchData\scryfall-cache`, passed as a parameter. If B4d looks too slow, the plan allows a labelled 5k-art subset.
+- **B4a carries an open question:** the single-printing fraction. It needs `default_cards` as well as `unique_artwork`.
+- **B6 is gated on H3,** the user's fixture corpus, which needs H1 (the printed mount). If H1 and H3 are late, B stops at B2/B5c.
+- **Working in the worktree:** `stream-b` is a linked worktree, so `guard-write.sh` freezes the contract surface there. A session working *from the main checkout* is **not** frozen when it writes main's own files, so keep every write inside `.claude/worktrees/stream-b/`. Build and test there with `.claude/worktrees/stream-b/scripts/lorefetch.sh test --no-pull`.
+- **Current B baseline:** 45 StreamB tests, 8 of them `WindowsOnly` goldens (37 run under the macOS filter). Integration 143 passed / 8 skipped / 151 total.
+
+#### What this session learned
+
+1. **Verification caught what implementer reports missed, every time it looked.** Without the orchestrator's own chaos case, these would all have been ticked:
+   - the trigger fired on a slowly moving hand (A0);
+   - a changed resize filter was invisible to B1a's 29 tests;
+   - a failed store commit's temp-file cleanup was untested, because `FileShare.None` fails before the write path (D3);
+   - the watchdog stall test passed at the wrong timeout (C1c);
+   - a preview data race tore frames (A2).
+   Keep breaking one invariant per package yourself. **The best chaos case is the one the brief didn't name.**
+2. **Smoke-launch anything with a UI thread.** A3's crash (`RequestAnimationFrame` called off the UI thread) and A1's temp-folder leak (Avalonia's `Shutdown()` never raises `ShutdownRequested`) were invisible to every unit test. Launch with `LOREFETCH_SMOKE_EXIT_MS=3000`, check exit 0 and the `%TEMP%` folder count, and never leave a window open.
+3. **A usage limit hit mid-chaos-test leaves the mutation in the code.** It happened twice: UTF-16 strings in B3a, and D3's cleanup call commented out. After any cutoff, grep every worktree for `chaos` and check `git diff` before resuming or committing.
+4. **Stop at package boundaries, not mid-edit.** Near a limit, say "finish and commit your current package, then stop" rather than killing agents. And have implementers commit as each step passes.
+5. **A fresh agent with a tight brief is usually cheaper than resuming.** Resumed contexts ran 200–300k tokens; a fresh brief pointing at the files and the specific defect was cheaper and did as well. Resume only when the agent holds mid-edit reasoning the repo doesn't.
+6. **Four parallel streams hit the usage limit** within about 5 hours, including review. Two at a time, or B plus one, is the sustainable width.
+7. **The orchestrator must not implement.** It drifted into writing a test once and was rightly stopped. Its own writes are the plan, the ticks, and reverting a known chaos mutation.
+8. **Stale wording to fix on `main` when convenient:** TESTING.md §Unit says movement beyond ε re-arms the trigger. The ruling in stream-a A0 says only a count change does (see A0's tick).
+
 ### Handoff — written at S0.8, 2026-09-21
 
 **Stream 0 is complete. G1 is the next gate, and P1 (the push + both CI legs green) is the only thing between here and forking.** This section exists because the orchestrating session that built Stream 0 ended here deliberately, and four things it learned live nowhere else. Everything else is already recorded against its own item — that was the point of writing findings down as they landed rather than saving them for a summary.
@@ -448,6 +546,15 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
 *Forked 2026-09-21 on the **Windows PC** (`C:\Repos\LoreFetch`), from `main` at `dc1530a`: `stream/a`–`stream/d` in `.claude/worktrees/stream-<x>`.* `guard-write.sh` was re-tested against the live worktrees with 10 synthetic payloads: denied `Abstractions`, `Scanning`, `Fakes`, `Tests/Integration`, a `.csproj` and `global.json` inside a worktree, plus a write outside the repo; allowed each stream's own scope and `main`'s contract files. **A harness pitfall worth knowing:** hand-escaping Windows paths into the JSON payload with `printf` yields invalid JSON, `jq` exits 5, and every case reads as *allow* — build the payload with `jq -n --arg` instead.
 
+**Paused 2026-09-21 (usage limit), on the Windows PC — resolved the same night; every row below is now ticked.** Kept as the record of the pause. **Found on resuming:** the limit had cut off two implementers mid-chaos-test with the mutation still in the code (UTF-16 strings in B3a, the temp-file cleanup commented out in D3). A limit hit mid-chaos can leave a planted bug in a worktree, so grep every worktree for chaos markers before resuming work there. Implementers were stopped mid-package, so worktrees hold **unverified** work — committed and uncommitted. Nothing is ticked that was not independently verified. To resume, verify each stream's commits since the last ticked one, have the uncommitted files finished (or discarded) by a fresh implementer, then continue:
+
+| Stream | Ticked | Committed, not yet verified | Uncommitted in the worktree | Next |
+|---|---|---|---|---|
+| A | A0, A1 | `d5b0b2d` temp-folder cleanup (the A1 follow-up) | — | A2 preview, A3 overlay (briefed, not started) |
+| B | B1a | `3d28cea` B1b goldens | B3a index format, partial: `src/LoreFetch.Core/Identification/`, `Tests/StreamB/HashIndexFileTests.cs` — **was mid-edit with a known missing brace** | verify B1b (chaos: `INTER_LINEAR` in step 5 must fail a golden), then finish B3a |
+| C | — | `f4a459f` C1a + `84979d7` fixups (0 warnings, bounded enumerator test), `1f8380b` C1b | C1c watchdog, partial: `FrameWatchdog.cs`, `FrameWatchdogTests.cs` | verify C1a/C1b, finish C1c |
+| D | D1, D2 | `690ecce` D3 | the D3 test-gap fix, partial: `CsvCollectionStoreWriteSequenceTests.cs` (a failed commit must leave no temp file; removing `TryDeleteBestEffort` currently leaves all 57 green) | finish the fix, tick D3, then D4 Moxfield |
+
 **Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
 
 ### Human track H (parallel, may start at G0)
@@ -476,21 +583,21 @@ Global overrides for every A brief:
 - Never set `IsDefault` on any button.
 - Status text comes from `IScanPipeline.SourceDescription`.
 
-- [ ] **A0** `AutoCaptureTrigger` in `Core/Trigger`:
+- [x] **A0** `AutoCaptureTrigger` in `Core/Trigger`: — *done 2026-09-21, `stream/a` `cdaf7f6` + fix `2cd4b05`. **Review found a real defect:** movement was measured frame-to-frame, so a card drifting 3 px/frame (under ε=4 each step, ~45 px over the window) fired the trigger on a moving hand. Now every snapshot is compared to the quads at the settle window's start, by max corner displacement (centroid is used only to match quads — a card rotated in place moves no centroid). "Scene breaks" = count ≠ expected, per stream-a; movement restarts the timer but never re-arms. TESTING.md §Unit still says "or movement beyond ε" re-arms — stale wording, superseded by stream-a A0. Consequence: swapping one card for another without lifting it does not re-fire auto mode; Space covers it. 14 tests; 6 chaos cases fail correctly.*
   - count-gated settle over `SettleMilliseconds`
   - movement epsilon is `MovementTolerancePixels`, matched by **nearest centroid**
   - "the scene breaks" means any count ≠ expected
   - re-arm only after the scene breaks, and `NotifyCaptured` suppresses re-firing
 
   Accept: every case in TESTING.md §Unit passes, including two near-equal-area quads swapping order without resetting the settle.
-- [ ] **A1** App shell and composition root:
+- [x] **A1** App shell and composition root: — *done 2026-09-21, `stream/a` `01b1fa6`. `AttachDeveloperTools` left uncalled: current Avalonia docs require portal licence credentials (paid tier). Smoke-launch via `LOREFETCH_SMOKE_EXIT_MS=3000` independently re-run: starts in Fakes mode against generated frames in `%TEMP%`, exits 0. A leaked temp folder per launch was found; the first fix (`d5b0b2d`) still leaked on the smoke path, because Avalonia's `Shutdown()` never raises `ShutdownRequested` (verified in the 12.1.2 source). The fix in `bcfe815` disposes on `Exit`, idempotently; re-verified 0 → 0 folders across a smoke launch.*
   - `AppComposition` offers a `Fakes` mode, with `Real` added at integration
   - it calls `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`, then `RunAsync` once
   - a status line
   - it resolves `AttachDeveloperTools` licensing in its first hour, and leaves it uncalled if the tool turns out to be paid
 
   Accept: the app launches against `FolderFrameSourceFactory`.
-- [ ] **A2** Preview:
+- [x] **A2** Preview: — *done 2026-09-21, `stream/a` `6b47e28` + fix `22d373c`. **Review found a data race:** the render callback took a reference to the one shared staging buffer and converted it after releasing the lock, so the pipeline thread could overwrite it mid-conversion (torn frames, hidden by the slow fake source). Now a three-slot `FrameHandoff` guarantees the producer never writes the slot being converted. Its 20,000-frame uniformity test fails 20/20 when the rotation is collapsed, and an independent chaos case (the consumer never marks its slot taken) fails 5/5. The ~15 fps gate used to drop a frame arriving inside the interval, so the last frame before a stall was never drawn; it now defers with a timer, still at most one render outstanding.*
   - one `WriteableBitmap` for the life of the app
   - lock, copy and dispose the lock every frame
   - BGR→BGRA conversion that switches on `Layout` and respects `RowBytes`
@@ -499,8 +606,11 @@ Global overrides for every A brief:
   - copy inside the `FrameProcessed` handler
 
   Accept: unit tests for the pure `PixelConvert` function (BGR24/BGRA32 with padded strides).
-- [ ] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry.
+- [x] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry. — *done 2026-09-21, `stream/a` `8d2c30c`. A pure `FrameToControlTransform` (scale = min, centred offsets) and `Polygon` children on a hit-test-invisible canvas. Independent chaos: swapping the X/Y offsets fails all 3 transform tests. **The smoke launch caught a crash no unit test could:** `RequestAnimationFrame` was called from the pipeline thread and asserts UI-thread access; the call is now marshalled through `Dispatcher.UIThread.Post`.*
 - [ ] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`.
+  **Added 2026-09-22 (user ruling):** a `LOREFETCH_FRAMES_DIR` environment variable. When set, Fakes mode's `FolderFrameSourceFactory` reads that folder instead of `DemoFrames`' generated rectangles, so the user's real captures in `test-images/ad-hoc/` (12 × 1920×1080, 4 cards × black/brown/white surfaces, ~12″) cycle through the preview. Unset → current behaviour. A missing or empty folder is a clear logged error, not a crash. The images are gitignored and never copied into the repo.
+
+**UI screenshots, standing from A4 onward (user ruling 2026-09-22).** The user wants to *see* the UI run, not only read test counts. Each of A4–A9 adds at least one `Avalonia.Headless` test that renders the window to a PNG — driving Space/Enter/Escape where the package is about keys — and writes it to the test's output directory, **never into the repo**. The orchestrator reads every PNG during verification and sends it to the user with `SendUserFile`. Where it helps, the orchestrator also smoke-launches the real exe with `LOREFETCH_FRAMES_DIR` and `LOREFETCH_SMOKE_EXIT_MS`, captures the screen, and sends that too. Neither replaces **A10**, which stays the user's hands-on keyboard run. The orchestrator has no desktop-control tools, so it cannot click a live window.
 - [ ] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state.
 - [ ] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
   - `AsyncPopulator`, filtering off the UI thread with `Take(20)`
@@ -547,29 +657,30 @@ Global overrides for every B brief:
 - The Scryfall image cache lives **outside the repo**: `C:\LoreFetchData\scryfall-cache` on the PC, `~/LoreFetchData/scryfall-cache` on the Mac. Take it as a parameter, never a constant.
 - Golden tests carry `[Trait("Category","WindowsOnly")]`.
 
-- [ ] **B1a** Hash core in `Core/Imaging`:
+- [x] **B1a** Hash core in `Core/Imaging`: — *done 2026-09-21, `stream/b` `d4badaf`. Measured on win-x64 (bound in brackets): two input scales 4 (≤100); brightness ±30 → 14/7 (≤60); gamma 1.3/0.7 → 17/19 (≤120); inverted 1002 (≥900). 29 tests; all 4 briefed chaos cases fail correctly. **Independent finding:** switching step 5 to `INTER_LINEAR` leaves all 29 green — the invariant tests cannot see an unintended filter change, which is exactly what B1b's goldens must catch; carried into B1b's brief as a named chaos case.*
   - `ReferenceTransform.Prepare`: GaussianBlur 3×3 with σX = σY = 1 given explicitly, then resize to 96 px wide `INTER_AREA`, then grayscale
   - `QueryTransform.Prepare`: grayscale only
   - the **single** shared `CardHasher.Hash(gray)` for steps 4–6: region `w×0.85w`, then 32×32 `INTER_AREA`, then per cell the **upper order statistic (33rd of 64)** with the tie-break `v == m && m > 128`, packed one `ulong` per cell
   - Hamming distance via `PopCount`
 
   Accept, as bounds rather than equalities: two input scales stay within a bound, brightness and gamma shifts stay within a bound, an inverted image lands at ≈1024, and the median and tie-break unit tests pass.
-- [ ] **B1b** Golden hashes: deterministic procedural inputs, with the expected hex committed after it is generated **on win-x64**. Accept: the test passes on Windows and is filtered out on macOS.
-- [ ] **B3a** Index format `cards.lfidx`:
+- [x] **B1b** Golden hashes: deterministic procedural inputs, with the expected hex committed after it is generated **on win-x64**. Accept: the test passes on Windows and is filtered out on macOS. — *done 2026-09-21, `stream/b` `3d28cea`. 8 goldens, traited `WindowsOnly`: 45 run unfiltered, 37 under `Category!=WindowsOnly`, which `scripts/lorefetch.sh` applies on the macOS leg. Independent chaos: switching step 5 to `INTER_LINEAR`, which B1a's 29 invariant tests could not see, now fails all 8 goldens.*
+- [x] **B3a** Index format `cards.lfidx`: — *done 2026-09-21, `stream/b` `96d0f52`. Magic `LFIX`, version and counts; a deduplicated oracle table; little-endian, length-prefixed UTF-8. Written by one implementer, which was cut off by the usage limit mid-chaos with a UTF-16 mutation left in the file (reverted by the orchestrator); finished and chaos-verified by a fresh one. 3 chaos cases fail correctly.*
   - header: magic, version, counts
   - per entry: 16 `ulong` hash values, an oracle index, the `ArtworkId`, and an `IsBasicLand` flag (V11)
   - an oracle name table
   - a reader and a writer
 
   Accept: round-trip tests on a synthetic index.
-- [ ] **B3b** `HashCardIdentifier`, which implements `ICardIdentifier` and `IOracleCatalog`:
+- [x] **B3b** `HashCardIdentifier`, which implements `ICardIdentifier` and `IOracleCatalog`: — *done 2026-09-22, `stream/b` `ed4d4f0`…`1b4f8d3`. Flat `ulong[]` scan, full 1024-bit distance, a 180° flip of the full grayscale card before the crop, best per oracle, and a bounded top-K with a `(Distance, oracle-table index)` tie-break. **Timing: 3.1–3.9 ms/query, ~28–35 ms for 9 queries** against a realistic 48,700-entry / 33,600-oracle fixture. **Review found the first version at 11.7 ms/query:** a full `Sort` of every oracle on each query took 8–12 ms of it, while the scan took ~2. StreamB now has 63 tests; all 6 briefed chaos cases fail correctly. **Two independent chaos cases:** a mirror flip (`FlipMode.Y`) fails 3 tests. Having the top-K displace against the *best* kept candidate instead of the worst **left all 61 tests green**, and is now caught by a targeted test plus a fixed-seed property test against a naive full-sort reference. **Harness pitfall the implementer hit:** `dotnet test --no-build` reuses a stale `Core.dll`, so a mutation looks caught-by-nothing. Always rebuild when chaos-testing.*
   - brute-force search
   - best distance per `OracleId`
   - hashes both 180° orientations and keeps the better one
   - never applies a threshold
 
   Accept: ranking and distinctness tests, plus a timing test for 9 queries against a synthetic 50k index (log the time; soft-fail above 50 ms).
-- [ ] **B4a** ∥ Lab `bulk` command:
+- [x] **B4a** ∥ Lab `bulk` command: — *done 2026-09-22, `stream/b` `2ea5e47`…`9d5cb82`. Live cascade (2026-09-22 file): 54,773 / 37,740 raw → 54,761 image_status → 54,360 en → 50,920 with `image_uris.normal` (3,440 multi-faced skipped explicitly) → 48,936 layouts → **48,750 arts / 33,612 oracle ids**; `frame == "2015"` would leave 31,720 (information only, not applied). Manifest `scryfall-bulk/filtered-artworks.jsonl` (gitignored) with a public reader for B4b/B4c. StreamB 63 → 81 tests; 3 briefed chaos cases fail correctly. **Independent chaos:** counting arts instead of distinct oracle ids fails 2 tests. Lab production code is 717 lines, reported against the tripwire: it covers an HTTP client, two parsers, the cascade, manifest I/O and two commands.*
+  - **Open question answered — single-printing fraction: 60.07%.** 21,032 of 35,013 in-scope illustration ids have exactly one in-scope printing (63,373 printings in `default_cards`). Filter: `lang == "en"` && `finishes` contains `nonfoil` && has top-level `image_uris` && `frame == "2015"` && the same layout/set_type exclusions as the cascade. Where the art is unambiguous, the art match is the printing, so printing resolution for ~60% of arts is a plausible v1.5 feature.
   - `GET /bulk-data/unique_artwork` with the required `User-Agent` and `Accept` headers
   - download `jsonl_download_uri` to `scryfall-bulk/` (gitignored)
   - apply the filter cascade from stream-b §B4 and print the count at each step
@@ -577,17 +688,38 @@ Global overrides for every B brief:
   Accept: a unit test over a small committed JSONL sample (text only) reproduces the filter decisions.
 
   **Open question, deferred here from the `ArtworkId` ruling (2026-09-21):** what fraction of in-scope artworks have exactly **one** in-scope printing (English, non-foil, single-faced, modern frame)? Where the art is unambiguous, the art match *is* the printing — which is what would make accurate prices, and importers needing a set or printing id such as ManaBox, possible. Needs `default_cards` in addition to `unique_artwork`. **This decides whether printing resolution is a v1.5 feature, not whether to keep the id** — that was settled independently, because keeping it is justified at any value of this number. Report the fraction and the exact filter used.
-- [ ] **B4b** Lab `images` command: download `image_uris.normal` into the external cache. It resumes, runs with polite concurrency, respects HTTP 429, and skips files already present.
-- [ ] **B4c** Lab `build-index` command: `ReferenceTransform` → `CardHasher` → `cards.lfidx`. It supports a `--subset N` fallback that labels the index size.
-- [ ] **B4d** 🧭👤 Run B4a–B4c in full on **the win-x64 PC** (a 👤 ask: the orchestrator is on the Mac) (about 6 GB, hours). Commit `data/index/cards.lfidx` and record its artwork count and SHA-256 here. If it stalls, use a labelled 5k subset.
-- [ ] **B5a** ∥ `ContourCardDetector` in `Core/Imaging`:
+- [x] **B4b** Lab `images` command: download `image_uris.normal` into the external cache. It resumes, runs with polite concurrency, respects HTTP 429, and skips files already present. — *done 2026-09-22, `stream/b` `ab1e9f6`. Writes `<cache>/<ArtworkId>.jpg` via temp-then-move. Refuses a cache inside the repo and any URL without `/normal/`. Checks JPEG magic bytes and logs sizes other than 488×680. StreamB 81 → 95 tests; 4 briefed chaos cases fail correctly. **Independent chaos:** disabling the non-`normal` refusal fails 1 test. Smoke: 50 images in 0.8 s (~59/s), and the rerun skipped all 50 without a request. **Defect for B4c to fix:** `RepoPaths.FindRepoRoot` walks up from the exe, so a Lab build copied out of the repo crashes with an unhandled exception that also names the wrong flag (`--out`).*
+- [x] **B4c** Lab `build-index` command: `ReferenceTransform` → `CardHasher` → `cards.lfidx`. It supports a `--subset N` fallback that labels the index size. — *done 2026-09-22, `stream/b` `1394308`. Output is in manifest order whatever the parallelism, so rebuilds are byte-identical. The write is atomic and re-read to verify. A missing image fails the build unless `--allow-missing` is given. `--subset N` takes the first N entries; `--ids <file> [--fill N]` exists for B5b's four-card smoke index. Writes a `<out>.build.json` sidecar. Also fixed B4b's `RepoPaths` defect. StreamB 95 → 133 tests; 4 briefed chaos cases fail correctly, including the query transform swapped in for the reference transform. **Independent chaos:** hardcoding `IsBasicLand = false` fails 1 test. The implementer's spot check put 20 random renders through the query path: **20/20 own `ArtworkId` at rank 1, distances 10–36**. That is a preview of B2's floor, not the gate itself. **Note:** B3b's timing test soft-skips (over 50 ms) when the full suite runs in parallel with the CPU-heavy build-index tests. That skip is by design, but the number is only meaningful from an isolated run.*
+- [x] **B4d** 🧭👤 Run B4a–B4c in full on **the win-x64 PC** (a 👤 ask: the orchestrator is on the Mac) (about 6 GB, hours). Commit `data/index/cards.lfidx` and record its artwork count and SHA-256 here. If it stalls, use a labelled 5k subset. — *done 2026-09-22 by the orchestrator on the PC, `stream/b` `0412abe`. Inputs: the 2026-09-22 `unique_artwork` file, and 48,750 `normal` renders in `C:\LoreFetchData\scryfall-cache` (5.1 GB, 0 failures, 10.7 min at 76/s — minutes, not the hours estimated). **Full index, no subset: 48,750 artworks / 33,612 oracle cards / 1,882 basic lands, 10,460,648 bytes, SHA-256 `6495314eb3e5f37e3c1bd5830aa506d6efc617e23303c46f87851edef09e4dd3`,** built in 40 s. An orchestrator rebuild from the same inputs was byte-identical. The committed blob's SHA matches, and git detects the file as binary. **Size is ~10.0 MiB, not the ~8.2 MiB predicted:** the prediction left out the per-entry 36-character `ArtworkId`, about 1.9 MB. **Recommend adding `*.lfidx binary` to `.gitattributes` on `main`:** `core.autocrlf` is on and nothing yet pins the file as binary except git's NUL-byte heuristic.*
+- [x] **B5a** ∥ `ContourCardDetector` in `Core/Imaging`: — *done 2026-09-22, `stream/b` `53f0c10`…`8d3746e`. Settings: min area 1% of the frame, border margin 2 px, Canny 50/150, a 5×5 close, `approxPolyDP` ε = 2% of the perimeter. Corner ordering puts a short edge first, so the warp comes out upright or 180°, never at 90°. `DetectWithDiagnostics` exposes every rejection and its reason. StreamB 133 → 157 tests. Of the 5 briefed chaos cases, 3 initially left tests green: min-area, ascending order and nested dedupe. The implementer strengthened the tests until all 5 fail. **Nested dedupe cannot be reached end-to-end**, because `RETR_EXTERNAL` never returns inner contours; it is covered by a direct unit test. **Independent chaos:** disabling the border-touch rejection fails 1 test.*
+  - **Real capture, 10/12 frames with exactly one detection** (quads 239–283 × 347–393 px). Misses: `atarka_foil_black` (foil, out of scope) and **`verix_sleeved_black`**: the sleeve's outer outline approximates to more than 4 points, and the card inside is not found. Both are recorded as known misses in the test, not tuned away. **Plains on black, the Risk 4 case, is "detected", but by eye the quad sits on the *inner* edge of the black border, not on the card's outer edge.** Black-on-black leaves no outer edge. So Risk 4 shows up as a **crop-scale error (roughly 5–10% per side)** rather than a miss, and "exactly one detection" cannot see it. Sol Ring on white lands on the true outer edge. **B5b's rectified crops and B5c's crop-scale curve must look at this directly.** Overlays are in `C:\LoreFetchData\detect-out\`.
   - Canny → morphological close → `findContours` External → `approxPolyDP` to 4 points → order corners TL, TR, BR, BL
   - aspect 1.397 ±15% (the ±25% widening is configurable) and a minimum area
   - top N by area
   - every discard reason logged
 
   Accept, on generated frames: an empty mat on light, mid and dark backgrounds returns 0; a partial grid returns the correct count; a hand-shaped blob is rejected; rotated cards come back correctly ordered.
-- [ ] **B5b** `PerspectiveRectifier`: warp to 488×680 with `INTER_LINEAR` pinned. Accept: a known quad on a synthetic frame produces the expected corner pixels.
+  **Added 2026-09-22 (user ruling): real-capture check.** `test-images/ad-hoc/` holds 12 real C920 frames: Sol Ring (clean normal card), Verix Bladewing (sleeved), Atarka (foil, out of scope) and Plains (land). Each is shot on black foam, brown cardboard and white paper at ~12″, with a cluttered desk in frame (deck box, power bricks, controller, card stacks). The measured card is ~260×370 px against a predicted 283×396. An artifact-gated test in `Tests/StreamB` expects **exactly one** detection per frame and skips with a reason when the folder is absent. **Plains on black foam is the Risk 4 worst case** (black border on a black mat): if it misses, record the fact rather than tuning until it passes. Also a Lab `detect <image> --out <png>` command that draws accepted quads, rejected contours with their discard reason, and the rectified crop (after B5b). It writes to a path outside the repo. The orchestrator reads each PNG and sends it to the user, so the user sees detection working on their own photos before integration.
+- [x] **B5b** `PerspectiveRectifier`: warp to 488×680 with `INTER_LINEAR` pinned (full item text below the results). — *done 2026-09-22, `stream/b` `ebc7a14`…`9679148`. Corners map to pixel centres (0,0)…(487,679), with `INTER_LINEAR` and `Replicate` passed explicitly. StreamB 157 → 163 tests. A synthetic detect → rectify → hash round trip lands at Hamming 17. 4 briefed chaos cases fail correctly (Nearest, mirror, off-by-one size, channel swap). **Independent chaos:** switching to the edge convention (488 instead of 487) fails 2 tests. Adds a Lab `identify <image>` command: detect → rectify → identify against the full committed index, printing the top 5.*
+  - **Early real-path smoke, full 48,750-art index, the 12 ad-hoc frames at ~12″:**
+
+    | Frame | Rank 1 (distance) | Rank 2 (distance) | Margin |
+    |---|---|---|---|
+    | solring_black | **Sol Ring ✓ (94)** | Thraben Charm 159 | 65 |
+    | solring_brown | ✗ Mantle of the Ancients 147 | Sol Ring 157 | — |
+    | solring_white | Sol Ring ✓ 163 | Mantle of the Ancients 185 | 22 |
+    | plains_black | ✗ Mountain 345 | Personal Incarnation 351 | — |
+    | plains_brown | Plains ✓ 143 | Life Goes On 253 | 110 |
+    | plains_white | Plains ✓ 168 | Tarnation Vista 259 | 91 |
+    | verix_sleeved_brown | Verix Bladewing ✓ 242 | Null Champion 255 | 13 |
+    | verix_sleeved_white | Verix Bladewing ✓ 257 | White Ward 287 | 30 |
+    | atarka_foil_brown / white | Atarka ✓ 131 / 133 | Skyshaper 248 / Nether Spirit 252 | 117 / 119 |
+    | atarka_foil_black, verix_sleeved_black | not detected (B5a) | | |
+
+    **Sol Ring's distance is 94** (black mat), matching `ArtworkId` `073bfdca-d7b8-4f4b-93f3-6e7c44bc0b0a` (SCD). The implementer compared the crop and the render by eye and judged it the right art. **Tally: 8 correct at rank 1, 2 wrong at rank 1, 2 not detected.** Real photos land at 94–257, against 10–36 for render-to-self, which leaves a wide gap for lighting and focus to close (Risk 1). Margins are thin on Sol Ring and on the sleeved Verix. **Plains on black was confirmed by its crop:** the black border is absent from the rectified card (about 5% inset per side in width, 3–4% in height), and the result is a confident wrong match. Sol Ring on black shows no inset. The failure is this printing's border merging into the mat, not black mats in general. This is B5c's evidence. One frame per cell, so none of this is an accuracy number; B6 still needs H3.
+
+  Item text: Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
+  **Early real-path smoke (user ruling 2026-09-22):** once B4c exists, build a small labelled subset index that includes those four cards' arts. Sol Ring should then retrieve its own `ArtworkId` through detect → rectify → identify. Record the distance. This is a smoke check, not an accuracy number: B6 still needs the H3 corpus.
 - [ ] **B7** Lab synthetic generator:
   - px/inch = 1360/height
   - keystone, blur, noise and JPEG artefacts
@@ -617,9 +749,9 @@ Global overrides for every C brief:
 - Drop frames before decoding them.
 - No test ever opens a device outside the `Hardware` trait.
 
-- [ ] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool).
-- [ ] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees.
-- [ ] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts.
+- [x] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool). — *done 2026-09-21, `stream/c` `f4a459f` + fixups `84979d7`. Review sent back 4 `xUnit1051` warnings and an enumerator test that *hung* rather than failed when its guard was removed; both fixed, and the test is now bounded by `WaitAsync`. Also replaces StreamC's placeholder with real internal-touching tests, closing the `InternalsVisibleTo` thread.*
+- [x] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees. — *done 2026-09-21, `stream/c` `1f8380b`. Independent chaos: swapping the 90°/270° mappings fails the marker-corner test at both angles.*
+- [x] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts. — *done 2026-09-21, `stream/c` `72503b5` + `8382f25` + `56b1b9b`. Generic over `IAsyncEnumerable<T>` so C2 can wrap either stage; injectable `TimeProvider`. The finishing implementer found a real bug: disposing an async iterator while its `MoveNextAsync` is pending throws `NotSupportedException`, so disposal is deferred until the pending call settles. Review strengthened two tests. The healthy stream now spans six frame-timeout periods, because at one period the only-reset-once regression was caught in just 3 of 5 runs; it is now 5 of 5. And using the first-frame timeout for mid-stream gaps passed all 18 tests, so the stall test now pins both the detection time (< 2 s) and the timeout value in the message.*
 - [ ] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
   - enumerate and log every descriptor with its backend
   - zero descriptors gets its own diagnosis
@@ -641,7 +773,7 @@ Global overrides for every D brief:
 - Never sanitise `+2 Mace`.
 - Duplicate rows merge on read, justified by import robustness.
 
-- [ ] **D1** Native CSV codec:
+- [x] **D1** Native CSV codec: — *done 2026-09-21, `stream/d` `f952d55`. Hand-written RFC 4180 codec (`NativeCsvCodec`, 539 lines — over the tripwire on the tokenizer and doc comments, not scope); CsvHelper rejected because no CSV library refuses unknown extra columns. Header checked as a column **set** (order-tolerant). Blank ↔ `null` for `Condition` and `ArtworkId`: quoted-empty and unquoted-empty are indistinguishable, so there is no third state. Duplicate merge sums quantity, keeps the newest row's name/distance/source (as the stub does), and folds `ArtworkId` agree-or-null via a public `FoldArtworkId` for D3 to reuse. 39 tests; all 4 briefed chaos cases fail correctly, and an independent one (whitespace-before-quote treated as a quote) fails `LeadingWhitespaceBeforeQuote_…`.*
   - an RFC 4180 writer that quotes on `,`, `"`, CR and LF, and whenever a field contains a quote
   - a parser that rejects whitespace before an opening quote as a quote, treating it as content
   - an exact header check, which throws on any unknown or missing column
@@ -656,8 +788,8 @@ Global overrides for every D brief:
   **Override, from S0.5b's finding — do not skip this, it is a bug that hides by construction:** the `Condition` half of the `OracleId` + `Condition` dedup key is **unreachable through `CommitCohortAsync`**, because `CohortTile` carries no condition and v1 never assesses one. It is reachable **only through the reader**, on a file that already has conditions in it. So the duplicate-merge tests must be driven from a **written file**, and must cover `null` vs `""` as distinct keys explicitly. Proven on the stub: with the merge key conflating them, 79 unrelated tests passed and nothing failed. CONTRACTS.md calls this the case that "would silently split one card into two rows"; a suite built only around commits will not see it.
 
   **The same trap applies to `ArtworkId`'s fold, for the same structural reason:** a commit-only suite cannot tell agree-or-null from last-write-wins. Drive that from a written file too, with rows that agree and rows that disagree.
-- [ ] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export.
-- [ ] **D3** `CsvCollectionStore`:
+- [x] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export. — *done 2026-09-21, `stream/d` `1eb6390`. `IsVerified = true` for native, justified: its only target tool is LoreFetch's own reader, which the codec suite covers. leaveOpen chaos fails correctly.*
+- [x] **D3** `CsvCollectionStore`: — *done 2026-09-21, `stream/d` `690ecce` + review fix `ceb2110`. **Manual rows:** the store derives null distance and null `ArtworkId` from the tile state rather than trusting the tile; a reflection-forced test proves it. **The plan's own lock case was too weak:** under `FileShare.None` the commit fails at its *read* step, before any temp file exists, so deleting the temp-file cleanup left every test green. A `FileShare.ReadWrite` lock (the "Excel has it open" case) reaches `File.Move` and fails there, and that test asserts the full directory listing; the `FileShare.None` case stays for the exception and the untouched original. 58 tests; chaos (cleanup removed, exception conversion removed) fails correctly.*
   - commits `Included` and `ManuallySet` tiles, folding duplicates within a cohort
   - returns the number of **cards** committed
   - throws on a null `Chosen`
