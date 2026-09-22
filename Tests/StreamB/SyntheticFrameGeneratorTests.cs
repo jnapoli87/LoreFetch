@@ -128,6 +128,70 @@ public class SyntheticFrameGeneratorTests
         }
     }
 
+    /// Reviewer finding (2026-09-22, second instance): the keystone warp's
+    /// own interpolation flag was ALSO a hardcoded literal, one step
+    /// further down `Generate`'s pipeline than the downscale -- found by
+    /// the reviewer chaos-testing an un-briefed spot (`Linear` ->
+    /// `Nearest` at the `Cv2.WarpPerspective` call left all 182 tests
+    /// green). Same closure as `Default_UsesAreaForDownscale`: declares
+    /// what the default must be.
+    [Fact]
+    public void Default_UsesLinearForKeystone()
+    {
+        Assert.Equal(InterpolationFlags.Linear, SyntheticFrameOptions.Default.KeystoneInterpolation);
+    }
+
+    /// The behavioural half of closing the same finding: `Linear` and
+    /// `Nearest`, same source/seed/height/keystone amount, must produce
+    /// DIFFERENT pixels (proves `KeystoneInterpolation` is real, not a
+    /// no-op), and the DEFAULT output must byte-match the explicit
+    /// `Linear` output (pins which of the two the default actually is).
+    /// Mirrors `Generate_AreaVsLinearDownscale_ProducesDifferentPixels_
+    /// AndDefaultMatchesArea` exactly, one step later in the pipeline: an
+    /// unintended edit to the `Cv2.WarpPerspective` call in `ApplyKeystone`
+    /// -- whether it stops reading `keystoneInterpolation`, or starts
+    /// ignoring it via a hardcoded literal -- fails the default-matches-
+    /// Linear half of this test.
+    [Fact]
+    public void Generate_KeystoneLinearVsNearest_ProducesDifferentPixels_AndDefaultMatchesLinear()
+    {
+        using var source = MakeSourceCard(seed: 8);
+
+        var linearOptions = new SyntheticFrameOptions { KeystoneInterpolation = InterpolationFlags.Linear };
+        var nearestOptions = new SyntheticFrameOptions { KeystoneInterpolation = InterpolationFlags.Nearest };
+
+        var linearResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f, linearOptions);
+        var nearestResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f, nearestOptions);
+        var defaultResult = SyntheticFrameGenerator.Generate(source, heightInches: 9.75f);
+
+        using (linearResult.Frame)
+        using (nearestResult.Frame)
+        using (defaultResult.Frame)
+        {
+            using var linearMat = Core.Imaging.FrameMat.ToMat(linearResult.Frame);
+            using var nearestMat = Core.Imaging.FrameMat.ToMat(nearestResult.Frame);
+            using var defaultMat = Core.Imaging.FrameMat.ToMat(defaultResult.Frame);
+
+            using var linearVsNearestDiff = new Mat();
+            Cv2.Absdiff(linearMat, nearestMat, linearVsNearestDiff);
+            var linearVsNearestDiffering = Cv2.CountNonZero(ToSingleChannelAny(linearVsNearestDiff));
+
+            Assert.True(
+                linearVsNearestDiffering > 0,
+                "Linear and Nearest keystone interpolation produced byte-identical frames -- " +
+                "KeystoneInterpolation is not actually reaching ApplyKeystone's Cv2.WarpPerspective call.");
+
+            using var defaultVsLinearDiff = new Mat();
+            Cv2.Absdiff(defaultMat, linearMat, defaultVsLinearDiff);
+            var defaultVsLinearDiffering = Cv2.CountNonZero(ToSingleChannelAny(defaultVsLinearDiff));
+
+            Assert.True(
+                defaultVsLinearDiffering == 0,
+                "Generate's default output does not byte-match its own explicit Linear keystone output -- " +
+                "the default keystone interpolation has drifted away from Linear.");
+        }
+    }
+
     /// Chaos case (e) (my own): what if `Generate` stopped calling the JPEG
     /// round trip -- e.g. someone "simplifies" it away, or the quality
     /// option silently stops being wired through? Two frames built from

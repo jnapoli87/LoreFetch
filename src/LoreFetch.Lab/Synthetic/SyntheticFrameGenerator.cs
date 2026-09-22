@@ -74,6 +74,25 @@ public sealed record SyntheticFrameOptions
     /// in this codebase.
     public InterpolationFlags DownscaleInterpolation { get; init; } = InterpolationFlags.Area;
 
+    /// The filter `Generate`'s own keystone warp (step 2: `Cv2.WarpPerspective`
+    /// on the already-downscaled card) uses. Defaults to `INTER_LINEAR` --
+    /// pinned to match `PerspectiveRectifier`'s own warp EXACTLY, not
+    /// independently chosen, because the generator's whole reason to exist
+    /// is to exercise the shipping `IRectifier` path, not a lookalike of it.
+    /// `warpPerspective` does not support `INTER_AREA` at all (OpenCV's own
+    /// docs list it as "not supported by this function," for the same
+    /// reason `PerspectiveRectifier` itself cannot use it) -- which is why
+    /// this option's default is `Linear` while `DownscaleInterpolation`'s is
+    /// `Area`: readers should not mistake that asymmetry for an
+    /// inconsistency, since it is the same "`INTER_AREA` at every RESIZE,
+    /// pinned `INTER_LINEAR` at the WARP" split CLAUDE.md documents for the
+    /// shipping pipeline. Reviewer finding (2026-09-22): this was previously
+    /// a hardcoded literal at the `Cv2.WarpPerspective` call, and changing
+    /// it to `INTER_NEAREST` left every test green -- the same blind spot
+    /// as `DownscaleInterpolation`'s own history, one step later in the
+    /// pipeline. See `Generate_KeystoneLinearVsNearest_ProducesDifferentPixels_AndDefaultMatchesLinear`.
+    public InterpolationFlags KeystoneInterpolation { get; init; } = InterpolationFlags.Linear;
+
     public static SyntheticFrameOptions Default { get; } = new();
 }
 
@@ -124,7 +143,8 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 ///      that option's own doc comment for why it is a named knob rather
 ///      than a literal, and why swapping it is a real, tested risk rather
 ///      than a hypothetical one).
-///   2. A mild keystone: `Cv2.WarpPerspective` with `InterpolationFlags.Linear`
+///   2. A mild keystone: `Cv2.WarpPerspective` via
+///      `SyntheticFrameOptions.KeystoneInterpolation` (default `INTER_LINEAR`)
 ///      and `BorderTypes.Replicate` -- the SAME interpolation and border
 ///      mode `PerspectiveRectifier` is pinned to (see that type's own doc
 ///      comment for why an unstated default is a silent-divergence risk),
@@ -183,7 +203,7 @@ public static class SyntheticFrameGenerator
         using var downscaled = new Mat();
         Cv2.Resize(sourceCardBgr, downscaled, new Size(cardWidthPx, cardHeightPx), 0, 0, options.DownscaleInterpolation);
 
-        using var keystoned = ApplyKeystone(downscaled, options.KeystoneAmount, out var mask);
+        using var keystoned = ApplyKeystone(downscaled, options.KeystoneAmount, options.KeystoneInterpolation, out var mask);
         using (mask)
         {
             using var frame = MakeMatBackground(options);
@@ -209,14 +229,16 @@ public static class SyntheticFrameGenerator
     /// card.Rows` px at both corners -- an arbitrary but fixed choice of
     /// which edge tilts, "mild" because the inset is a small fraction of
     /// the card's own height. Returns the warped card (same size as `card`,
-    /// `InterpolationFlags.Linear` + `BorderTypes.Replicate`, matching
-    /// `PerspectiveRectifier` exactly) and, via `mask`, a same-size
-    /// single-channel mask that is 255 inside the true keystoned
-    /// quadrilateral and 0 everywhere else -- computed by directly filling
-    /// the destination quad's own corner points, never by inspecting the
-    /// warp's own border fill (see the type's own doc comment for why that
-    /// distinction matters). The caller owns and disposes both.
-    private static Mat ApplyKeystone(Mat card, float keystoneAmount, out Mat mask)
+    /// `keystoneInterpolation` + `BorderTypes.Replicate`, matching
+    /// `PerspectiveRectifier`'s own warp when `keystoneInterpolation` is
+    /// left at its `SyntheticFrameOptions.KeystoneInterpolation` default)
+    /// and, via `mask`, a same-size single-channel mask that is 255 inside
+    /// the true keystoned quadrilateral and 0 everywhere else -- computed
+    /// by directly filling the destination quad's own corner points, never
+    /// by inspecting the warp's own border fill (see the type's own doc
+    /// comment for why that distinction matters). The caller owns and
+    /// disposes both.
+    private static Mat ApplyKeystone(Mat card, float keystoneAmount, InterpolationFlags keystoneInterpolation, out Mat mask)
     {
         var width = card.Cols;
         var height = card.Rows;
@@ -241,11 +263,36 @@ public static class SyntheticFrameGenerator
         using var transform = Cv2.GetPerspectiveTransform(srcCorners, dstCorners);
         var warped = new Mat();
 
-        // See the type's own doc comment: INTER_LINEAR + Replicate, the
+        // keystoneInterpolation defaults to INTER_LINEAR + Replicate, the
         // exact interpolation and border mode `PerspectiveRectifier` pins
-        // for its own warp, reused rather than restated with a different
-        // choice.
-        Cv2.WarpPerspective(card, warped, transform, card.Size(), InterpolationFlags.Linear, BorderTypes.Replicate);
+        // for its own warp -- see `SyntheticFrameOptions.KeystoneInterpolation`'s
+        // own doc comment for why this is a named option rather than a
+        // restated literal.
+        //
+        // `BorderTypes.Replicate` here is a DELIBERATE, but deliberately
+        // UNPINNED, choice -- reviewer question (2026-09-22): considered
+        // and rejected exposing/testing it the same way as the two
+        // interpolation flags above. Reasoning: unlike an interpolation
+        // flag, which changes the VALUE of every pixel the mask keeps, a
+        // WarpPerspective border mode only ever supplies pixels for
+        // destination coordinates whose inverse-mapped source coordinate
+        // falls OUTSIDE `card`'s bounds -- and by this method's own
+        // geometry (the inset only ever pulls corners INWARD, never
+        // outward), that is exactly the region strictly OUTSIDE the true
+        // keystoned quad, which `mask` below excludes by directly filling
+        // `dstCorners` -- geometry, not the warp's own border fill (see
+        // this method's own doc comment). So the border mode's output
+        // never reaches `keystoned.CopyTo(region, mask)` in `Generate`,
+        // structurally, not by luck of the current test suite. Verified
+        // empirically too: swapping this to `BorderTypes.Constant` left
+        // all 184 tests green, which is the SAME finding as the two
+        // interpolation flags on its face, but for a different and
+        // provable reason -- there, the flag changes pixels the mask
+        // keeps and nothing pinned that; here, the flag cannot reach a
+        // kept pixel at all. A test asserting "changing this makes no
+        // difference" would be pinning a tautology of the mask design,
+        // not a real risk, so none was added.
+        Cv2.WarpPerspective(card, warped, transform, card.Size(), keystoneInterpolation, BorderTypes.Replicate);
 
         mask = new Mat(height, width, MatType.CV_8UC1, Scalar.All(0));
         var maskPoints = dstCorners.Select(p => new Point((int)MathF.Round(p.X), (int)MathF.Round(p.Y))).ToArray();
