@@ -716,7 +716,22 @@ Against `docs/stream-b-identification.md` §*Done when*:
 
 ### Handoff — the shortest path to closing B, for the Windows PC
 
-Approved by the user 2026-09-22. `main` is at `e5ea285`; `stream/b` is pushed at `8e4e7aa`.
+Approved by the user 2026-09-22. `stream/b` is pushed at `8e4e7aa`; `main` is pushed at whatever this section's own commit is — check `git log`, and do not trust a SHA quoted in prose here, because this file is edited on both machines.
+
+🔴 **STEP 0, AND STEP 2 IS IMPOSSIBLE WITHOUT IT: the fixture corpus and its ground truth exist ONLY on the Mac, and they are gitignored.** `AccuracyCorpusLoader` requires both at exact paths:
+
+| Needed at | What it is | Where it exists |
+|---|---|---|
+| `test-images/ground-truth.csv` | **54 hand-validated rows**, every `oracle_name` checked against the 33,596-name oracle catalog | **Mac only.** Never committed, cannot be |
+| `test-images/fixtures/15in/9/a_1.png` … `a_6.png` | the six 3×3 frames the whole accuracy number rests on | **Mac only** at that path (the PC has the raw captures elsewhere, unstructured) |
+
+**Copy both to the PC by hand**, into the `stream-b` worktree, exactly as the Scryfall manifest was hand-copied to the Mac. `test-images/*` is gitignored tree-wide and the pre-commit hook rejects staged rasters, so **neither can travel through git** — that is deliberate, because the frames are WotC IP regardless of who shot them.
+
+**Do not regenerate the ground truth by hand on the PC.** It took an image-by-image read of all six frames plus a catalog validation pass that caught four Omen/Adventure cards whose oracle names carry both halves (`Young Red Dragon // Bathe in Gold`, `Whirlwing Stormbrood // Dynamic Soar`, `Dirgur Island Dragon // Skimming Strike`, `Sagu Wildling // Roost Seek`). Retyping it invites exactly the typo-becomes-fake-`wrong@1` failure the labels were validated to prevent — and a typo lands as a *low-distance* wrong answer, which would drag the calibrated `okDistance` tighter for no reason.
+
+**Decision recorded:** `ground-truth.csv` stays **uncommitted**. It carries no imagery and committing just the labels was considered, but it is meaningless without the frames — which can never be committed — and `test-images/*` is deliberately a blunt rule so nothing slips through on `git add -A`. The cost is that the 70.4% figure is **not independently reproducible from a fresh clone**; that limitation belongs in README §B rather than being quietly hidden.
+
+**Also Mac-only, lower priority:** `test-images/b_corpus/` (six 20″ frames) and `test-images/d_corpus/` (two dark-mat frames). Their detection numbers are already recorded above, and the v1 accuracy table is single-height/single-mat, so the PC does **not** need them to finish B — only to extend the table later.
 
 **Step 1 — rebuild the index, filtered.** On `stream/b`, from the worktree, with the 5.1 GB cache already present on that machine:
 ```
@@ -731,6 +746,10 @@ Expect roughly **47,417 arts / 32,743 oracle ids** — the digital-only filter r
 **Step 2 — re-run B6 and write the thresholds.** `lab accuracy` against the new index. `wrong@1` should be **0**; `AccuracyHarnessRealCaptureTests` should go green, clearing the one red test on `stream/b`. Then write `goodDistance`/`okDistance` into `data/index/thresholds.json`. **`OkDistance` has a 63-point window: every correct match ≤8 lands ≤208, every wrong one ≥272.** ~240 is the natural midpoint. Also **promote `referenceFloor` 55 from `provisional`** — the ARM64 divergence was measured at 11 bits of 49.9M, so the Mac figure holds.
 
 **Step 3 — close item 6**, the `IOracleCatalog.All` test.
+
+**Expected test counts, so a regression is visible:** `Tests/StreamB` is **280 total, 1 failing** right now (`AccuracyHarnessRealCaptureTests`). After step 2 it should be **280 passing**, and after step 3 **281**. `Tests/Integration` must stay **143 passed / 8 skipped** throughout — it guards the frozen contracts, so any change there means something went wrong.
+
+**Free measurement while you are there:** B2 committed a **query-hash witness** (50 query-side hashes, generated on arm64, arch-aware test). Regenerating it on win-x64 makes that test report the *query-side* divergence directly, which nothing has yet measured in isolation — the 11-bit figure above is whole-index. Cheap, and it closes the last open question on Risk 2.
 
 **Step 4 — B8**: README §B with the honest numbers (**70.4% correct@1, `wrong@1` 0, 91% detection at 15″** — not rounded up), the per-project README "Internals" line, then the merge gate and **P3**.
 
