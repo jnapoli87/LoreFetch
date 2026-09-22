@@ -221,7 +221,12 @@ public static class AppComposition
         ICardDetector detector = new LayoutFollowingCardDetector(
             new StubCardDetector(settings.ExpectedCount), settings);
         IRectifier rectifier = new StubRectifier();
-        ICardIdentifier identifier = new StubCardIdentifier();
+        // Item 4b (A10-prep): wrap the stub so a captured cohort shows every
+        // hash-reachable tile state (confident / low-confidence / Unresolved)
+        // instead of every tile landing on the same one — see
+        // DemoCardIdentifier's own doc comment for the distance derivation,
+        // the concurrency argument and why per-capture oracle ids are skipped.
+        ICardIdentifier identifier = new DemoCardIdentifier(new StubCardIdentifier(), settings);
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
 
         // A6: oracle catalog for the "Set card manually…" type-ahead. The
