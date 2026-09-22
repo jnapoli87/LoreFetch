@@ -98,6 +98,13 @@ public class CsvCollectionStoreWriteSequenceTests
         Assert.Equal(new[] { "collection.csv" }, Directory.GetFiles(workspace.Directory).Select(Path.GetFileName).Order().ToArray());
     }
 
+    // macOS/Unix: rename(2) replaces an open file regardless of open handles,
+    // so File.Move(overwrite:true) SUCCEEDS even when a reader holds the file
+    // with FileShare.ReadWrite — no CollectionStoreException is thrown and
+    // the test would fail. The store code is correct; this exercises a
+    // Windows-specific platform guarantee (locker lacks FileShare.Delete →
+    // File.Move throws), so it is traited WindowsOnly.
+    [Trait("Category", "WindowsOnly")]
     [Fact]
     public async Task Commit_WhenTheTargetCannotBeReplaced_ThrowsAndLeavesTheOriginalByteIdentical_WithNoStrayTempFile()
     {
