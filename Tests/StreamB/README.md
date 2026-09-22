@@ -20,4 +20,12 @@ dotnet test Tests/StreamB/LoreFetch.Tests.StreamB.csproj -c Release
 
 `dotnet test` exits 0 even when a project discovers zero tests — check the `Passed`/`Total` counts, not just the exit code.
 
-Internals: documented by stream B at its done-when step.
+## Internals
+
+Most tests here are ordinary unit tests and run everywhere, with no gate. Three kinds of test are gated instead, each skipping (not failing) by default when what it needs isn't on the machine:
+
+- **Cache-gated tests** (round-trip gate, query-hash witness, accuracy against the real corpus, and anything else that hashes a real Scryfall render) need `LOREFETCH_SCRYFALL_CACHE` set to a populated image cache — default `~/LoreFetchData/scryfall-cache`, which on the Windows PC is `C:\LoreFetchData\scryfall-cache`. Unset, or pointing at a directory that doesn't exist, and these tests skip silently rather than fail: a machine whose cache lives elsewhere just runs a smaller suite with no red flag. Set the variable explicitly before trusting a "0 failed" run.
+- **Real-capture tests** additionally need `test-images/` on disk (gitignored, never committed — card imagery, per CLAUDE.md): `test-images/ad-hoc/` for individual detector fixtures, `test-images/fixtures/<height>in/<layout>/` plus `test-images/ground-truth.csv` for the accuracy harness against the real 54-slot corpus. Also skips, not fails, when absent.
+- **`LOREFETCH_REQUIRE_REAL=1`** flips both of the above from skip to fail (`RealCaptureGate.SkipOrFail`) — set it to prove, on a machine that does have the cache and fixtures, that the real-data tests actually ran rather than silently passed by skipping.
+
+The `WindowsOnly`-traited goldens (above) are filtered for a different reason than these three — an architecture mismatch rather than missing local data — so they stay filtered even on a Windows machine that has never run `LOREFETCH_REQUIRE_REAL`.
