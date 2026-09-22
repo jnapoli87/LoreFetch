@@ -13,8 +13,13 @@ namespace LoreFetch.Tests.StreamA;
 ///      isTempFolder=false (never delete the user's data).
 ///   2. Env var points at a non-existent folder → fall back to DemoFrames,
 ///      isTempFolder=true.
-///   3. Env var points at a folder with no image files → fall back to DemoFrames,
-///      isTempFolder=true.
+///   3a. Env var points at a folder that exists but is empty → fall back to DemoFrames,
+///       isTempFolder=true.
+///   3b. Env var points at a folder that exists but contains only non-image files
+///       (e.g. only a .txt) → fall back to DemoFrames, isTempFolder=true.
+///       This exercises the <c>IsImageFile</c> rejection branch, which the empty-folder
+///       case skips entirely (the <c>Any(IsImageFile)</c> call never runs on an empty
+///       enumeration).
 ///   4. Env var is null or empty → fall back to DemoFrames, isTempFolder=true.
 ///
 /// Chaos-tested: removing the <c>return (envVar, isTempFolder: false);</c>
@@ -69,6 +74,24 @@ public class FrameFolderSelectionTests : IDisposable
         Assert.True(isTempFolder, "Fallback DemoFrames folder must be flagged as temp.");
         Assert.True(Directory.Exists(folder), "Fallback folder must exist on disk.");
         Assert.NotEqual(emptyFolder, folder);
+    }
+
+    [Fact]
+    public void UserFolder_WithOnlyNonImageFiles_FallsBackToDemoFrames()
+    {
+        // Folder exists and has a file — but the file is not a recognised image
+        // extension. This exercises the IsImageFile rejection branch: the folder
+        // is non-empty so the empty-folder short-circuit doesn't apply; IsImageFile
+        // must return false for every entry for the fallback to trigger.
+        var userFolder = MakeTempDir();
+        File.WriteAllText(Path.Combine(userFolder, "notes.txt"), "these are not frames");
+
+        var (folder, isTempFolder) = AppComposition.ChooseFrameFolder(userFolder, _logger);
+        _toDelete.Add(folder); // DemoFrames temp folder — clean up after test
+
+        Assert.True(isTempFolder, "Fallback DemoFrames folder must be flagged as temp.");
+        Assert.True(Directory.Exists(folder), "Fallback folder must exist on disk.");
+        Assert.NotEqual(userFolder, folder);
     }
 
     [Theory]
