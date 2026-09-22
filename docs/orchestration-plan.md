@@ -402,9 +402,37 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
+
+**Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
+
+**State.** B4a, B4b, B4c, B4d, B5a and B5b are ticked. `stream/b` is at `9679148`, **not pushed**, with a clean worktree. StreamB has 163 tests; Integration is 143 passed / 8 skipped / 151. `main` holds the ticks. **The full index is committed on `stream/b`** (`data/index/cards.lfidx`, SHA `6495314e…`), so it reaches `main` only when B merges. Streams A, C and D are untouched since the first session.
+
+**Next for B, in order:** **B7** (synthetic generator) → **B2** (round-trip gate) → **B5c** (crop-scale curve) → B6, which is gated on H3 → B8. B2 is **unblocked now**: the cache and the committed index both exist on this PC. B7 before B2 is only a suggestion; they are independent. B5c now has concrete evidence to start from (B5b's note). It should measure the floor against the inset *and* decide whether the fix belongs in the detector (finding the outer edge) or in the identifier (a scale sweep).
+
+**Where things live on this PC. Everything below is outside git by design.**
+
+| Path | Contents |
+|---|---|
+| `C:\LoreFetchData\scryfall-cache\` | 48,750 `normal` renders, `<ArtworkId>.jpg`, 5.1 GB |
+| `C:\LoreFetchData\index-out\` | `cards.lfidx` (the committed one), `subset-5000.lfidx`, `.build.json` sidecars |
+| `C:\LoreFetchData\detect-out\` | B5a/B5b overlays and rectified crops |
+| `.claude\worktrees\stream-b\scryfall-bulk\` | bulk `.jsonl.gz` files and `filtered-artworks.jsonl`, the manifest (gitignored) |
+| `.claude\worktrees\stream-b\test-images\ad-hoc\` | **a copy** of main's 12 ad-hoc frames (gitignored). Tests resolve `test-images/` from the checkout they run in, so every worktree needs its own copy. |
+
+**What this session learned**
+
+1. **The image pull is minutes, not hours.** 48,750 images took 10.7 min (76/s, 0 failures), and building the index takes 40 s. Rebuilding the index is cheap, which makes "rebuild on any transform change" a practical rule rather than a threat.
+2. **Lab finds the repo by walking up from its own exe or the cwd.** A build copied outside the repo cannot run `bulk` or `images` without explicit paths. B4c fixed the crash. Run Lab from the worktree's `bin/`, and **do not rebuild the Lab while a long Lab run is using it**: Windows locks the dll, and the implementer's build fails.
+3. **"Exactly one detection" is a weak real-capture assertion.** It passed on Plains on black while the quad sat on the wrong edge, and the result was a confident wrong identification. Only looking at the overlay and crop caught it. For real-capture checks, look at the pictures. B5b's `identify` table is the better check.
+4. **Chaos cases the brief named left tests green 3 times in B5a** (min-area, ordering, dedupe), and the implementer strengthened each. The escape-valve clause is still earning its place.
+5. **B3b's 50 ms timing test soft-skips** when the full suite runs alongside CPU-heavy tests. Read that number only from an isolated run.
+6. **`core.autocrlf` is on and there is no `.gitattributes`.** `cards.lfidx` survived byte-identical only because git's NUL-byte heuristic flags it as binary. Add `*.lfidx binary` on `main` (a `main`-only file, not frozen) before the index merges.
+7. **The user asked whether a white mat without sleeves is best.** The answer given: it is the safest default for detection on this evidence (4/4 detected and correct), but it is not settled. Sol Ring on black gave the best distance of all (94). Black fails only when a card's border merges into the mat. With one sleeved card, sleeve and card cannot be separated. B6 on H3 decides.
+
 ### Handoff — end of the B3b session, 2026-09-22, Windows PC
 
-**Read this first; the two older handoffs below still apply.** State: B3b ticked. `stream/b` is at `1b4f8d3`, **not pushed**, with a clean worktree. `main` holds this tick. Every other stream is untouched since the first session. **Next: B4a**, then B4b → B4c, and start B4d's full image pull as early as possible so it runs unattended.
+**The two older handoffs below still apply.** State: B3b ticked. `stream/b` is at `1b4f8d3`, **not pushed**, with a clean worktree. `main` holds this tick. Every other stream is untouched since the first session. **Next: B4a**, then B4b → B4c, and start B4d's full image pull as early as possible so it runs unattended.
 
 B4a brief notes, already worked out, so the brief can be written straight from them:
 - **Lab has only a stub `Program.cs`.** B4a adds the command dispatch (hand-rolled argument parsing; no new package, since `.csproj`s are frozen) and uses `System.Text.Json` for the JSONL.
@@ -656,7 +684,25 @@ Global overrides for every B brief:
 
   Accept, on generated frames: an empty mat on light, mid and dark backgrounds returns 0; a partial grid returns the correct count; a hand-shaped blob is rejected; rotated cards come back correctly ordered.
   **Added 2026-09-22 (user ruling): real-capture check.** `test-images/ad-hoc/` holds 12 real C920 frames: Sol Ring (clean normal card), Verix Bladewing (sleeved), Atarka (foil, out of scope) and Plains (land). Each is shot on black foam, brown cardboard and white paper at ~12″, with a cluttered desk in frame (deck box, power bricks, controller, card stacks). The measured card is ~260×370 px against a predicted 283×396. An artifact-gated test in `Tests/StreamB` expects **exactly one** detection per frame and skips with a reason when the folder is absent. **Plains on black foam is the Risk 4 worst case** (black border on a black mat): if it misses, record the fact rather than tuning until it passes. Also a Lab `detect <image> --out <png>` command that draws accepted quads, rejected contours with their discard reason, and the rectified crop (after B5b). It writes to a path outside the repo. The orchestrator reads each PNG and sends it to the user, so the user sees detection working on their own photos before integration.
-- [ ] **B5b** `PerspectiveRectifier`: warp to 488×680 with `INTER_LINEAR` pinned. Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
+- [x] **B5b** `PerspectiveRectifier`: warp to 488×680 with `INTER_LINEAR` pinned (full item text below the results). — *done 2026-09-22, `stream/b` `ebc7a14`…`9679148`. Corners map to pixel centres (0,0)…(487,679), with `INTER_LINEAR` and `Replicate` passed explicitly. StreamB 157 → 163 tests. A synthetic detect → rectify → hash round trip lands at Hamming 17. 4 briefed chaos cases fail correctly (Nearest, mirror, off-by-one size, channel swap). **Independent chaos:** switching to the edge convention (488 instead of 487) fails 2 tests. Adds a Lab `identify <image>` command: detect → rectify → identify against the full committed index, printing the top 5.*
+  - **Early real-path smoke, full 48,750-art index, the 12 ad-hoc frames at ~12″:**
+
+    | Frame | Rank 1 (distance) | Rank 2 (distance) | Margin |
+    |---|---|---|---|
+    | solring_black | **Sol Ring ✓ (94)** | Thraben Charm 159 | 65 |
+    | solring_brown | ✗ Mantle of the Ancients 147 | Sol Ring 157 | — |
+    | solring_white | Sol Ring ✓ 163 | Mantle of the Ancients 185 | 22 |
+    | plains_black | ✗ Mountain 345 | Personal Incarnation 351 | — |
+    | plains_brown | Plains ✓ 143 | Life Goes On 253 | 110 |
+    | plains_white | Plains ✓ 168 | Tarnation Vista 259 | 91 |
+    | verix_sleeved_brown | Verix Bladewing ✓ 242 | Null Champion 255 | 13 |
+    | verix_sleeved_white | Verix Bladewing ✓ 257 | White Ward 287 | 30 |
+    | atarka_foil_brown / white | Atarka ✓ 131 / 133 | Skyshaper 248 / Nether Spirit 252 | 117 / 119 |
+    | atarka_foil_black, verix_sleeved_black | not detected (B5a) | | |
+
+    **Sol Ring's distance is 94** (black mat), matching `ArtworkId` `073bfdca-d7b8-4f4b-93f3-6e7c44bc0b0a` (SCD). The implementer compared the crop and the render by eye and judged it the right art. **Tally: 8 correct at rank 1, 2 wrong at rank 1, 2 not detected.** Real photos land at 94–257, against 10–36 for render-to-self, which leaves a wide gap for lighting and focus to close (Risk 1). Margins are thin on Sol Ring and on the sleeved Verix. **Plains on black was confirmed by its crop:** the black border is absent from the rectified card (about 5% inset per side in width, 3–4% in height), and the result is a confident wrong match. Sol Ring on black shows no inset. The failure is this printing's border merging into the mat, not black mats in general. This is B5c's evidence. One frame per cell, so none of this is an accuracy number; B6 still needs H3.
+
+  Item text: Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
   **Early real-path smoke (user ruling 2026-09-22):** once B4c exists, build a small labelled subset index that includes those four cards' arts. Sol Ring should then retrieve its own `ArtworkId` through detect → rectify → identify. Record the distance. This is a smoke check, not an accuracy number: B6 still needs the H3 corpus.
 - [ ] **B7** Lab synthetic generator:
   - px/inch = 1360/height
