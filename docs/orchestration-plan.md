@@ -468,9 +468,34 @@ Rules that follow from the split:
 
 Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 errors; StreamA **132/132**; Integration **155 passed / 8 skipped**; StreamC **39/39** (`Category!=Hardware`); StreamB 1 and StreamD 1 (placeholders until those streams merge).
 
-**Next, in order:**
-1. **P2 push** of `main` (user approval). Until it lands, any session merging "main" into a stream is merging a `main` nobody else has. That is exactly how the two `main`s diverged today.
-2. **Merge `main` into `stream/b` and `stream/d`** (reading order + stream A). This belongs to their sessions or the new orchestrator. Nothing in their scopes changes.
+**Update, later the same evening. The table above is superseded where it disagrees.**
+
+| Item | Where things stand |
+|---|---|
+| **P2** (stream A) | **Pushed** by the user. `main` `1b24dfa` and `stream/a` `9c5c195`. CI #24 is green. |
+| **P5** (stream D) | D merged at `0ee2d29`, with no conflicts. **Pushed** as `main` `0998420`, with the user's approval. Suites before the push: StreamD **71/71**, and every other suite unchanged. |
+| **Stream C** | Already in `main` (`c26ae12`). Nothing further on `origin/stream/c`. |
+| **`stream/b`** | Fast-forwarded to `origin/stream/b` `8e4e7aa`, then `main` merged in at `6503632`, with no conflicts. **Pushed.** It now carries A, C, D and the reading-order change. |
+
+Suites in the `stream-b` worktree after that merge: build 0 warnings / 0 errors; StreamB 275 passed / 5 skipped; StreamA 132; Integration 155/8; StreamD 71; StreamC 39. The 5 skips are artifact-gated, because that worktree has no `test-images/`. **Only B remains to merge.** After B: cleanup (the two A bugs, `test-images/README.md` for the a/b/d corpora), then I1–I6 and E1–E3.
+
+**Ruling (user, 2026-09-22): keep every stream worktree until the end of the hackathon.**
+
+| Worktree | Why it stays |
+|---|---|
+| `stream-b` | Active. |
+| `stream-a` | Where the two known A bugs get fixed while B runs. |
+| `stream-c`, `stream-d` | Hotfixes that E1 or the I steps turn up. |
+| `ui-validation` | Stays until I2 gives `main` a real Real mode, then it can go. |
+| `agent-arch-review-plan-f0e4ed` | A detached leftover, safe to remove. |
+
+Two rules make keeping them safe:
+1. **Merge `main` into a stream branch before starting new work in it.** Known bug 2 was exactly a stale `stream/a` tested without a change already on `main`.
+2. **Integration work (I1–I6) happens in the main checkout, never in a worktree.** It edits `Tests/Integration`, `AppComposition` and frozen project files, which `guard-write.sh` refuses inside any linked worktree. Worktrees are for stream-scoped fixes only.
+
+**Next, in order (revised):**
+1. ~~P2 push~~ done.
+2. ~~Merge `main` into `stream/b` and `stream/d`~~ `stream/b` is done. `stream/d` is merged into `main` and finished.
 3. **Fix the open known A bugs** (A10's "Known bugs, deferred"): bug 1 (type-ahead focus) and bug 3 (overlay vertical offset, confirmed live by the user). Bug 2 is **resolved**: the user confirmed tile order is correct from `main`.
 4. **B:** B6 → B8 → merge → P3. **Follow "Handoff — the shortest path to closing B, for the Windows PC"** in the B section (the Mac session's handoff, merged in from `origin/main` at `f0a9e2a`). **Correction to it:** it says `test-images/b_corpus/` and `d_corpus/` are Mac-only, but **both are present on the Windows PC** in `C:\Repos\LoreFetch\test-images\` (6 and 2 frames, used by this session's probes), along with `a_corpus/`. Only `ground-truth.csv` still has to come from the Mac. **D:** merge → P5. Then **I1–I6**. I2 is where `LOREFETCH_DETECTOR=real`-style wiring becomes the real `Real` mode, and I3 must set `CameraRotationDegrees = 0` (geometry re-ruling).
 
@@ -1276,10 +1301,10 @@ Every checkpoint means: show the summary, get explicit approval, push, and see b
 | Checkpoint | When |
 |---|---|
 | P1 | End of Stream 0 |
-| P2 | Merge of stream A |
+| P2 | Merge of stream A — **done 2026-09-22** (`1b24dfa`, CI #24 green) |
 | P3 | Merge of stream B |
 | P4 | Merge of stream C |
-| P5 | Merge of stream D |
+| P5 | Merge of stream D — **done 2026-09-22** (`0998420`) |
 | P6 | Integration done |
 | P7 | Release |
 
