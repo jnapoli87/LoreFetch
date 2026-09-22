@@ -204,33 +204,91 @@ public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
     /// tie-break. An oracle with no entry at all (distance still
     /// `int.MaxValue`) is excluded rather than surfaced at the bottom of the
     /// ranking -- it was never actually searched.
+    ///
+    /// Bounded top-K by sorted insertion, not a full sort: `maxCandidates`
+    /// is at most single digits in practice (CandidatesPerTile in
+    /// Core/Scanning), while the oracle table is tens of thousands of rows,
+    /// so sorting the whole table just to keep its first few entries was
+    /// pure waste -- measured at ~9 ms/query of a 13 ms total against a
+    /// realistic index, almost all of it in `List.Sort`'s delegate calls
+    /// over an oracle table two orders of magnitude bigger than what the
+    /// caller keeps. This is a SELECTION algorithm, not a filter: every
+    /// oracle slot is still visited exactly once (the loop below), and a
+    /// candidate is only ever dropped for being worse than all `capacity`
+    /// slots already kept -- never because of a distance threshold. See
+    /// CLAUDE.md "Step 7" (`ICardIdentifier.Identify` never filters by
+    /// threshold) -- that invariant is about the SET of results, and this
+    /// only changes how that set is picked.
     private IReadOnlyList<CardCandidate> RankOracles(
         int[] bestDistancePerOracle, string?[] bestArtworkPerOracle, int maxCandidates)
     {
-        var ranked = new List<(int OracleIndex, int Distance)>(_oracleTable.Count);
+        var capacity = Math.Min(maxCandidates, _oracleTable.Count);
+        if (capacity == 0)
+        {
+            return Array.Empty<CardCandidate>();
+        }
+
+        // Parallel arrays, ascending by (Distance, OracleIndex), kept sorted
+        // as entries are inserted -- `count` is how many of the `capacity`
+        // slots are filled so far (grows to `capacity` and then stays there
+        // as further candidates only ever displace the current worst).
+        var topDistances = new int[capacity];
+        var topOracleIndices = new int[capacity];
+        var count = 0;
+
         for (var oracleIndex = 0; oracleIndex < _oracleTable.Count; oracleIndex++)
         {
-            if (bestDistancePerOracle[oracleIndex] != int.MaxValue)
+            var distance = bestDistancePerOracle[oracleIndex];
+            if (distance == int.MaxValue)
             {
-                ranked.Add((oracleIndex, bestDistancePerOracle[oracleIndex]));
+                continue; // no entry ever referenced this oracle -- it was never searched
+            }
+
+            if (count < capacity)
+            {
+                InsertSorted(topDistances, topOracleIndices, count, distance, oracleIndex);
+                count++;
+            }
+            else if (IsBetter(distance, oracleIndex, topDistances[capacity - 1], topOracleIndices[capacity - 1]))
+            {
+                // Displaces the current worst kept candidate, then re-sorts
+                // into place -- the buffer never grows past `capacity`.
+                InsertSorted(topDistances, topOracleIndices, capacity - 1, distance, oracleIndex);
             }
         }
 
-        ranked.Sort((a, b) =>
+        var result = new List<CardCandidate>(count);
+        for (var i = 0; i < count; i++)
         {
-            var byDistance = a.Distance.CompareTo(b.Distance);
-            return byDistance != 0 ? byDistance : a.OracleIndex.CompareTo(b.OracleIndex);
-        });
-
-        var take = Math.Min(maxCandidates, ranked.Count);
-        var result = new List<CardCandidate>(take);
-        for (var i = 0; i < take; i++)
-        {
-            var (oracleIndex, distance) = ranked[i];
+            var oracleIndex = topOracleIndices[i];
             var oracle = _oracleTable[oracleIndex];
-            result.Add(new CardCandidate(oracle.OracleId, oracle.OracleName, distance, bestArtworkPerOracle[oracleIndex]));
+            result.Add(new CardCandidate(oracle.OracleId, oracle.OracleName, topDistances[i], bestArtworkPerOracle[oracleIndex]));
         }
 
         return result;
     }
+
+    /// Shifts entries at and after `atIndex` right by one, then writes
+    /// `(distance, oracleIndex)` into its sorted position at or before
+    /// `atIndex` -- the shared insertion step `RankOracles` uses both to
+    /// grow the buffer (`atIndex == count`, nothing to overwrite yet) and to
+    /// replace its current worst slot (`atIndex == capacity - 1`).
+    private static void InsertSorted(int[] distances, int[] oracleIndices, int atIndex, int distance, int oracleIndex)
+    {
+        var insertAt = atIndex;
+        while (insertAt > 0 && IsBetter(distance, oracleIndex, distances[insertAt - 1], oracleIndices[insertAt - 1]))
+        {
+            distances[insertAt] = distances[insertAt - 1];
+            oracleIndices[insertAt] = oracleIndices[insertAt - 1];
+            insertAt--;
+        }
+
+        distances[insertAt] = distance;
+        oracleIndices[insertAt] = oracleIndex;
+    }
+
+    /// The ranking's tie-break, as one place both insertion call sites
+    /// share: ascending distance, then ascending oracle-table index.
+    private static bool IsBetter(int distanceA, int oracleIndexA, int distanceB, int oracleIndexB) =>
+        distanceA != distanceB ? distanceA < distanceB : oracleIndexA < oracleIndexB;
 }
