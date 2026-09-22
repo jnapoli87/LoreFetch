@@ -555,6 +555,30 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 | `InternalsVisibleTo` Capture → Tests.StreamC is declared but unprovable — `Capture` has no code yet | **C1a** should replace StreamC's placeholder with a real internal-touching test |
 | `THIRD-PARTY-NOTICES` advisory is non-empty by design until **I5** | the hook prints it, deduplicated, on every commit |
 
+### Approved frozen-surface change — `AvaloniaUI.DiagnosticsSupport` Debug-only, 2026-09-22 (user)
+
+`src/LoreFetch.App/LoreFetch.App.csproj` is frozen; the user approved this change explicitly, which is what the freeze process requires. Landed on `main` as `fb78c66`.
+
+**Why:** the package (2.2.3) declares **no licence at all** — no `<license>` element in its `.nuspec`, no licence file in the package. No licence means no grant to redistribute, which is worse than a restrictive licence because the terms are simply absent. It was referenced unconditionally, so it would have shipped inside the `win-x64` single-file exe, contradicting RECONCILIATION's "nothing is redistributed".
+
+**Why Debug-only rather than removal:** there are **no `AttachDevTools()` call sites anywhere in `src/`**, so the package is currently unused and could have been deleted outright. It is kept under `Condition="'$(Configuration)' == 'Debug'"` because A10 is a hands-on UI run where DevTools is exactly the tool you would want, and the condition costs nothing.
+
+**Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
+
+⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+
+### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
+
+**Measured, not inferred: all 8 of B1b's `WindowsOnly`-traited golden hashes, generated on win-x64, pass bit-exact on this arm64-darwin Mac** (`--filter Category=WindowsOnly` → 8 passed, 0 failed).
+
+That **contradicts the premise behind the trait**, which CLAUDE.md states as "since `macos-latest` is ARM64, a shared golden cannot pass there, so the leg would be permanently red". On this machine it passes.
+
+**Likely mechanism, worth stating because it is reassuring rather than lucky:** the hash is a *thresholded* bit pattern — each bit is "pixel > the median of its own 8×8 cell". A sub-LSB interpolation difference only flips a bit if that pixel straddles its cell median. So the 1024-bit quantisation absorbs precisely the class of error `INTER_AREA`'s ARM64 divergence produces. 8 goldens × 1024 bits = 8,192 bit observations in agreement.
+
+**Evidence, not proof** — a pixel sitting exactly on its cell median could still flip, and OpenCV #24163 is a real confirmed bug. So `thresholds.json` stays `provisional` until win-x64 re-measurement. But two consequences are worth acting on:
+1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
+2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
@@ -788,7 +812,21 @@ Global overrides for every B brief:
   **`BorderTypes.Replicate` was examined and deliberately *not* pinned, with reasoning** — the right outcome, not a miss. The composite mask is filled from the destination quad's own geometric corners, and the keystone inset only pulls corners inward, so a border mode can only supply pixels strictly outside the true quad — exactly the region the mask always excludes. A border-mode change is therefore structurally unobservable downstream, not merely untested; swapping to `BorderTypes.Constant` left all 184 green for a provably different and non-actionable reason. Recorded inline at the call site instead of pinned.
 
   **Independent chaos beyond the brief:** dropping the JPEG round trip was caught by exactly 1 of 179 tests, confirming that test is non-redundant. The standing practice this package produced is now in `docs/TESTING.md` §*pin every interpolation flag and border mode*. Lab production code is ~1,504 lines total, reported against the tripwire and accepted — it is a multi-command dev harness, not one package doing several jobs.
-- [ ] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
+- [x] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
+
+  *Done 2026-09-22, **Mac (arm64-darwin)**, `stream/b` `ce5d407`. Ran against the full 48,750-artwork committed index and the complete real cache (48,750 renders re-pulled on the Mac from the ported manifest in 738 s at 66/s, 0 failures). Fixed sample of 200, seed `20260922`. StreamB 184 → **197**; Integration unchanged 143/8. `data/index/thresholds.json` written at the path Stream 0 already froze, with `goodDistance`/`okDistance` deliberately absent so `ThresholdsFile.Load` throws "missing required field" until B6 sets them — loud, not a fabricated placeholder.*
+
+  | Measure | Value |
+  |---|---|
+  | **referenceFloor** | **55** (own distance min 9, mean 22.3, median 21) |
+  | Margin to best *different* artwork | min **63**, mean 204.1, median 203, max 322 |
+  | **Rank-1 `ArtworkId` rate** | **100.00% (200/200)** — lands 20/20, non-lands 180/180 |
+
+  The worst margin (63) exceeds the floor (55), so every sampled artwork is separated from its nearest impostor by more than the whole spread of own-distances. Far above the 99% stop-and-ask bar. **Marked `provisional: true` / `measuredOn: arm64-darwin`** per Machine split rule 4; the PC promotes it. The thresholds file now records its own provenance (architecture, OS, index SHA-256, sample size, seed), which turns rule 4 from a rule someone must remember into a mechanism.
+
+  🔴 **The gate has a structural limit, found by the implementer's briefed chaos case and worth understanding before anyone trusts it further than it goes.** Swapping the query transform for the reference transform on the query side **did not fail** the rank-1 or bound assertions — the reported distance *improved to 0*. Cause: the queried render's own index entry was built by that same reference pipeline from the same bytes, so forcing the two sides into symmetry only makes a self-match better. **A render-self-match gate is therefore biased toward passing when the two sides converge, even wrongly, and cannot by itself guard reference/query divergence.** Closed as far as it can be by cross-checking `Identify`'s reported distance against an independent raw-scan distance (catches the mutation: expected 17, actual 0). The real guards on divergence remain B1b's goldens and B2's new witness — which is what CLAUDE.md's "golden hashes **plus** a round-trip test" already implies; the risk was reading the round-trip gate as doing more than it does.
+
+  **Query-hash witness (orchestrator addition to the brief).** 50 query-side 1024-bit hashes for a fixed seed, committed as text. **Its trait choice is better than the brief asked for:** rather than copying B1b's `WindowsOnly`, it reads the runtime architecture and compares against the witness's recorded `measuredOn` — same architecture asserts bit-exact, foreign architecture skips with the measured bit-difference count in the message. That matters concretely: `scripts/lorefetch.sh` filters `WindowsOnly` out on macOS, so the goldens are *not* run in a script-driven Mac run, while the witness is. **Orchestrator chaos confirms it:** mutating `QueryTransform`'s `BGR2GRAY` to `RGB2GRAY` is caught by exactly two tests — a golden and the witness — and the witness is the one that survives the macOS filter.
 - [ ] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
 - [ ] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
