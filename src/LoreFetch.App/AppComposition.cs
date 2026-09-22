@@ -1,3 +1,4 @@
+using LoreFetch.App.Fakes;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Scanning;
@@ -188,6 +189,19 @@ public static class AppComposition
 
         var logger = loggers.CreateLogger("LoreFetch.App.AppComposition");
         var settings = new ScanSettings();
+
+        // Item 3 (A10-prep): a fresh ScanSettings defaults GoodDistance and
+        // OkDistance to 0, which makes CohortTile.ProposeFromHash propose
+        // Unresolved for every tile (best.Distance <= 0 is never true) — the
+        // keyboard loop could capture but never commit anything. DemoThresholds
+        // is the one place in the App allowed to name a distance literal (see
+        // its own doc comment for why Fakes mode can't load a real
+        // ThresholdsFile); everything else derives from these two numbers.
+        // Must be set before ScanPipelineFactory.Create below, so every tile
+        // the pipeline constructs sees non-zero thresholds from its first
+        // capture.
+        settings.GoodDistance = DemoThresholds.GoodDistance;
+        settings.OkDistance = DemoThresholds.OkDistance;
 
         // A4: when LOREFETCH_FRAMES_DIR is set, use the user's own folder
         // instead of generating a DemoFrames temp folder. A bad env var

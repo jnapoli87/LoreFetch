@@ -1,4 +1,5 @@
 using LoreFetch.App;
+using LoreFetch.App.Fakes;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Trigger;
@@ -156,6 +157,37 @@ public class AppCompositionTests
     /// header, before any frame arrives), so this count is a direct proxy
     /// for "how many times was RunAsync started", without needing to spy on
     /// the pipeline itself.
+    /// A10-prep item 3: before this fix, `CreateFakesAsync` never touched
+    /// `ScanSettings.GoodDistance`/`OkDistance`, so both stayed at their
+    /// default of 0 and `CohortTile.ProposeFromHash` proposed `Unresolved`
+    /// for every tile — the keyboard loop could capture but never commit.
+    /// `DemoThresholds` is the one sanctioned place in the App that names a
+    /// distance literal (see its own doc comment: LoreFetch.App.csproj is
+    /// frozen and ships only `data/index/**`, and Fakes mode has no real
+    /// ThresholdsFile to load), so this asserts composition actually wires
+    /// those constants into the settings the pipeline was built from —
+    /// non-zero, equal to `DemoThresholds`' own values, and good < ok (a
+    /// swapped pair would make every hash-reachable tile Unresolved too,
+    /// since a distance can never be <= a smaller "good" while > a larger
+    /// "ok" — this final check would still catch a good/ok swap).
+    [Fact]
+    public async Task CreateAsync_FakesMode_AssignsNonZeroDemoThresholdsToScanSettings()
+    {
+        await using var session = await AppComposition.CreateAsync(
+            CompositionMode.Fakes,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotEqual(0, session.Settings.GoodDistance);
+        Assert.NotEqual(0, session.Settings.OkDistance);
+        Assert.Equal(DemoThresholds.GoodDistance, session.Settings.GoodDistance);
+        Assert.Equal(DemoThresholds.OkDistance, session.Settings.OkDistance);
+        Assert.True(
+            session.Settings.GoodDistance < session.Settings.OkDistance,
+            "GoodDistance must be strictly less than OkDistance, or every " +
+            "hash-reachable tile collapses to Unresolved.");
+    }
+
     private sealed class CountingFrameSource : IFrameSource
     {
         public int ReadAsyncCallCount { get; private set; }
