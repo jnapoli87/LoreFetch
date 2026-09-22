@@ -39,8 +39,8 @@ public class MoxfieldCsvExporterTests
 
         Assert.Equal("moxfield", exporter.Format.Id);
         Assert.Equal("csv", exporter.Format.FileExtension);
-        Assert.False(exporter.Format.IsVerified,
-            "IsVerified must remain false until D4 — a real Moxfield import — is completed and the flag is flipped consciously.");
+        Assert.True(exporter.Format.IsVerified,
+            "IsVerified was flipped to true on 2026-09-22 (D5) after a real 6-card import into a live Moxfield account landed correctly.");
         Assert.False(string.IsNullOrWhiteSpace(exporter.Format.DisplayName));
         // Notes must mention both the printing-columns-blank and the
         // unverified-import limitations so the UI can surface them.

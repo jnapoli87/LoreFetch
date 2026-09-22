@@ -52,22 +52,21 @@ public sealed class MoxfieldCsvExporter : ICollectionExporter
     private const string RecordTerminator = "\r\n";
 
     /// <summary>
-    /// <c>IsVerified: false</c> — no generated file has yet been imported
-    /// into a live Moxfield account and confirmed to land correctly.
-    /// D4 in docs/stream-d-export.md is the step that verifies this and
-    /// should flip the flag. <c>Notes</c> explains the two permanent
-    /// limitations: printing columns (Edition, Collector Number) are always
-    /// blank because v1 cannot resolve printings, and the format has not been
-    /// verified by a real import.
+    /// <c>IsVerified: true</c> — a generated file has been imported into a live
+    /// Moxfield account (2026-09-22, D5) and confirmed to land correctly: names,
+    /// the quantity merge and the blank-Condition → Near Mint default all held.
+    /// <c>Notes</c> records the one permanent limitation that remains: printing
+    /// columns (Edition, Collector Number) are always blank because v1 cannot
+    /// resolve printings.
     /// </summary>
     public ExportFormat Format { get; } = new(
         Id: "moxfield",
         DisplayName: "Moxfield (CSV)",
         FileExtension: "csv",
-        IsVerified: false,
+        IsVerified: true,
         Notes: "Edition and Collector Number columns are left blank — v1 identifies the oracle card only, not a specific printing. " +
-               "Condition is left blank; Moxfield will apply its own default (typically Near Mint) on import. " +
-               "This adapter has not yet been verified by a real import into a live Moxfield account (D4, docs/stream-d-export.md).");
+               "Condition is left blank; Moxfield applies its own default (Near Mint) on import. " +
+               "Verified by a real import into a live Moxfield account on 2026-09-22.");
 
     /// <summary>
     /// Writes the Moxfield CSV header followed by one line per row, populating
