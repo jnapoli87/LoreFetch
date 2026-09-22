@@ -14,10 +14,15 @@ namespace LoreFetch.Lab;
 /// rejected contour big enough to be worth ink in orange, labelled with its
 /// discard reason (tiny noise contours below
 /// `ContourDetectorOptions.DiagnosticNoiseFloorPx` are still counted in the
-/// printed summary but never drawn). Output never lands in the repository
-/// -- see `EnsureOutputOutsideRepo` -- because the input image, and
-/// therefore the annotated output, may itself contain photographed card
-/// artwork (CLAUDE.md "Never commit card imagery").
+/// printed summary but never drawn). For every ACCEPTED quad, also writes
+/// the `PerspectiveRectifier`-rectified 488x680 crop next to the overlay,
+/// as `<name>.card<i>.png` (package B5b) -- this is what lets B5a's
+/// "Plains on black" crop-scale finding actually be looked at, rather than
+/// eyeballed off the overlay's quad outline alone. Output never lands in
+/// the repository -- see `EnsureOutputOutsideRepo` -- because the input
+/// image, and therefore the annotated output and the rectified crops, may
+/// itself contain photographed card artwork (CLAUDE.md "Never commit card
+/// imagery").
 public static class DetectCommand
 {
     /// CLAUDE.md/the package brief: detection output goes outside the repo
@@ -100,10 +105,15 @@ public static class DetectCommand
         }
 
         var resolvedOut = outPath ?? DefaultOutputPath(imagePath);
-        var (accepted, rejected) = ProcessOne(detector, imagePath, resolvedOut, maxCards);
+        var (accepted, rejected, cropPaths) = ProcessOne(detector, imagePath, resolvedOut, maxCards);
 
         Console.WriteLine(Summarize(Path.GetFileName(imagePath), accepted, rejected));
         Console.WriteLine($"  -> {resolvedOut}");
+        foreach (var cropPath in cropPaths)
+        {
+            Console.WriteLine($"  -> {cropPath}");
+        }
+
         return 0;
     }
 
@@ -128,19 +138,26 @@ public static class DetectCommand
         }
 
         Directory.CreateDirectory(DefaultOutDir);
+        var totalCrops = 0;
 
         foreach (var file in files)
         {
             var outPath = DefaultOutputPath(file);
-            var (accepted, rejected) = ProcessOne(detector, file, outPath, maxCards);
+            var (accepted, rejected, cropPaths) = ProcessOne(detector, file, outPath, maxCards);
             Console.WriteLine(Summarize(Path.GetFileName(file), accepted, rejected));
+            foreach (var cropPath in cropPaths)
+            {
+                Console.WriteLine($"  -> {cropPath}");
+            }
+
+            totalCrops += cropPaths.Count;
         }
 
-        Console.WriteLine($"Wrote {files.Count} annotated frame(s) to {DefaultOutDir}");
+        Console.WriteLine($"Wrote {files.Count} annotated frame(s) and {totalCrops} rectified crop(s) to {DefaultOutDir}");
         return 0;
     }
 
-    private static (IReadOnlyList<CardQuad> Accepted, IReadOnlyList<RejectedContour> Rejected) ProcessOne(
+    private static (IReadOnlyList<CardQuad> Accepted, IReadOnlyList<RejectedContour> Rejected, IReadOnlyList<string> CropPaths) ProcessOne(
         ContourCardDetector detector, string imagePath, string outPath, int maxCards)
     {
         using var color = Cv2.ImRead(imagePath, ImreadModes.Color);
@@ -162,7 +179,25 @@ public static class DetectCommand
 
         Cv2.ImWrite(outPath, color);
 
-        return (diagnostics.Accepted, diagnostics.Rejected);
+        // For every ACCEPTED quad -- never the rejected ones, which are not
+        // real cards -- also write the rectified 488x680 crop next to the
+        // overlay: package B5b. This is what B5a's "Plains on black" finding
+        // (the accepted quad sits on the black border's INNER edge, not the
+        // card's outer edge) needs a crop to look at directly, and what
+        // package B5c's crop-scale sweep will compare between mats.
+        var rectifier = new PerspectiveRectifier();
+        var cropPaths = new List<string>(diagnostics.Accepted.Count);
+        var baseName = Path.GetFileNameWithoutExtension(imagePath);
+        for (var i = 0; i < diagnostics.Accepted.Count; i++)
+        {
+            var card = rectifier.Rectify(frame, diagnostics.Accepted[i]);
+            using var cardMat = QueryTransform.ToMat(card);
+            var cropPath = Path.Combine(outDir ?? DefaultOutDir, $"{baseName}.card{i}.png");
+            Cv2.ImWrite(cropPath, cardMat);
+            cropPaths.Add(cropPath);
+        }
+
+        return (diagnostics.Accepted, diagnostics.Rejected, cropPaths);
     }
 
     private static void Draw(Mat color, DetectionDiagnostics diagnostics)
@@ -334,6 +369,8 @@ public static class DetectCommand
             Usage:
               detect <image> [--out <png>] [--max N]   Run the detector on one image.
               detect --all <dir> [--max N]             Run it on every image in a folder.
+            Writes an annotated overlay PNG plus one rectified 488x680 crop
+            per accepted quad (<name>.card<i>.png).
             Default output directory: {DefaultOutDir} (never inside the repo).
             """);
     }

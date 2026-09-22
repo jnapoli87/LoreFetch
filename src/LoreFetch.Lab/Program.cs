@@ -21,6 +21,7 @@ return await (command switch
     "images" => ImagesCommand.RunAsync(rest),
     "build-index" => BuildIndexCommand.RunAsync(rest),
     "detect" => DetectCommand.RunAsync(rest),
+    "identify" => IdentifyCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -64,10 +65,17 @@ static void PrintUsage()
                                    write an annotated PNG: accepted quads in
                                    green with corner labels, rejected
                                    contours in orange labelled with their
-                                   discard reason. Output defaults to
+                                   discard reason, plus a rectified 488x680
+                                   crop per accepted quad. Output defaults to
                                    C:\LoreFetchData\detect-out\ and is
                                    refused inside the repository -- an input
                                    or output image may show real card
                                    artwork.
+          identify <image> [--index <path>] [--max N] [--top N]
+                                   Run detect -> rectify -> Identify against
+                                   a real hash index (default
+                                   data/index/cards.lfidx) and print the top
+                                   N candidates per detected card, plus a
+                                   180-degree-flip sanity check.
         """);
 }
