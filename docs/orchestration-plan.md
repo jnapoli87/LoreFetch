@@ -695,6 +695,47 @@ The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked 
 
 **Consequent cleanup owed:** `CropScaleTransform` (93 lines) sits in `Core/Imaging` and is diagnostic-only. Its placement there was correct *if* the sweep were adopted; since it is rejected, **move it to `Lab`** so it does not ship in the product assembly. Keep `lab crop-scale` working — the curve is real evidence and should stay reproducible.
 
+### B8 done-when review — scorecard, 2026-09-22 🧭
+
+Against `docs/stream-b-identification.md` §*Done when*:
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Round-trip gate passes, floor recorded | ✅ B2 — 200/200 rank-1 `ArtworkId`, `referenceFloor` **55** |
+| 2 | ≥90% correct@1 on real normal-card fixtures | ❌ **70.4%** — **waived by user ruling**, candidate-list fallback taken |
+| 3 | `wrong@1` ≤ explicit count at calibrated `OkDistance`, asserted by the harness | ✅ **0**, and the assertion is proven live — the gate *did* fail on the Alchemy collision. ⏳ needs the filtered committed index |
+| 4 | Goldens committed, win-x64, green on the Windows leg, `WindowsOnly`-traited | ✅ B1b — 8 goldens |
+| 5 | `GoodDistance`/`OkDistance` committed as measured values with margin data | ❌ **not written** — the one hard blocker |
+| 6 | `IOracleCatalog` returns every oracle card in the index | ⚠ **no test exists** — gap found in this review |
+| 7 | Detection returns 0 on an empty mat, right count on a partial grid | ✅ B7's bare-mat generator (light/mid/dark) + detector tests |
+| 8 | The accuracy table is committed | ⚠ partial — in `docs/accuracy.md`, but the numbers were measured against the *unfiltered* index |
+
+**Items 3, 5 and 8 all resolve from one PC task** (the filtered win-x64 index rebuild). Item 2 is waived. Item 6 needs a small test.
+
+⚠ **Item 6 is worth closing before A resumes, not after.** `IOracleCatalog.All` is what backs Stream A's *"Set card manually…"* type-ahead over the oracle catalog — and the PC's A10 run found that **"Set card manually… does nothing."** An empty or truncated `All` would present as exactly that symptom. `HashIndexFileTests` asserts the index *file's* oracle-table count, which is the reader, not the interface implementation on `HashCardIdentifier`. A test that loads the real committed index and asserts `All.Count` equals the index's oracle count would rule out half of A10's bug for free.
+
+### Handoff — the shortest path to closing B, for the Windows PC
+
+Approved by the user 2026-09-22. `main` is at `e5ea285`; `stream/b` is pushed at `8e4e7aa`.
+
+**Step 1 — rebuild the index, filtered.** On `stream/b`, from the worktree, with the 5.1 GB cache already present on that machine:
+```
+lab bulk        --out scryfall-bulk
+lab images      --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache
+lab build-index --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache --out C:\LoreFetchData\index-out\cards.lfidx
+```
+Expect roughly **47,417 arts / 32,743 oracle ids** — the digital-only filter removes ~1,333 arts / ~869 oracle ids. Images resume and skip what is present, so this is not a fresh 6 GB pull. Copy the result over `data/index/cards.lfidx`, commit it, and **record the new SHA-256 here**. `*.lfidx` is pinned binary in `.gitattributes`, so it round-trips safely.
+
+⚠ **Re-run `lab bulk` deliberately**, unlike previous sessions: the cascade changed, so the manifest must be regenerated. Note this means a *newer* bulk snapshot than the one behind the 48,750 index — so counts may differ slightly from the figures above. That is expected; record what you actually get.
+
+**Step 2 — re-run B6 and write the thresholds.** `lab accuracy` against the new index. `wrong@1` should be **0**; `AccuracyHarnessRealCaptureTests` should go green, clearing the one red test on `stream/b`. Then write `goodDistance`/`okDistance` into `data/index/thresholds.json`. **`OkDistance` has a 63-point window: every correct match ≤8 lands ≤208, every wrong one ≥272.** ~240 is the natural midpoint. Also **promote `referenceFloor` 55 from `provisional`** — the ARM64 divergence was measured at 11 bits of 49.9M, so the Mac figure holds.
+
+**Step 3 — close item 6**, the `IOracleCatalog.All` test.
+
+**Step 4 — B8**: README §B with the honest numbers (**70.4% correct@1, `wrong@1` 0, 91% detection at 15″** — not rounded up), the per-project README "Internals" line, then the merge gate and **P3**.
+
+**Also owed, lower priority:** move `CropScaleTransform` from `Core/Imaging` to `Lab` (sweep rejected, so it is diagnostic-only code shipping in the product assembly).
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
