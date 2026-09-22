@@ -621,7 +621,7 @@ Global overrides for every A brief:
   - *(stream/a `0368a35`; `TileViewModel.ToggleExcludedFromUi/SetManuallyFromUi/ClearFromUi` each = tile mutator + `Refresh()` (UI never assigns State/Chosen). `TypeAheadPopulator` built by `BuildPopulator`: yields off UI thread, honours cancellation, runners-up (`CohortTile.Candidates`) first then `IOracleCatalog.All`, `StartsWith(…,Ordinal)`, deduped by OracleId, capped `Take(20)`; `MinimumPrefixLength=2`/`MinimumPopulateDelay=150ms` set in code-behind `OnTypeAheadLoaded`. `IOracleCatalog` threaded via optional params (AppComposition builds `StubOracleCatalog()` 33k → AppSession → MainViewModel.LoadCohort → TileViewModel); all A4/A5 ctors still compile. New `CatalogItem` (App wrapper, `ToString()`=OracleName) avoids touching frozen Core. MainWindow: `Tapped`→toggle, `ContextMenu` (Set manually…/Clear), `AutoCompleteBox` overlay. **Override applied (V16): the doc's "few hundred entries / can't test 33k" is stale — stub is now 33k, cap tested against it.** No keyboard/capture (A7). 17 new tests (79 StreamA). Verified: scope App+StreamA only, build 0 err/0 warn, StreamA 79 pass, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos: catalog `StartsWith`→`Contains` → substring test fails at line 273 ("Lightning Bolt" leaks on prefix "Bolt") — prefix semantics genuinely enforced.)*
 
   Accept: a populator unit test against 33k entries (capped, cancellable).
-- [ ] **A7** Keyboard map:
+- [x] **A7** Keyboard map:
   - a window-level `Tunnel` handler, which returns without setting `Handled` when focus is in a `TextBox`
   - Space awaits `CaptureAsync`
   - Enter commits and keeps the cohort on `CollectionStoreException`
@@ -629,6 +629,7 @@ Global overrides for every A brief:
   - keys 1–9 are optional
 
   Accept: `Avalonia.Headless.XUnit` tests cover Space, Enter and Esc, and check that **a space typed into the type-ahead still arrives**.
+  - *(stream/a `7b3accb` + test `97615f3`; window-level `AddHandler(KeyDownEvent, …, Tunnel)` — focus bail (`FocusManager.GetFocusedElement() is TextBox` → return without `Handled`, the WM_CHAR trap), no `IsDefault` button. `MainViewModel.CaptureFromPipelineAsync` runs `CaptureAsync` off-thread and marshals `LoadCohort` back (no-op on null/0 detections); `CommitCohortAsync` no-op when store/cohort null; `ClearPendingCohort`/`HasPendingCohort`. Enter handler clears **only on success**; catches `CollectionStoreException` and keeps the cohort (retry banner deferred to A9); `AutoCaptured` subscribed + marshaled. `ICollectionStore` threaded via optional params (`StubCollectionStore` in `CreateFakesAsync`). 1–9 toggles: see report. All A4–A6 ctors still compile. Verified: scope App+StreamA only, build 0 err, **StreamA 87 pass**, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos found the retain-on-failure path had **no test** (clearing in the catch left all 86 green) → closed by `97615f3`; re-ran the chaos against the new test and it fails `Expected 2, Actual 0` at line 190, right reason.)*
 - [ ] **A8** Collection view and export: a sortable `DataGrid` over `ListAsync` (keep the DataGrid theme include), and an exporter picker with an `IsVerified` badge. No per-format code: `grep -ri moxfield src/LoreFetch.App` must return nothing.
 - [ ] **A9** Non-happy states:
   - empty collection
