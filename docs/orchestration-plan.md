@@ -685,6 +685,16 @@ The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked 
 1. **The gate passes at 0% correct.** `wrong@1 = 0` is satisfied by identifying nothing at all, so the gate alone can be met by total failure. The done-when separately requires ≥90% correct@1; **both conditions must be checked**, and CI must not gate on the exit code alone.
 2. **"Full corpus" overstates.** It means every ground-truth row has its file on disk, not that the corpus is complete. The coverage line beside it is honest; the header is not.
 
+### Rulings — the 90% gate and B5c's sweep, 2026-09-22 (user)
+
+**1. The ≥90% correct@1 gate is waived for v1. 70.4% is accepted.** Stream B's *Done when* requires ≥90% correct@1 on real normal-card fixtures, and the measured figure on the 54-slot corpus is **70.4%** (38/54), which triggered the recorded stop-and-ask. The user's ruling: accept it for v1 and take the plan's own fallback — the **candidate-list flow**, surfacing the top 3 and letting the confirmation grid resolve the rest. That costs no rework: `CohortTile.Candidates` is already *"ranked, unfiltered"* at the contract level and Stream A already renders ranked candidates.
+
+**What justifies waiving it** rather than treating it as a failure: the metric the stream doc itself calls more important is satisfied with room to spare. `wrong@1` is **0** at any `OkDistance` between **209 and 271** — a 63-point window — because every correct match across six independent frames lands at ≤208 and every wrong one at ≥272. *"A silent miss is recoverable, a confident wrong answer is permanent bad inventory."* Seven cards in ten identify outright; the other three are **flagged**, not silently entered wrong. **The accuracy table must state 70.4% plainly** — it is not to be rounded up or described as "about 90%".
+
+**2. B5c's 3-scale crop sweep is REJECTED for v1.** B5c deferred the decision pending corpus evidence, and the corpus answered it: every wrong match sits at **272–344**, far outside the ~5% crop tolerance the curve identified, so crop error is not what is failing these cards. The sweep would cost **~6× query time** (53 ms → 295 ms per 9-card cohort) to fix a failure mode the data does not show.
+
+**Consequent cleanup owed:** `CropScaleTransform` (93 lines) sits in `Core/Imaging` and is diagnostic-only. Its placement there was correct *if* the sweep were adopted; since it is rejected, **move it to `Lab`** so it does not ship in the product assembly. Keep `lab crop-scale` working — the curve is real evidence and should stay reproducible.
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 

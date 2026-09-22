@@ -179,6 +179,7 @@ v0.1.0 ships with modern-frame English cards (single-faced, non-foil), captures 
 |---|---|
 | **"Worth sleeving" flag** | Detailed below. It needs a price column in the index, but not printing detection, which is why it's first. |
 | "Update card data" in the app | New sets need a new index. The Lab can already build one (`bulk` → `images` → `build-index`), but it's a developer tool that isn't shipped. Ship it with the app, or add the command to the app, so the index is always built by the same hashing code the app runs. The lighter alternative — publish just a new `cards.lfidx` per set — is detailed below under *Published index builds*, which is the recommended route. |
+| **Improve identification accuracy past ~70%** | Detailed below. v1 measured **70.4% correct@1** with **wrong@1 = 0**; the gap is recoverable rather than inherent, and every lever is already identified. |
 | Foils | Polarized or diffuse light. Glare defeats the hash (Risk 6). |
 | Set and printing | OCR of the collector line and a lower mount (the v2 path under *Identification*). This unlocks exact prices, ManaBox and other export targets that need a set. |
 | Double-faced cards | Per-face images. The 3,440 objects without a top-level `image_uris` are skipped today. |
@@ -205,6 +206,22 @@ v0.1.0 ships with modern-frame English cards (single-faced, non-foil), captures 
 **Deliberately deferred, and why.**
 - **A tiered staleness check** — `GET /bulk-data/unique_artwork` is only ~500 bytes and carries `updated_at` plus a timestamped download URI, so a nightly check is effectively free. But **`updated_at` moves daily whether or not any card changed**, so it is useless on its own: it only becomes a real signal with the manifest-SHA comparison behind it (download the 37.8 MB bulk file, re-run the cascade, compare against the sidecar's `manifestSha256`). And whatever it detects, a human still presses the button. Worth adding *after* the Action exists, never before.
 - **Recording the build architecture in the index header and warning on mismatch.** Cheap, and it would turn today's measurement into a mechanism rather than folklore — but it guards a macOS release that is not shipped.
+
+### Improving identification accuracy
+
+v1 ships at **70.4% correct@1** (38 of 54 real card slots) with **`wrong@1` = 0** and a 63-point threshold window. The remaining 29.6% splits into two very different problems, and they have different fixes:
+
+**5 of 54 were never detected.** These never reach the grid at all, which is the unrecoverable failure class — so this is the higher-value half.
+- **Grid-driven re-detection of empty cells.** With a 3×3 declared and 8 quads found, the grid's pitch and origin are known, so the missing cell's location is known. Crop to it and re-detect with thresholds you can afford to loosen *because a card is known to be there*. `SlotMapper.TryInferGrid` already does the inference; only the second pass is missing.
+- **Adaptive thresholding** instead of fixed Canny 50/150. The fixed thresholds assume a contrast range that real setups do not have — measured: detection drops from 91% at 15″ to 33% at 20″ purely on edge strength, and light-bordered cards on a light mat lose their edge entirely. This is the fix for "users won't have perfect setups".
+- **Multi-frame accumulation.** The scanner sees video but is evaluated on stills. A card that fails detection in one frame may succeed in the next. Note this needs a design change, because auto-capture's count gate currently *requires* detection to already work.
+
+**11 of 54 were detected but not identified** — all at distance 272–344, i.e. correctly flagged rather than confidently wrong. Raising these is the lower-value half, since the grid already resolves them in one click.
+- The corpus is unusually hostile: Final Fantasy, Avatar and TMNT crossover frames, Omen/Adventure split cards, retro "Summon" frames, two visibly tilted placements. **Measure a plain black-bordered corpus before optimising** — the ceiling may be considerably higher than 70% on an ordinary collection, and that is untested.
+- The `0.85·width` hash region assumes title/art/type-line at the top. Non-standard layouts break that assumption — though note a Saga (`Summon: Fat Chocobo`) *did* match correctly at 149, so the region is more robust than expected and this needs measuring rather than assuming.
+- **The crop-scale sweep is not the answer** and was rejected on evidence — see the orchestration plan's ruling. Do not re-propose it without a corpus showing crop error above ~5%.
+
+**Do not tune any of this against the existing corpus.** It is the measurement; fitting to it would make the resulting number meaningless. Capture a second corpus first.
 
 ### "Worth sleeving" flag
 
