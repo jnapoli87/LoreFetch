@@ -563,8 +563,8 @@ Global overrides for every B brief:
   - Hamming distance via `PopCount`
 
   Accept, as bounds rather than equalities: two input scales stay within a bound, brightness and gamma shifts stay within a bound, an inverted image lands at ≈1024, and the median and tie-break unit tests pass.
-- [ ] **B1b** Golden hashes: deterministic procedural inputs, with the expected hex committed after it is generated **on win-x64**. Accept: the test passes on Windows and is filtered out on macOS.
-- [ ] **B3a** Index format `cards.lfidx`:
+- [x] **B1b** Golden hashes: deterministic procedural inputs, with the expected hex committed after it is generated **on win-x64**. Accept: the test passes on Windows and is filtered out on macOS. — *done 2026-09-21, `stream/b` `3d28cea`. 8 goldens, traited `WindowsOnly`: 45 run unfiltered, 37 under `Category!=WindowsOnly`, which `scripts/lorefetch.sh` applies on the macOS leg. Independent chaos: switching step 5 to `INTER_LINEAR`, which B1a's 29 invariant tests could not see, now fails all 8 goldens.*
+- [x] **B3a** Index format `cards.lfidx`: — *done 2026-09-21, `stream/b` `96d0f52`. Magic `LFIX`, version and counts; a deduplicated oracle table; little-endian, length-prefixed UTF-8. Written by one implementer, which was cut off by the usage limit mid-chaos with a UTF-16 mutation left in the file (reverted by the orchestrator); finished and chaos-verified by a fresh one. 3 chaos cases fail correctly.*
   - header: magic, version, counts
   - per entry: 16 `ulong` hash values, an oracle index, the `ArtworkId`, and an `IsBasicLand` flag (V11)
   - an oracle name table
@@ -666,7 +666,7 @@ Global overrides for every D brief:
 
   **The same trap applies to `ArtworkId`'s fold, for the same structural reason:** a commit-only suite cannot tell agree-or-null from last-write-wins. Drive that from a written file too, with rows that agree and rows that disagree.
 - [x] **D2** `NativeCsvExporter`: the shared codec, `leaveOpen: true`, and a BOM. Accept: the caller's stream is still usable after export. — *done 2026-09-21, `stream/d` `1eb6390`. `IsVerified = true` for native, justified: its only target tool is LoreFetch's own reader, which the codec suite covers. leaveOpen chaos fails correctly.*
-- [ ] **D3** `CsvCollectionStore`:
+- [x] **D3** `CsvCollectionStore`: — *done 2026-09-21, `stream/d` `690ecce` + review fix `ceb2110`. **Manual rows:** the store derives null distance and null `ArtworkId` from the tile state rather than trusting the tile; a reflection-forced test proves it. **The plan's own lock case was too weak:** under `FileShare.None` the commit fails at its *read* step, before any temp file exists, so deleting the temp-file cleanup left every test green. A `FileShare.ReadWrite` lock (the "Excel has it open" case) reaches `File.Move` and fails there, and that test asserts the full directory listing; the `FileShare.None` case stays for the exception and the untouched original. 58 tests; chaos (cleanup removed, exception conversion removed) fails correctly.*
   - commits `Included` and `ManuallySet` tiles, folding duplicates within a cohort
   - returns the number of **cards** committed
   - throws on a null `Chosen`
