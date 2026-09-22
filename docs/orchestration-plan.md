@@ -402,6 +402,44 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Handoff — end of the first stream session, 2026-09-21 ~23:55, Windows PC
+
+**Read this first; the S0.8 handoff below is older and still applies.** The checkboxes are the truth. This section holds only what the session learned that is not already recorded against an item.
+
+#### State
+
+- **13 packages ticked:** A0–A3, B1a, B1b, B3a, C1a–C1c, D1–D3. Each one was independently verified (§0 steps plus one orchestrator chaos case) before its tick.
+- **Everything is pushed:** `main` at `50c1214` with CI green on both legs, and `stream/a`–`stream/d` on GitHub. No stream is merged: none has finished its list, which the merge gate requires. **Stream code has only been proven on this PC**; CI runs on `main` alone, so the macOS leg first sees stream code at each merge.
+- **Worktrees on this PC** (`.claude/worktrees/stream-<x>`) are clean, each at its pushed branch tip. The stale `agent-arch-review-plan-f0e4ed` worktree holds pre-rewrite history and can be removed.
+- **Next per stream:** A4 · **B3b** · C2 · D4. Remaining: 25 stream packages, 9 integration/endgame, 4 human items.
+
+#### Next session: stream B, solo, on this PC
+
+Stream B is the critical path: about 12 serial packages, plus B4d's multi-hour image pull. This PC is the right machine, because B1b's goldens, B4d's index and every golden run are win-x64 by nature.
+
+- **Order:** B3b (the identifier, over the B3a index), then **B4a → B4b → B4c, and start B4d's full run as early as possible** so the ~6 GB pull runs unattended while B5a/B5b/B7 proceed. The cache lives outside the repo at `C:\LoreFetchData\scryfall-cache`, passed as a parameter. If B4d looks too slow, the plan allows a labelled 5k-art subset.
+- **B4a carries an open question:** the single-printing fraction. It needs `default_cards` as well as `unique_artwork`.
+- **B6 is gated on H3,** the user's fixture corpus, which needs H1 (the printed mount). If H1 and H3 are late, B stops at B2/B5c.
+- **Working in the worktree:** `stream-b` is a linked worktree, so `guard-write.sh` freezes the contract surface there. A session working *from the main checkout* is **not** frozen when it writes main's own files, so keep every write inside `.claude/worktrees/stream-b/`. Build and test there with `.claude/worktrees/stream-b/scripts/lorefetch.sh test --no-pull`.
+- **Current B baseline:** 45 StreamB tests, 8 of them `WindowsOnly` goldens (37 run under the macOS filter). Integration 143 passed / 8 skipped / 151 total.
+
+#### What this session learned
+
+1. **Verification caught what implementer reports missed, every time it looked.** Without the orchestrator's own chaos case, these would all have been ticked:
+   - the trigger fired on a slowly moving hand (A0);
+   - a changed resize filter was invisible to B1a's 29 tests;
+   - a failed store commit's temp-file cleanup was untested, because `FileShare.None` fails before the write path (D3);
+   - the watchdog stall test passed at the wrong timeout (C1c);
+   - a preview data race tore frames (A2).
+   Keep breaking one invariant per package yourself. **The best chaos case is the one the brief didn't name.**
+2. **Smoke-launch anything with a UI thread.** A3's crash (`RequestAnimationFrame` called off the UI thread) and A1's temp-folder leak (Avalonia's `Shutdown()` never raises `ShutdownRequested`) were invisible to every unit test. Launch with `LOREFETCH_SMOKE_EXIT_MS=3000`, check exit 0 and the `%TEMP%` folder count, and never leave a window open.
+3. **A usage limit hit mid-chaos-test leaves the mutation in the code.** It happened twice: UTF-16 strings in B3a, and D3's cleanup call commented out. After any cutoff, grep every worktree for `chaos` and check `git diff` before resuming or committing.
+4. **Stop at package boundaries, not mid-edit.** Near a limit, say "finish and commit your current package, then stop" rather than killing agents. And have implementers commit as each step passes.
+5. **A fresh agent with a tight brief is usually cheaper than resuming.** Resumed contexts ran 200–300k tokens; a fresh brief pointing at the files and the specific defect was cheaper and did as well. Resume only when the agent holds mid-edit reasoning the repo doesn't.
+6. **Four parallel streams hit the usage limit** within about 5 hours, including review. Two at a time, or B plus one, is the sustainable width.
+7. **The orchestrator must not implement.** It drifted into writing a test once and was rightly stopped. Its own writes are the plan, the ticks, and reverting a known chaos mutation.
+8. **Stale wording to fix on `main` when convenient:** TESTING.md §Unit says movement beyond ε re-arms the trigger. The ruling in stream-a A0 says only a count change does (see A0's tick).
+
 ### Handoff — written at S0.8, 2026-09-21
 
 **Stream 0 is complete. G1 is the next gate, and P1 (the push + both CI legs green) is the only thing between here and forking.** This section exists because the orchestrating session that built Stream 0 ended here deliberately, and four things it learned live nowhere else. Everything else is already recorded against its own item — that was the point of writing findings down as they landed rather than saving them for a summary.
