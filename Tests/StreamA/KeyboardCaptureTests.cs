@@ -153,6 +153,51 @@ public class KeyboardCaptureTests
     }
 
     // -----------------------------------------------------------------------
+    // Enter with a locked store: cohort is RETAINED, no exception escapes
+    //
+    // CollectionStoreException means "Excel has the file open" — the handler
+    // catches it and keeps the pending cohort so the user can retry (A9 adds
+    // the retry dialog). A7's only contract here is "do not crash, keep
+    // cohort". This test guards that catch block against accidentally clearing
+    // the grid (e.g. a misplaced ClearPendingCohort in the catch arm).
+    // -----------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task Enter_WhenStoreThrowsCollectionStoreException_RetainsCohort()
+    {
+        var store = new StubCollectionStore();
+        store.ArmNextCommitToThrow(); // simulates "Excel has the CSV locked"
+        var pipeline = new SpyPipeline();
+        var session = MakeSession(pipeline, store);
+
+        var window = new MainWindow(session);
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var vm = (MainViewModel)window.DataContext!;
+
+        var cohort = MakeCohort(2);
+        vm.LoadCohort(cohort);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(2, vm.Tiles.Count);
+
+        // Press Enter — store throws CollectionStoreException.
+        // The handler must catch it and keep the cohort intact.
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs(); // drains any dispatcher work (there should be none — no Post on catch)
+
+        // Cohort is retained: tiles still present, HasPendingCohort still true.
+        Assert.Equal(2, vm.Tiles.Count);
+        Assert.True(vm.HasPendingCohort);
+
+        // Store must be clean — the failed commit wrote nothing.
+        var rows = await store.ListAsync(CancellationToken.None);
+        Assert.Empty(rows);
+
+        window.Close();
+    }
+
+    // -----------------------------------------------------------------------
     // Escape: discards without writing to the store
     // -----------------------------------------------------------------------
 
