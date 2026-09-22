@@ -589,6 +589,52 @@ That **contradicts the premise behind the trait**, which CLAUDE.md states as "si
 1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
 2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
 
+### Measured — ARM64 index divergence is real but vanishing, 2026-09-22
+
+**Settled by experiment, not inference.** Rebuilt the full index on the Mac (arm64-darwin) from the **identical** manifest and image cache the committed win-x64 index was built from:
+
+| | |
+|---|---|
+| win-x64 committed | SHA-256 `6495314eb3e5f37e3c1bd5830aa506d6efc617e23303c46f87851edef09e4dd3` |
+| arm64 rebuild | SHA-256 `9fac40ee20537f7facfc168806fd45817a5f2531ded6c9bbe72a4e260ec7d9fd` |
+| size / counts | **identical** — 10,460,648 bytes, 48,750 arts / 33,612 oracle / 1,882 lands |
+| **differing bytes** | **7** of 10,460,648 (0.0001%) |
+| **differing bits** | **11** of 49,920,000 hash bits |
+
+Two conclusions, and they point opposite ways:
+
+1. **Machine split rule 4 STANDS for the index.** The SHA differs, so a Mac-built index must never be committed. This is now measured rather than assumed.
+2. **Rule 4's *threshold* clause is demonstrably over-cautious.** At ~1 divergent bit per 4.5 million, a card's distance to its own reference entry shifts by at most a bit or two — against `referenceFloor` 55 and margins of 60+, that is noise. **B2's `referenceFloor` 55 measured on arm64 is promotable rather than requiring re-measurement.**
+
+⚠ **This corrects the "the `WindowsOnly` trait looks unnecessary" reading recorded above.** The goldens *do* pass on arm64 (8/8, verified) — but that is a small-sample consequence of this divergence rate, not evidence of bit-exactness: 8 goldens are 8,192 bits, and at ~1 bit per 4.5M the probability any is touched is tiny. The trait's stated premise ("a shared golden cannot pass there") is wrong; the trait itself is defensible caution. **Do not act on the earlier reading without this correction.** The mechanism proposed for it does hold, and is now quantified: the per-cell median threshold absorbs **99.999978%** of sub-LSB resize error.
+
+### Found by B6's first real run — digital-only cards are same-art impostors, 2026-09-22
+
+**The index contains 132 Alchemy (`A-` prefixed) entries, 0.27% of 48,750 — and 128 of them have their non-Alchemy twin also present.** Alchemy cards are digital-only MTG Arena cards; they share artwork with the paper card, so the hash **cannot** distinguish them, and they can never be the correct answer for a physical scan — only a confidently wrong one.
+
+This is not theoretical: it is the single gate failure in B6's first real run. `Young Red Dragon // Bathe in Gold` rank-1-matched `A-Young Red Dragon // A-Bathe in Gold` at **distance 93, margin 12** — well inside any plausible `OkDistance`, so a *confident* wrong answer, which CLAUDE.md calls "permanent bad inventory."
+
+B4a's cascade already excludes `art_series` and `token` layouts. **This is the same category of exclusion and was simply missed**, and it is a Risk 5 instance that is *fixable* rather than inherent — unlike two paper printings sharing art, a digital-only card is never a legitimate answer. Fix in progress; filtering must be keyed on Scryfall's own `games`/`digital`/`set_type` fields, **not** the `A-` name prefix, which is a symptom.
+
+**Consequence for the shippable artifact:** the filtered index must be **rebuilt on win-x64** (see the divergence finding above). A Mac rebuild verifies the fix but cannot produce the committed file.
+
+### B6 first real run — the frame-drop policy was hiding the result, 2026-09-22
+
+Against a real 54-slot corpus (6 frames, 15″, light mat, ground truth validated name-by-name against the 33,596-name oracle catalog):
+
+| Retrieval mode | correct@1 | wrong@1 | no-match | scored slots |
+|---|---|---|---|---|
+| `RETR_EXTERNAL` (baseline) | 0 | 0 | 54 (all dropped-frame) | **0 of 54** |
+| `RETR_LIST` | 14 (25.9%) | 1 | 39 (36 dropped-frame) | **18 of 54** |
+
+**The 25.9% is an artifact of dropping any frame whose detected count ≠ the layout count.** Detection yields 8–9 per frame and only two frames hit exactly 9, so four frames — 36 slots — were discarded wholesale. **Of the 18 slots actually scored, 14 were correct (78%)**, 3 were correctly flagged above `OkDistance`, and 1 was the Alchemy collision.
+
+The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked exactly as designed on real data.** Detection found 1–2 of 9, and rather than pairing two quads against nine slots and manufacturing seven wrong answers, the harness refused each frame and reported it in its own bucket. That guard exists because of a user question about slot ordering.
+
+**Two harness findings to fix:**
+1. **The gate passes at 0% correct.** `wrong@1 = 0` is satisfied by identifying nothing at all, so the gate alone can be met by total failure. The done-when separately requires ≥90% correct@1; **both conditions must be checked**, and CI must not gate on the exit code alone.
+2. **"Full corpus" overstates.** It means every ground-truth row has its file on disk, not that the corpus is complete. The coverage line beside it is honest; the header is not.
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
