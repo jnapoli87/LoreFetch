@@ -402,6 +402,10 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Per-project READMEs — ruled 2026-09-22
+
+Each of the nine projects has a `README.md` on `main` (`b0a295b`) that holds **orientation only**: purpose, owner, dependency rules, freeze, how to run its tests, and links into `docs/`. **Streams do not edit these files mid-stream.** `Core`'s README is shared by A, B and D, so concurrent edits would be exactly the multi-way conflict the freeze exists to prevent. Each stream fills in the "Internals" line of its own projects' READMEs **at its done-when step** (A10, B8, C4, D6), next to the root README section it already owes. The same step flips its "(not yet on `main`)" markers in `Core`'s folder map.
+
 ### Handoff — end of the first stream session, 2026-09-21 ~23:55, Windows PC
 
 **Read this first; the S0.8 handoff below is older and still applies.** The checkboxes are the truth. This section holds only what the session learned that is not already recorded against an item.
