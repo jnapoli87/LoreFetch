@@ -18,4 +18,8 @@ The Scryfall bulk-data cache and downloaded renders live **outside this reposito
 
 Unit- and synthetic-integration-tested in `../../Tests/StreamB`. Accuracy runs are local-only, reported as a committed table rather than pass/fail — see [`../../docs/TESTING.md`](../../docs/TESTING.md#the-five-levels).
 
+## Diagnostic-only code
+
+`CropScale/` (`CropScaleTransform`, `CropScaleExperimentRunner`, `MultiScaleSweepExperiment`, plus the `lab crop-scale` command) lives here, not in `Core/Imaging`, because it is diagnostic tooling for package B5c's crop-scale experiment — never part of the shipping reference or query path. B5c's 3-scale identifier-side sweep was **rejected for v1** (`docs/orchestration-plan.md`, "Rulings — the 90% gate and B5c's sweep": every real wrong match sits at 272–344, outside the ~5% crop tolerance the curve identified, so crop error is not what is failing real cards), so this code must not ship in the product assembly — `LoreFetch.App` never references `Lab`. Kept working and tested (`lab crop-scale`) because the curve is real evidence and stays reproducible; see `docs/accuracy.md`'s B5c section for the measurements it produced.
+
 Internals: documented by stream B at its done-when step.

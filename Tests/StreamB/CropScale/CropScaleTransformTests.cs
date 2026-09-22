@@ -1,4 +1,4 @@
-using LoreFetch.Core.Imaging;
+using LoreFetch.Lab.CropScale;
 using OpenCvSharp;
 using Xunit;
 

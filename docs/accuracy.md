@@ -1543,3 +1543,79 @@ Files changed: `src/LoreFetch.Lab/RoundTrip/RoundTripThresholdsDocument.cs`
 (`Provisional`/notes derived from architecture, testable internal
 overload), `Tests/StreamB/RoundTrip/RoundTripThresholdsDocumentTests.cs`
 (new), `docs/accuracy.md` (this section).
+
+## B5c-cleanup, part C: `CropScaleTransform` moved out of `Core/Imaging`, 2026-09-22
+
+**Consequent cleanup owed**, per `docs/orchestration-plan.md`'s B5c ruling
+(above): `CropScaleTransform` (93 lines) sat in `src/LoreFetch.Core/Imaging`,
+which is correct only if the 3-scale crop sweep were adopted -- it was
+rejected for v1 (every real wrong match sits at 272-344, outside the ~5%
+crop tolerance the curve itself identified). Diagnostic-only code sitting
+in `Core/Imaging` ships in the product assembly for no reason; it belongs
+in `Lab`, where every other B5c experiment artifact
+(`CropScaleExperimentRunner`, `MultiScaleSweepExperiment`, `lab
+crop-scale`) already lives.
+
+Moved `src/LoreFetch.Core/Imaging/CropScaleTransform.cs` ->
+`src/LoreFetch.Lab/CropScale/CropScaleTransform.cs`, namespace
+`LoreFetch.Core.Imaging` -> `LoreFetch.Lab.CropScale`. Updated the four
+dependents:
+- `CropScaleExperimentRunner.cs`, `MultiScaleSweepExperiment.cs` (same
+  target namespace now -- no `using` needed for `CropScaleTransform`
+  itself; `MultiScaleSweepExperiment.cs` keeps `using
+  LoreFetch.Core.Imaging;` for `CardHash`/`QueryTransform`/`CardHasher`,
+  which it still uses).
+- `Tests/StreamB/CropScale/CropScaleTransformTests.cs`: `using
+  LoreFetch.Core.Imaging;` -> `using LoreFetch.Lab.CropScale;` (no other
+  `Core.Imaging` type used in that file).
+- `Tests/StreamB/CropScale/CropScaleRealFrameTests.cs`: added `using
+  LoreFetch.Lab.CropScale;` alongside the existing `using
+  LoreFetch.Core.Imaging;` (still needed there for `FrameMat`,
+  `QueryTransform`, `ContourCardDetector`, `PerspectiveRectifier`).
+
+**Verified nothing outside `Lab`/`Tests` ever referenced it**: `grep -rl
+CropScaleTransform` across `src/LoreFetch.Core`, `src/LoreFetch.App`,
+`src/LoreFetch.Capture` returns nothing, before or after the move --
+`Core/Imaging`'s shipping transforms (`ReferenceTransform`,
+`QueryTransform`) never called it; it was always exercised only through
+`lab crop-scale` and its own tests.
+
+**`lab crop-scale` output confirmed byte-identical before and after the
+move** (`--cache C:\LoreFetchData\scryfall-cache --sample 5 --seed
+20260922`, real cache, real committed index):
+
+```
+Level                       Rank1%  OwnMin  OwnMean  OwnMed  OwnMax   MgMin   MgMean   MgMed   MgMax
+0.00                        100.0%      12     18.6      18      32     154    185.0     184     212
++0.01                       100.0%      41     55.0      54      70     138    161.8     155     202
++0.02                       100.0%      93    105.2      97     127     120    131.2     127     152
++0.03                       100.0%     111    146.2     151     186      56    104.2     103     137
++0.04                       100.0%     143    177.2     161     227      11     86.2      82     138
++0.05                        80.0%     186    208.5     199     249      58     83.0      78     118
++0.06                        80.0%     202    248.2     249     292      27     53.8      50      88
++0.08                        40.0%     283    309.5     309     336      16     17.0      17      18
++0.10                        20.0%     301    301.0     301     301      32     32.0      32      32
++0.15                         0.0%      -1     -1.0      -1      -1      -1     -1.0      -1      -1
++0.20                         0.0%      -1     -1.0      -1      -1      -1     -1.0      -1      -1
+-0.02                       100.0%      69    103.8     112     124      78    102.0     108     120
+-0.05                       100.0%     137    191.8     187     242       1     37.0      52      66
+-0.08                        40.0%     195    214.5     214     234      13     16.5      16      20
+real (plains_black, B5b)    100.0%     146    182.4     168     231       1     79.0      83     124
+```
+
+`diff` between the "before" run (temporarily set aside via `git stash
+push -u`, tagged, restored via `git stash apply <sha>` and dropped
+afterward -- never a bare `stash pop`) and the "after" run: **empty**, no
+differences.
+
+No `.csproj` change was needed -- `LoreFetch.Lab.csproj` already
+references `LoreFetch.Core`, so moving a type further INTO `Lab` adds no
+new project-reference edge.
+
+Files changed: `src/LoreFetch.Lab/CropScale/CropScaleTransform.cs`
+(moved from `src/LoreFetch.Core/Imaging/`, namespace changed, doc comment
+updated to explain why it lives here), `src/LoreFetch.Lab/CropScale/CropScaleExperimentRunner.cs`
+(dropped now-unneeded `using`), `Tests/StreamB/CropScale/CropScaleTransformTests.cs`,
+`Tests/StreamB/CropScale/CropScaleRealFrameTests.cs` (`using` updated),
+`src/LoreFetch.Lab/README.md` (new "Diagnostic-only code" section),
+`docs/accuracy.md` (this section).
