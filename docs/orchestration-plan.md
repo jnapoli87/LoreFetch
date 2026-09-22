@@ -418,6 +418,20 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the Mac A/D session, 2026-09-22
+
+**Newest handoff; the ones below still apply.** Covers the Mac's lanes only (A, C3, D). The B/PC handoffs below remain the truth for their lanes. Checkboxes and their per-item notes are authoritative.
+
+**State — the Mac's entire workload is complete.** A4, A5, A6, A7 (+ the retain-on-lock test), A8, A9 are ticked; C3 is ticked; D4, D5 (real Moxfield import verified) and D6 are ticked. `stream/a` is rebased onto `origin/stream/a` (`9e4c228`) with A4–A9 replayed on top (tip `ac55852` pre-rebase), **ahead 8 / behind 0 — a clean fast-forward**, clean worktree. StreamA is **106 passed / 0 failed** (2 `WindowsOnly` screenshot tests excluded on macOS), Integration **143 passed / 8 skipped**. Each A package was verified independently (scope, build, both suites, smoke-launch, `grep -ri moxfield src/LoreFetch.App` empty) plus one un-briefed chaos case — which found and closed a real gap in A7 (retain-cohort-on-`CollectionStoreException` was untested; `97615f3` covers it).
+
+**Push status.** `stream/c` (`7bf2632`) and `stream/d` (`fb24715`) were pushed earlier this session; the PC has since **merged `stream/c` to `main`** (Stream C complete — C2 + C4 hardware-verified on the C920). `stream/a` and the A5–A9 `main` ticks are pushed at session end **with the user's approval**.
+
+**Next for the PC (A lane):** **A10** 🧭👤 — the done-when hardware run on `stream/a`: all three layouts, a keyboard-only loop, all four tile states reached (two via configured `StubCardIdentifier` distances, two via user action), memory flat for 5 min under `dotnet-counters`; record fps + memory, then write **README §A**. **A10 is A's merge gate → P2.** Everything A needs is on `stream/a`; it depends on nothing from B or D. C4 is already done. B continues per its own handoff (B7 → B2 → B5c → B6 → B8).
+
+**Adjacent finds.**
+1. 9 pre-existing `xUnit1051` analyzer warnings in `Tests/StreamA/TileInteractionTests.cs` (A6) — non-blocking; the repo already treats `xUnit1051` as worth fixing (see C1a). A cheap cleanup when A is next touched.
+2. The named-chaos escape-valve earned its place again: A7's brief-named chaos all failed correctly, but the *un-briefed* case is what surfaced the retain-on-lock coverage gap. Same lesson as the B session's finding #4.
+
 ### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
 
 **Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
@@ -572,7 +586,7 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
   - back it up outside git
 
   Gates B6.
-- [ ] **H4** 👤 A Moxfield account. Gates D5.
+- [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
 - [x] **H6** 👤 A C920 attached to the Windows PC. Gates C4. — *confirmed attached 2026-09-21 (G0.3).*
 
 ### Stream A — UI · worktree `stream-a` · scope `src/LoreFetch.App/**`, `src/LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, README §A
@@ -607,20 +621,21 @@ Global overrides for every A brief:
 
   Accept: unit tests for the pure `PixelConvert` function (BGR24/BGRA32 with padded strides).
 - [x] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry. — *done 2026-09-21, `stream/a` `8d2c30c`. A pure `FrameToControlTransform` (scale = min, centred offsets) and `Polygon` children on a hit-test-invisible canvas. Independent chaos: swapping the X/Y offsets fails all 3 transform tests. **The smoke launch caught a crash no unit test could:** `RequestAnimationFrame` was called from the pipeline thread and asserts UI-thread access; the call is now marshalled through `Dispatcher.UIThread.Post`.*
-- [ ] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`.
+- [x] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`. *(stream/a `d30d7bd` + `163c2e9`; first view model `MainViewModel` writes through to `ScanSettings.ExpectedCount`/`AutoCaptureEnabled`, 3 radio buttons no `IsDefault`, `LOREFETCH_FRAMES_DIR` with graceful fallback + logged error. 44 StreamA + 143 Integration green (Mac filter); smoke-launched exit 0; chaos found + closed an `IsImageFile` rejection-branch test gap. **Screenshot PNG is `WindowsOnly` — headless `CaptureRenderedFrame` returns null on macOS ARM64, so pixel verification is deferred to the PC leg; a cross-platform visual-tree test runs on Mac.**)*
   **Added 2026-09-22 (user ruling):** a `LOREFETCH_FRAMES_DIR` environment variable. When set, Fakes mode's `FolderFrameSourceFactory` reads that folder instead of `DemoFrames`' generated rectangles, so the user's real captures in `test-images/ad-hoc/` (12 × 1920×1080, 4 cards × black/brown/white surfaces, ~12″) cycle through the preview. Unset → current behaviour. A missing or empty folder is a clear logged error, not a crash. The images are gitignored and never copied into the repo.
 
 **UI screenshots, standing from A4 onward (user ruling 2026-09-22).** The user wants to *see* the UI run, not only read test counts. Each of A4–A9 adds at least one `Avalonia.Headless` test that renders the window to a PNG — driving Space/Enter/Escape where the package is about keys — and writes it to the test's output directory, **never into the repo**. The orchestrator reads every PNG during verification and sends it to the user with `SendUserFile`. Where it helps, the orchestrator also smoke-launches the real exe with `LOREFETCH_FRAMES_DIR` and `LOREFETCH_SMOKE_EXIT_MS`, captures the screen, and sends that too. Neither replaces **A10**, which stays the user's hands-on keyboard run. The orchestrator has no desktop-control tools, so it cannot click a live window.
-- [ ] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state.
-- [ ] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
+- [x] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state. *(stream/a `6dccb9a`; `TileViewModel : ObservableObject` wraps `CohortTile` — reflects State/DisplayName(blank when Unresolved)/DistanceText(blank when null)/IsLowConfidence directly, never re-derives low-conf from ChosenDistance; `Refresh()` re-notifies for A6; exposes `Tile` so A6 reaches the mutators. `MainViewModel.Tiles` + `LoadCohort(Cohort)` (A7 wires capture). MainWindow.axaml cohort grid: ItemsControl+WrapPanel, four state visuals + amber low-conf border; ✕ marker IsVisible→ShowExcludedMarker. 18 new tests (62 StreamA total); cross-platform visual-tree check + WindowsOnly PNG. Verified: scope App+StreamA only, build 0 err, StreamA 62 pass, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos: inverted ShowExcludedMarker → visual-tree test fails Assert.Single (4 markers) at line 81 — ✕ binding is real, not vacuous.)*
+- [x] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
   - `AsyncPopulator`, filtering off the UI thread with `Take(20)`
   - `MinimumPrefixLength` of 2
   - `MinimumPopulateDelay` of 150 ms
   - ordinal matching
   - runners-up listed first
+  - *(stream/a `0368a35`; `TileViewModel.ToggleExcludedFromUi/SetManuallyFromUi/ClearFromUi` each = tile mutator + `Refresh()` (UI never assigns State/Chosen). `TypeAheadPopulator` built by `BuildPopulator`: yields off UI thread, honours cancellation, runners-up (`CohortTile.Candidates`) first then `IOracleCatalog.All`, `StartsWith(…,Ordinal)`, deduped by OracleId, capped `Take(20)`; `MinimumPrefixLength=2`/`MinimumPopulateDelay=150ms` set in code-behind `OnTypeAheadLoaded`. `IOracleCatalog` threaded via optional params (AppComposition builds `StubOracleCatalog()` 33k → AppSession → MainViewModel.LoadCohort → TileViewModel); all A4/A5 ctors still compile. New `CatalogItem` (App wrapper, `ToString()`=OracleName) avoids touching frozen Core. MainWindow: `Tapped`→toggle, `ContextMenu` (Set manually…/Clear), `AutoCompleteBox` overlay. **Override applied (V16): the doc's "few hundred entries / can't test 33k" is stale — stub is now 33k, cap tested against it.** No keyboard/capture (A7). 17 new tests (79 StreamA). Verified: scope App+StreamA only, build 0 err/0 warn, StreamA 79 pass, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos: catalog `StartsWith`→`Contains` → substring test fails at line 273 ("Lightning Bolt" leaks on prefix "Bolt") — prefix semantics genuinely enforced.)*
 
   Accept: a populator unit test against 33k entries (capped, cancellable).
-- [ ] **A7** Keyboard map:
+- [x] **A7** Keyboard map:
   - a window-level `Tunnel` handler, which returns without setting `Handled` when focus is in a `TextBox`
   - Space awaits `CaptureAsync`
   - Enter commits and keeps the cohort on `CollectionStoreException`
@@ -628,8 +643,9 @@ Global overrides for every A brief:
   - keys 1–9 are optional
 
   Accept: `Avalonia.Headless.XUnit` tests cover Space, Enter and Esc, and check that **a space typed into the type-ahead still arrives**.
-- [ ] **A8** Collection view and export: a sortable `DataGrid` over `ListAsync` (keep the DataGrid theme include), and an exporter picker with an `IsVerified` badge. No per-format code: `grep -ri moxfield src/LoreFetch.App` must return nothing.
-- [ ] **A9** Non-happy states:
+  - *(stream/a `7b3accb` + test `97615f3`; window-level `AddHandler(KeyDownEvent, …, Tunnel)` — focus bail (`FocusManager.GetFocusedElement() is TextBox` → return without `Handled`, the WM_CHAR trap), no `IsDefault` button. `MainViewModel.CaptureFromPipelineAsync` runs `CaptureAsync` off-thread and marshals `LoadCohort` back (no-op on null/0 detections); `CommitCohortAsync` no-op when store/cohort null; `ClearPendingCohort`/`HasPendingCohort`. Enter handler clears **only on success**; catches `CollectionStoreException` and keeps the cohort (retry banner deferred to A9); `AutoCaptured` subscribed + marshaled. `ICollectionStore` threaded via optional params (`StubCollectionStore` in `CreateFakesAsync`). 1–9 toggles: see report. All A4–A6 ctors still compile. Verified: scope App+StreamA only, build 0 err, **StreamA 87 pass**, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos found the retain-on-failure path had **no test** (clearing in the catch left all 86 green) → closed by `97615f3`; re-ran the chaos against the new test and it fails `Expected 2, Actual 0` at line 190, right reason.)*
+- [x] **A8** Collection view and export: a sortable `DataGrid` over `ListAsync` (keep the DataGrid theme include), and an exporter picker with an `IsVerified` badge. No per-format code: `grep -ri moxfield src/LoreFetch.App` must return nothing. *(stream/a `4c7426a`; `CollectionViewModel` (Rows from `ListAsync`, `ExporterItems`, testable `ExportToStreamAsync(exporter, stream, ct)`), `ExporterItem` wrapper exposing `IsUnverified` for the badge. MainWindow: `DataGrid x:Name=CollectionGrid` (sortable, 6 cols) + `ListBox x:Name=ExporterList` with a `Border IsVisible={Binding IsUnverified}` "unverified" badge; DataGrid Fluent theme include kept. Exporters threaded via optional `AppSession.Exporters` (`CreateFakesAsync` wires two `StubCollectionExporter`s — one verified, one not — to exercise the badge; real Native+Moxfield wired at integration). Export uses `StorageProvider.SaveFilePickerAsync`→stream→`ExportToStreamAsync`; UI has zero per-format code. Verified: scope App+StreamA only, build 0 err/0 warn, **StreamA 91 pass**, Integration 143 pass/8 skip, `grep -ri moxfield src/LoreFetch.App` empty, smoke-launch exit 0. Un-briefed chaos: forced badge `IsVisible=False` → visual-tree test fails `Assert.NotEmpty (empty)` at line 162 — badge binding + tree walk are load-bearing. Non-happy states (empty placeholder, store-locked banner, source-failed) deferred to A9.)*
+- [x] **A9** Non-happy states:
   - empty collection
   - no frame source
   - `SourceFailed`
@@ -637,6 +653,7 @@ Global overrides for every A brief:
   - a missing index or thresholds file
 
   No stack traces in the UI.
+  - *(stream/a `ac55852`; empty-collection placeholder (`CollectionViewModel.IsEmpty`/`HasRows`), `SourceFailed` banner (subscribed + marshalled, `.Message` only, unsubscribed on close), store-lock retry banner on `CollectionStoreException` from commit/export with a Retry that re-attempts and clears on success (cohort retained — builds on A7), startup-error surface via `MainViewModel.StartupErrorMessage` string (composition sets it — **no contract change; STOP not triggered**), and a visible "Set card manually…" hint on `Unresolved` tiles. No stack traces in any surface. Verified: scope App+StreamA only, **StreamA 106 pass/0 fail** (2 WindowsOnly screenshots excluded), Integration 143 pass/8 skip, `grep -ri moxfield src/LoreFetch.App` empty, smoke-launch exit 0. Un-briefed chaos: `ex.Message`→`ex.ToString()` in the SourceFailed handler → no-stack-trace test fails on "System." at line 213 — the invariant is real. Adjacent find: 9 pre-existing `xUnit1051` analyzer warnings in A6's `TileInteractionTests.cs` (non-blocking).)*
 - [ ] **A10** 🧭👤 Done-when run on the Windows PC:
   - all three layouts work
   - a keyboard-only loop works
@@ -644,6 +661,16 @@ Global overrides for every A brief:
   - memory stays flat for 5 minutes under `dotnet-counters`
 
   Record the fps and memory results. Then README §A. **Merge gate, then P2.**
+
+  **A10-prep, done 2026-09-22 on the Windows PC**, `stream/a` `7311e87`…`866b3ea`. The first Windows run of `stream/a` found that A10 could not be performed as written:
+  1. **The screenshot tests had never passed anywhere.** `TestApp` set `UseHeadlessDrawing = true`, which is Avalonia's no-op renderer, so `CaptureRenderedFrame()` returns null on Windows too. The A4/A5 notes blaming macOS ARM64 were wrong. Fixed with `UseSkia()` plus `UseHeadlessDrawing = false`, and the `WindowsOnly` trait was removed from both tests. **The macOS CI leg must confirm at P2;** if it fails, re-trait them with the real reason.
+  2. **Fakes mode never set `GoodDistance`/`OkDistance`.** Both were 0, so every tile came up Unresolved and the keyboard loop could commit nothing.
+  3. **The fake detector ignored the 1/3/9 selector.** It was fixed at `CardCount = 1` from startup, so the 3- and 9-card layouts were unreachable.
+  4. **Nothing measured fps or memory.**
+
+  The fixes: `LayoutFollowingCardDetector` and `DemoCardIdentifier`. The demo identifier cycles confident → low-confidence → Unresolved per `Identify` call, with distances derived from the loaded good/ok values; the cycle runs across captures, so the 1-card layout also walks all three states. A `Diagnostics:` log line every 10 s reports preview fps (frames rendered), pipeline fps, managed memory, working set and GC counts. The 9 `xUnit1051` warnings are gone, and there is a new `A10-cohort-9.png` screenshot test. StreamA 106 + 2 failing → **119/119**, Integration 143/8, 0 warnings. All 6 briefed chaos cases fail correctly. **Independent chaos:** putting the low-confidence distance on the `good` boundary fails 2 tests.
+  **Ruling (orchestrator, 2026-09-22): demo thresholds live in `src/LoreFetch.App/Fakes/DemoThresholds.cs` (good 100, ok 200).** The frozen `App.csproj` ships only `data/index/**`, stream B's scope, so a demo JSON file cannot ship from stream A. This is the one sanctioned App file with distance literals, it is used by Fakes mode only, and **I4 exempts it**. Real mode (I2) loads `DataFiles.ThresholdsPath`.
+  Adjacent finds for E2 polish, not blocking: the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
 
 ### Stream B — Identification (critical path) · worktree `stream-b` · scope `src/LoreFetch.Core/Identification/**`, `src/LoreFetch.Core/Imaging/**`, `src/LoreFetch.Lab/**`, `Tests/StreamB/**`, `data/index/**`, `docs/accuracy.md`, README §B
 Global overrides for every B brief:
@@ -752,7 +779,7 @@ Global overrides for every C brief:
 - [x] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool). — *done 2026-09-21, `stream/c` `f4a459f` + fixups `84979d7`. Review sent back 4 `xUnit1051` warnings and an enumerator test that *hung* rather than failed when its guard was removed; both fixed, and the test is now bounded by `WaitAsync`. Also replaces StreamC's placeholder with real internal-touching tests, closing the `InternalsVisibleTo` thread.*
 - [x] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees. — *done 2026-09-21, `stream/c` `1f8380b`. Independent chaos: swapping the 90°/270° mappings fails the marker-corner test at both angles.*
 - [x] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts. — *done 2026-09-21, `stream/c` `72503b5` + `8382f25` + `56b1b9b`. Generic over `IAsyncEnumerable<T>` so C2 can wrap either stage; injectable `TimeProvider`. The finishing implementer found a real bug: disposing an async iterator while its `MoveNextAsync` is pending throws `NotSupportedException`, so disposal is deferred until the pending call settles. Review strengthened two tests. The healthy stream now spans six frame-timeout periods, because at one period the only-reset-once regression was caught in just 3 of 5 runs; it is now 5 of 5. And using the first-frame timeout for mid-stream gaps passed all 18 tests, so the stall test now pins both the detection time (< 2 s) and the timeout value in the message.*
-- [ ] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
+- [x] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
   - enumerate and log every descriptor with its backend
   - zero descriptors gets its own diagnosis
   - select 1920×1080, `PixelFormats.JPEG`, `(double)fps >= 30`, or throw with the full list
@@ -761,8 +788,29 @@ Global overrides for every C brief:
   - `Description` reports what was negotiated
 
   Accept: unit tests of the selection logic over plain descriptor data objects.
-- [ ] **C3** ∥ README §C (including the macOS compile-only note).
-- [ ] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+
+  *Done 2026-09-22, Windows PC, `stream/c` `1f60ec0` + fix `cd53e54`.* 37 StreamC tests; the implementer's five chaos cases (`==` for `>=`, VfW in the preference list, swapped preference, first-characteristic fallback, hardcoded `Description`) each failed the right test.
+  🔴 **Review caught a defect every unit test passed: the device was opened but never `StartAsync`-ed.** FlashCap delivers nothing to an un-started device, so every real open would have ended in the 10 s first-frame timeout, misdiagnosed as unplugged / in use / permission denied. It is not unit-testable (FlashCap devices cannot be faked from outside its assembly), so the C4 hardware harness is its guard. The fix also releases the device if anything throws after `OpenAsync`, and logs time-to-first-frame.
+- [x] **C3** ∥ README §C (including the macOS compile-only note). *(stream/c `7bf2632`; README-only. §C covers the FlashCap→`IFrameSource` pipeline (`WebcamFrameSourceFactory` entry point, DropOldest single-frame, `ArrayPool` no-garbage, first-frame/mid-stream watchdogs), the C920 USB-2 MJPG-30fps negotiation asserted from `EnumerateDescriptors()`, MJPEG decode as this stream's job (`Cv2.ImDecode`→BGR24, in-source `Cv2.Rotate`), and a `> [!IMPORTANT]` win-x64-only callout (FlashCap #182 native crash → macOS compile-only in CI). Verified: scope README-only; API refs fact-checked against ScanSettings (`FirstFrameTimeoutMs`=10s, `FrameWatchdogMs`=2s, `CameraRotationDegrees` default 90°) and the contract-pinned factory name.)*
+- [x] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+
+  *Done 2026-09-22 with the user at the C920. Harness `e7cf54a` + fix `039d768`, docs `d313a51`, C3 merged from origin `e2b1305`: `Category=Hardware` tests in `Tests/StreamC/Hardware/`, the unplug test additionally `Interactive=Unplug`. Output goes to `%TEMP%\lorefetch-hw`, never the repo.*
+
+  | Check | Measured |
+  |---|---|
+  | Negotiated | `HD Pro Webcam C920 1920x1080 MJPG @30fps (DirectShow)`, from the device's own characteristics. DShow 35 characteristics, MF 335; VfW "Default" enumerated and skipped |
+  | Delivered | **28.6 fps** over 10 s; first frame ~720–790 ms after `StartAsync` |
+  | **JPEG decode** | **11–15 ms mean** per 150-frame window, max 42 ms (one outlier). ~40% of one core at a full 30 fps; drop-before-decode means only consumed frames pay it |
+  | Sustained, 3 min | 5,035 frames; private bytes oscillated 180–190 MB, post-warm-up growth **9.5 MB** (bound 100 MB) |
+  | Slow consumer | 500 ms/frame for 60 s: **+5.7 MB**; capture→consume latency mean 33 ms, max 77 ms, not trending |
+  | Unplug | `FrameSourceException` **2,002 ms** after the last frame (`FrameWatchdogMs` 2000); `DisposeAsync` 23 ms |
+  | Replug | Reopen OK, first frame 719 ms |
+
+  **Orchestrator chaos, the case the brief did not name:** deleting `StartAsync` first failed the live test for the **wrong reason**. The harness's 5 s per-`MoveNext` bound was shorter than `FirstFrameTimeoutMs` (10 s), and its `finally` disposed the async iterator mid-`MoveNext` → `NotSupportedException`, masking the product's diagnosis. Fixed in `039d768`: bounds are derived from the settings, and the harness cancels, then settles, then disposes. A non-hardware unit test pins both halves, and each was chaos-tested. Re-run on hardware, the chaos now fails with the product's own `FrameSourceException: No frame arrived within 10000 ms of opening the capture device…`. The four unattended tests pass on the fixed harness (4/4). The unplug test ran on the pre-fix harness; its fix touched only the bound, which was already 130 s.
+
+  **Open, physical, not a C blocker:** rotation *direction*. The captured frame was shot before the mount (table depth ran across the frame), so whether 90° or 270° is upright is decided at H1 mount time. It is a `ScanSettings.CameraRotationDegrees` value, not code.
+  **Merged and pushed 2026-09-22:** `main` `c26ae12` (full local suite green on Windows), `stream/c` `e2b1305`. CI [run 35757384775](https://github.com/jnapoli87/LoreFetch/actions/runs/35757384775): `windows-latest` ✅. `macos-latest` ❌ **at Test, with Restore and Build green**. The log needs a signed-in account and was not read. Suspected, unconfirmed: the first macOS-CI test to call OpenCV natively (C1b's `ImEncode`/`ImDecode`), i.e. Risk 7's `osx.arm64` runtime. **User ruling (2026-09-22): macOS passing is not a requirement. Do not spend effort on this leg.** Its Build step still proves `Core` portability. A red Test step there is expected until someone chooses to look.
+  **Found in passing, outside C:** `AvaloniaUI.DiagnosticsSupport` 2.2.3 declares no licence, yet `App.csproj` references it unconditionally, so it would ship in the single-file exe. That contradicts RECONCILIATION's "nothing is redistributed". Spun off as a main-only task: make it Debug-only.
 
 ### Stream D — Collection & export · worktree `stream-d` · scope `src/LoreFetch.Core/Collection/**`, `src/LoreFetch.Core/Export/**`, `Tests/StreamD/**`, README §D
 Global overrides for every D brief:
@@ -798,15 +846,15 @@ Global overrides for every D brief:
   - `ListAsync` on a missing file returns an empty list
 
   Accept: the blank-condition round trip yields 1 row with quantity 2; nine Forests return 9; a file locked with `FileShare.None` throws and leaves the original byte-identical; the temp file lives in the target directory.
-- [ ] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors.
-- [ ] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`.
-- [ ] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.**
+- [x] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors. *(stream/d `68e749f`; also `ed60d6c` marks the write-lock test WindowsOnly — macOS `rename(2)` replaces an open target. 70 StreamD + 143 Integration green on Mac filter; chaos: CRLF flip fails 9 tests, line endings pinned.)*
+- [x] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`. *(stream/d `bd106e0`; user imported a 6-card sample via Moxfield's Collection-view CSV upload on 2026-09-22 — all 6 names intact incl. `+2 Mace`/`Borrowing 100,000 Arrows`/`Kongming, "Sleeping Dragon"`/`Lim-Dûl's Vault`, `Forest` merged to qty 9, blank Condition → Near Mint, printings auto-assigned by Moxfield as expected for oracle-name-only rows. `IsVerified` flipped false→true; StreamD metadata test now asserts true, chaos-checked. README §D amended with the import instruction + verified result. StreamD 70 pass, Integration 143 pass/8 skip.)*
+- [x] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.** *(stream/d `844c7f3`; native SOT + Moxfield, unsupported table for ManaBox/Archidekt/Deckbox/Dragon Shield, `+2 Mace` `> [!NOTE]`, oracle-name-only limitation cross-referenced. Only README.md; anchor + links verified. D5 will amend §D with the verification record.)*
 
 ### Integration I (on `main`, after the relevant streams have merged)
 - [ ] **I1** After D merges: implement `Real` in `Tests/Integration` for the store and exporters, and switch `AppComposition` to use them.
 - [ ] **I2** After A and B merge: `Real` gets the detector, rectifier, identifier and catalog, loaded from `DataFiles`. B7's synthetic frames take the `FolderFrameSource` slot. `AppComposition` gets a `Real` mode that loads the index and thresholds.
 - [ ] **I3** After C merges: `WebcamFrameSourceFactory` goes into `AppComposition`, with a switch between the demo folder and the camera.
-- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none.
+- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none. **Exempt:** `src/LoreFetch.App/Fakes/DemoThresholds.cs`, Fakes-mode demo values (ruled at A10-prep).
 - [ ] **I5** `THIRD-PARTY-NOTICES`: an entry for every package, so the hook's advisory list is empty. Chase down the FFmpeg notices in the OpenCvSharp runtimes (PLAN risk 7).
 - [ ] **I6** 🧭👤 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on the **Windows PC** with every artifact present gives **0 skipped**. Then P6.
 
