@@ -565,7 +565,17 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 
 **Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
 
-⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+✅ **Merged into every stream branch, 2026-09-22, at the clean boundary after B5c.** `main` → `stream/a`, `stream/b`, `stream/d` (`stream/c` is already merged *into* `main`, so it needed nothing). All four worktrees were confirmed clean first. Each branch re-verified after its merge, with the macOS filter the test script itself applies:
+
+| Branch | Own suite | Integration | Build |
+|---|---|---|---|
+| `stream/a` | 106 passed / 0 failed | 143 / 8 skipped | 0 errors, **9 pre-existing `xUnit1051` warnings** (A6's `TileInteractionTests`, a known adjacent find — not merge damage) |
+| `stream/b` | 212 passed / 1 soft-skip / 213 | 143 / 8 skipped | 0 errors, 0 warnings |
+| `stream/d` | 70 passed / 0 failed | 143 / 8 skipped | 0 errors, 0 warnings |
+
+This also removes a live trap: the fixed `capture-fixtures.sh` now exists in the stream worktrees, so running the stale copy from inside one is no longer possible.
+
+⚠ **A precision on the `WindowsOnly` trait, learned while verifying these merges — do not over-generalise the goldens finding.** Run unfiltered on this Mac, `stream/a` fails 2 and `stream/d` fails 1, and they are *exactly* the `WindowsOnly`-traited tests: A's two Avalonia screenshot tests, and D's `Commit_WhenTheTargetCannotBeReplaced_…` write-lock test (macOS `rename(2)` replaces an open target, recorded at D4 `ed60d6c`). **So `WindowsOnly` is load-bearing for A and D** — those behaviours genuinely differ by platform. The finding that the trait looks unnecessary applies **only to stream B's golden hashes**, which pass bit-exact on ARM64. Anyone acting on that finding must scope it to B's goldens; dropping the trait wholesale would make the macOS leg permanently red for real reasons.
 
 ### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
 
