@@ -452,9 +452,52 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the A-merge session, 2026-09-22 evening, Windows PC
+
+**Newest handoff; read this first.** A new orchestrator takes over from here and "puts it all together": B's merge, D's merge, integration I1–I6. The checkboxes and their per-item notes are authoritative; this section adds only where things stand.
+
+**State.**
+
+| Branch | Where | Pushed? |
+|---|---|---|
+| `main` | `Merge branch 'stream/a' into main` plus this handoff. It contains stream A (A0–A10), stream C, the reading-order contract change (`0bf9d76`) and the B session's `main` (`16ed6bc`, merged at `b0464ab`). | **No.** `origin/main` is still `31fb642`. **P2 is due: show the summary, then push on the user's approval.** Watch the macOS CI leg for the screenshot tests (see the A10-prep note). |
+| `stream/a` | Merged. Done. | Local tip ahead of `origin/stream/a`; pushing it is optional now that it is in `main`. |
+| `stream/b` | `origin/stream/b` = `8e4e7aa` (B2, B5c, B7 done; B6 in progress; `RetrievalMode.List`; digital-only filter). The **local `stream/b` ref is stale** (`41f0e22`) and the `stream-b` worktree is clean. Fast-forward it before B resumes. | Remote is the truth. |
+| `stream/d` | `origin/stream/d` = `574ac13`; local ref stale (`08446f7`). | Remote is the truth. |
+| `validate/ui-real-frames` | Throwaway worktree `.claude/worktrees/ui-validation`: `stream/a` + `origin/stream/b` + `main`. **Never merge it.** | No. |
+
+Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 errors; StreamA **132/132**; Integration **155 passed / 8 skipped**; StreamC **39/39** (`Category!=Hardware`); StreamB 1 and StreamD 1 (placeholders until those streams merge).
+
+**Next, in order:**
+1. **P2 push** of `main` (user approval). Until it lands, any session merging "main" into a stream is merging a `main` nobody else has. That is exactly how the two `main`s diverged today.
+2. **Merge `main` into `stream/b` and `stream/d`** (reading order + stream A). This belongs to their sessions or the new orchestrator. Nothing in their scopes changes.
+3. **Fix the two known A bugs** (A10's "Known bugs, deferred"). Re-test bug 2 from `main` first: the exe the user tested came from `stream/a`, which lacked the reading-order change. Confirmed with `git merge-base --is-ancestor`.
+4. **B:** B6 → B8 → merge → P3. **D:** merge → P5. Then **I1–I6**. I2 is where `LOREFETCH_DETECTOR=real`-style wiring becomes the real `Real` mode, and I3 must set `CameraRotationDegrees = 0` (geometry re-ruling).
+
+**Real test imagery (user-supplied, gitignored, "absolutely real data").** `test-images/a_corpus` (6), `b_corpus` (6) and `d_corpus` (2) are real 1920×1080 C920 frames of **tight 3×3 grids**: a and b on white paper over a cluttered desk, d on a black mat. `test-images/ad-hoc` (12) holds single cards on black, brown and white. The layout `test-images/README.md` describes (`fixtures/`, `ground-truth.csv`) is the H3 corpus, which does not exist yet. The a/b/d folders are not described there; add them when B6 or H3 next touches it. Ground truth for the two frames checked by eye (row-major):
+- `a_1`/`b_1`: Freya Crescent, Zidane Tantalus Thief, Adventurer's Airship / You're Not Alone, Summon: Fat Chocobo, Instant Ramen / Cactuar, Cat Warriors, Defibrillating Current.
+- `d_4`: Ilysian Caryatid, Farhaven Elf, Sagu Wildling / Ruby Medallion, Meteor Sword, Kyoshi Battle Fan / Loch Dragon, Dirgur Island Dragon, Barrels of Blasting Jelly.
+
+**Detector findings on those frames (old `RETR_EXTERNAL` detector, `41f0e22`), for B:**
+1. **White paper: 0–2 of 9 found.** The sheet's outline encloses every card, so `RETR_EXTERNAL` never returns them. `RETR_LIST` lifts a_corpus to 7–9/9 but b_corpus only to 2–5/9, so a second cause remains there. `RETR_TREE` with parent-only dedupe double- or triple-counts cards (outer border, frame, art box). B had already switched to `List` in `6828ad5`.
+2. **Black-bordered cards on the black mat vanish** (d_6 3/9, atarka_black, verix_black). This is CLAUDE.md risk 4, reproduced; retrieval mode doesn't matter.
+3. **Edge placement is disputed:** the probe agent says d_4's quads sit on the outer edge, but the orchestrator's zoom of its own crop shows the green line inside the black border (≈8 px). Treat it as B5b's inset question: check it, don't assume it.
+
+**Real-frames UI validation (package UV): in flight at the end of this session.** A Sonnet implementer was building, on `validate/ui-real-frames`:
+- `LOREFETCH_DETECTOR=real` (B's detector + rectifier, `DemoCardIdentifier` stub) and `LOREFETCH_FRAME_INTERVAL_MS`;
+- artifact-gated headless tests rendering all 26 real frames through the real `MainWindow`, asserting tile count and reading order;
+- screenshots and tile crops under this session's scratchpad (`…\scratchpad\uv\`), which the next session can't rely on.
+
+**Check `git -C .claude/worktrees/ui-validation log` for its commits.** If they're incomplete, re-dispatch from the brief's intent above. Its results are the best repro for known bug 2.
+
+**Learned this session.**
+1. **Two `main`s can diverge silently when stream branches carry `main` to the remote but `main` itself isn't pushed.** Each machine then holds a different "main". Push `main` whenever it is merged into a pushed stream branch, or don't merge it.
+2. **The detector probe duplicated B's work,** because B's newest commits weren't pushed yet. `git fetch` before any cross-stream investigation.
+3. **A headless focus assertion passed while the live window failed** (bug 1). For focus and keyboard behaviour, the hands-on run stays the acceptance.
+
 ### Handoff — end of the A10 session, 2026-09-22, Windows PC
 
-**Newest handoff.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
+**Superseded by the handoff above for overall state; its notes still apply.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
 
 **State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**. **The user's hands-on run failed on two points: *Set card manually…* does nothing, and Enter does not commit** (see A10's note). Memory and fps pass.
 
