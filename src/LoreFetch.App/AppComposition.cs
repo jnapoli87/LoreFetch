@@ -134,9 +134,16 @@ public static class AppComposition
     {
         ArgumentNullException.ThrowIfNull(loggers);
 
+        var logger = loggers.CreateLogger("LoreFetch.App.AppComposition");
         var settings = new ScanSettings();
 
-        var frameFolder = DemoFrames.CreateFolder();
+        // A4: when LOREFETCH_FRAMES_DIR is set, use the user's own folder
+        // instead of generating a DemoFrames temp folder. A bad env var
+        // (missing or empty folder) is logged and falls back gracefully —
+        // the user's images are never deleted (isTempFolder stays false).
+        var envVar = Environment.GetEnvironmentVariable("LOREFETCH_FRAMES_DIR");
+        var (frameFolder, isTempFolder) = ChooseFrameFolder(envVar, logger);
+
         IFrameSourceFactory frameSourceFactory = new FolderFrameSourceFactory(frameFolder, TimeSpan.FromMilliseconds(250));
 
         ICardDetector detector = new StubCardDetector(settings.ExpectedCount);
@@ -148,7 +155,12 @@ public static class AppComposition
         // from AppSession.DisposeAsync only after the frame source itself
         // (and therefore its decode loop) has stopped. Orchestrator review
         // found every launch left one of these behind — nothing ever
-        // deleted them.
+        // deleted them. The user's own folder (isTempFolder=false) is
+        // never deleted — it belongs to the user, not to this process.
+        Action? onDisposed = isTempFolder
+            ? () => DemoFrames.DeleteFolderBestEffort(frameFolder)
+            : null;
+
         return ComposeAsync(
             frameSourceFactory,
             detector,
@@ -158,7 +170,69 @@ public static class AppComposition
             settings,
             loggers,
             ct,
-            onDisposed: () => DemoFrames.DeleteFolderBestEffort(frameFolder));
+            onDisposed: onDisposed);
+    }
+
+    /// <summary>
+    /// Selects the frame-source folder for the Fakes composition path.
+    /// </summary>
+    /// <param name="envVar">
+    /// The raw value of <c>LOREFETCH_FRAMES_DIR</c>, or <c>null</c> /
+    /// empty if the variable is not set.
+    /// </param>
+    /// <param name="logger">
+    /// Receives an error when the env var is set but invalid, so the
+    /// operator sees exactly what went wrong without a crash or an exception
+    /// silently swallowed higher up.
+    /// </param>
+    /// <returns>
+    /// <c>(folder, isTempFolder)</c>: the chosen folder path plus a flag
+    /// that is <c>true</c> only for a DemoFrames temp folder that this
+    /// process created and should delete on teardown. A user-supplied
+    /// folder always yields <c>false</c> — never delete the user's data.
+    /// </returns>
+    /// <remarks>
+    /// Factored out of <see cref="CreateFakesAsync"/> so
+    /// <c>Tests/StreamA</c> can exercise the three code paths — user
+    /// folder with images, user folder with no images, and env var unset —
+    /// without launching the full composition stack.
+    /// </remarks>
+    internal static (string folder, bool isTempFolder) ChooseFrameFolder(
+        string? envVar, ILogger logger)
+    {
+        if (!string.IsNullOrEmpty(envVar))
+        {
+            if (!Directory.Exists(envVar))
+            {
+                logger.LogError(
+                    "LOREFETCH_FRAMES_DIR is set to '{Path}' but that directory does not exist. " +
+                    "Falling back to generated demo frames.",
+                    envVar);
+            }
+            else
+            {
+                var hasImages = Directory.EnumerateFiles(envVar)
+                    .Any(IsImageFile);
+
+                if (!hasImages)
+                {
+                    logger.LogError(
+                        "LOREFETCH_FRAMES_DIR is set to '{Path}' but it contains no " +
+                        "image files (.png, .jpg, .jpeg, .bmp). " +
+                        "Falling back to generated demo frames.",
+                        envVar);
+                }
+                else
+                {
+                    // User-supplied folder, looks good — use it as-is and
+                    // leave cleanup entirely to the user.
+                    return (envVar, isTempFolder: false);
+                }
+            }
+        }
+
+        // Env var was absent, empty, or invalid — generate the demo frames.
+        return (DemoFrames.CreateFolder(), isTempFolder: true);
     }
 
     /// The testable core of composition, factored out so Tests/StreamA can
@@ -195,4 +269,13 @@ public static class AppComposition
 
         return new AppSession(pipeline, source, runTask, settings, onDisposed);
     }
+
+    // A4: image extensions that FolderFrameSource can decode. Must stay in
+    // sync with FolderFrameSource.ImageExtensions (that field is private).
+    // ".png", ".jpg", ".jpeg", ".bmp" — same four that FolderFrameSource uses.
+    private static bool IsImageFile(string path) =>
+        Path.GetExtension(path).AsSpan().Equals(".png", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(path).AsSpan().Equals(".jpg", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(path).AsSpan().Equals(".jpeg", StringComparison.OrdinalIgnoreCase)
+        || Path.GetExtension(path).AsSpan().Equals(".bmp", StringComparison.OrdinalIgnoreCase);
 }

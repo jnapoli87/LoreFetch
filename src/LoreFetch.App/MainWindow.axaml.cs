@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using LoreFetch.App.ViewModels;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Scanning;
 
@@ -99,6 +100,13 @@ public partial class MainWindow : Window
         _pipeline = session.Pipeline;
         _pipeline.FrameProcessed += OnFrameProcessed;
         Closed += OnClosed;
+
+        // A4: wire the expected-count selector and auto-capture toggle
+        // through the first view model. DataContext is set here so the
+        // AXAML RadioButton / CheckBox bindings find MainViewModel via
+        // the standard Avalonia binding path. The VM holds a reference to
+        // ScanSettings and writes through on each property change.
+        DataContext = new MainViewModel(session.Settings);
     }
 
     private void OnClosed(object? sender, EventArgs e)
