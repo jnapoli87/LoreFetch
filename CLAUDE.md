@@ -73,17 +73,19 @@ Log the discard reason for every rejected contour. Detection will find hands, sl
 
 ### Geometry — one height serves every layout
 
-Orient the camera so the **1920 axis runs along the table's depth**, and orient every layout's long side along that same axis. C920 is 78° diagonal → HFOV 70.4°, VFOV 43.3° → **px/inch = 1360 / height_inches**.
+The camera stays **landscape and unrotated** — `ScanSettings.CameraRotationDegrees` is **0** at composition time (the `ScanSettings` default itself stays 90°; this is a value set at composition, not a change to the frozen contract). C920 is 78° diagonal → HFOV 70.4°, VFOV 43.3° → **px/inch = 1360 / height_inches**.
 
-| Layout | Footprint | Min height |
+| Layout | Footprint | Geometric floor |
 |---|---|---|
 | 1 card | 2.5″ × 3.5″ | 3.1″ |
 | 3 in a line | 2.5″ × 10.7″ | 7.6″ |
-| **3×3 grid** | 7.7″ × 10.7″ | **9.75″** ← binding |
+| **3×3 grid, cards portrait** | 7.7″ × 10.7″ | **9.75″** ← binding |
 
-At a fixed **~9.75″** every card in every mode is **346 × 483 px**, which is 1.6–2.7× SpellTable's proven 130–215 px working range. **The mount locks once**; 1/3/9 differ purely in software. The 3D printer's job is the adjustable camera mount (stand or gantry bracket) — nothing else.
+That **9.75″ is a geometric floor, not an operating height**: a 3×3 laid out with its cards portrait first fits the landscape frame there with just **0.04″ of margin** — one millimetre, so a card leaves the frame if the mat shifts. The **operating height is 12″** (1.83″ of margin), and the accuracy sweep runs **12″ and 20″**.
 
-Getting the axis wrong costs 38% linear resolution: a 3×3 of portrait cards is far taller than wide while the sensor is 16:9, so in the wrong orientation the vertical binds, it needs 13.5″, and yields only 251 × 350 px.
+A 3×3 of portrait cards is far taller than wide while the sensor is 16:9, so laid out that way it costs 38% linear resolution in the wrong orientation — needing 13.5″ and yielding only 251×350 px. **The fix is to rotate the layout, not the camera**: the 3×3 grid is laid out with its cards **rotated**, long edge across the frame, giving it a 10.7″ × 7.7″ footprint that fits the landscape frame at 12″ with 1.83″ to spare, at **identical pixel resolution** — 283×397 px either way, since px/inch is the same on both axes. Rotating the layout substitutes for rotating the camera, so the camera mount stays landscape and unrotated for every layout; **the mount locks once** at 12″ (sweep also covers 20″), and 1/3/9 differ purely in software. The 3D printer's job is the adjustable camera mount (stand or gantry bracket) — nothing else.
+
+**Derive each fixture's height from its frame, not from a tape measure:** `height_inches = 1360 × 2.5 / card_pixel_width`. This runs through the real optics rather than trusting a label. It matters because a mislabelled height does not fail loudly — it reads as mysteriously poor accuracy in the per-height accuracy table. (Evidence: a batch of ad-hoc frames recorded as shot at "~12″" had a ~260×370 px card, which implies 13.1″ from the width and 12.9″ from the height — both axes agree the tape was an inch out, not the `1360` constant.)
 
 ### Interaction — capture, then accept the cohort
 
