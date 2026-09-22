@@ -662,6 +662,16 @@ Global overrides for every A brief:
 
   Record the fps and memory results. Then README §A. **Merge gate, then P2.**
 
+  **A10-prep, done 2026-09-22 on the Windows PC**, `stream/a` `7311e87`…`866b3ea`. The first Windows run of `stream/a` found that A10 could not be performed as written:
+  1. **The screenshot tests had never passed anywhere.** `TestApp` set `UseHeadlessDrawing = true`, which is Avalonia's no-op renderer, so `CaptureRenderedFrame()` returns null on Windows too. The A4/A5 notes blaming macOS ARM64 were wrong. Fixed with `UseSkia()` plus `UseHeadlessDrawing = false`, and the `WindowsOnly` trait was removed from both tests. **The macOS CI leg must confirm at P2;** if it fails, re-trait them with the real reason.
+  2. **Fakes mode never set `GoodDistance`/`OkDistance`.** Both were 0, so every tile came up Unresolved and the keyboard loop could commit nothing.
+  3. **The fake detector ignored the 1/3/9 selector.** It was fixed at `CardCount = 1` from startup, so the 3- and 9-card layouts were unreachable.
+  4. **Nothing measured fps or memory.**
+
+  The fixes: `LayoutFollowingCardDetector` and `DemoCardIdentifier`. The demo identifier cycles confident → low-confidence → Unresolved per `Identify` call, with distances derived from the loaded good/ok values; the cycle runs across captures, so the 1-card layout also walks all three states. A `Diagnostics:` log line every 10 s reports preview fps (frames rendered), pipeline fps, managed memory, working set and GC counts. The 9 `xUnit1051` warnings are gone, and there is a new `A10-cohort-9.png` screenshot test. StreamA 106 + 2 failing → **119/119**, Integration 143/8, 0 warnings. All 6 briefed chaos cases fail correctly. **Independent chaos:** putting the low-confidence distance on the `good` boundary fails 2 tests.
+  **Ruling (orchestrator, 2026-09-22): demo thresholds live in `src/LoreFetch.App/Fakes/DemoThresholds.cs` (good 100, ok 200).** The frozen `App.csproj` ships only `data/index/**`, stream B's scope, so a demo JSON file cannot ship from stream A. This is the one sanctioned App file with distance literals, it is used by Fakes mode only, and **I4 exempts it**. Real mode (I2) loads `DataFiles.ThresholdsPath`.
+  Adjacent finds for E2 polish, not blocking: the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
+
 ### Stream B — Identification (critical path) · worktree `stream-b` · scope `src/LoreFetch.Core/Identification/**`, `src/LoreFetch.Core/Imaging/**`, `src/LoreFetch.Lab/**`, `Tests/StreamB/**`, `data/index/**`, `docs/accuracy.md`, README §B
 Global overrides for every B brief:
 - Steps 2–3 run on the **reference side only**.
@@ -844,7 +854,7 @@ Global overrides for every D brief:
 - [ ] **I1** After D merges: implement `Real` in `Tests/Integration` for the store and exporters, and switch `AppComposition` to use them.
 - [ ] **I2** After A and B merge: `Real` gets the detector, rectifier, identifier and catalog, loaded from `DataFiles`. B7's synthetic frames take the `FolderFrameSource` slot. `AppComposition` gets a `Real` mode that loads the index and thresholds.
 - [ ] **I3** After C merges: `WebcamFrameSourceFactory` goes into `AppComposition`, with a switch between the demo folder and the camera.
-- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none.
+- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none. **Exempt:** `src/LoreFetch.App/Fakes/DemoThresholds.cs`, Fakes-mode demo values (ruled at A10-prep).
 - [ ] **I5** `THIRD-PARTY-NOTICES`: an entry for every package, so the hook's advisory list is empty. Chase down the FFmpeg notices in the OpenCvSharp runtimes (PLAN risk 7).
 - [ ] **I6** 🧭👤 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on the **Windows PC** with every artifact present gives **0 skipped**. Then P6.
 
