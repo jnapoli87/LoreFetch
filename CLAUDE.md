@@ -30,7 +30,7 @@ Work happens in **four parallel git worktrees** after a serial ~3.5h foundation 
 
 ### Identification — ported perceptual hash, not OCR, not ML
 
-The engine is a C# port of **CardSpotter**'s 1024-bit perceptual hash (`github.com/relgin/cardspotter`, **BSD-3-Clause**, GPLv3-compatible, must be attributed in `THIRD-PARTY-NOTICES`). This is the algorithm shipping in Wizards' own SpellTable — verified by inspecting its production WASM bundle, which contains no neural net despite the "card recognition AI" marketing.
+The engine is a C# port of **CardSpotter**'s 1024-bit perceptual hash (`github.com/relgin/cardspotter`, **BSD-3-Clause**, GPLv3-compatible, must be attributed in `THIRD-PARTY-NOTICES`). Wizards' own SpellTable uses image hashing, not a neural net, despite the "card recognition AI" marketing — verified by inspecting its production WASM bundle — but whether it specifically ships CardSpotter's implementation is unverified, with no independent corroboration found.
 
 Seven steps. **The two sides are deliberately asymmetric** — steps 2 and 3 run on the **reference side only**; the query side enters at step 4 with an already-rectified 488×680 card. Upstream does exactly this, and the convergence argument below *depends* on it: blurring and downsampling the reference is what destroys detail a webcam cannot reproduce. Steps 4–6 are shared and must be bit-identical.
 
