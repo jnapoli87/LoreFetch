@@ -118,3 +118,6 @@ test-images/*
 
 # macOS directory metadata.
 .DS_Store
+
+# Demo video: script, deck layout and assets (local only)
+docs/demo/
