@@ -492,7 +492,7 @@ Global overrides for every A brief:
   - re-arm only after the scene breaks, and `NotifyCaptured` suppresses re-firing
 
   Accept: every case in TESTING.md §Unit passes, including two near-equal-area quads swapping order without resetting the settle.
-- [x] **A1** App shell and composition root: — *done 2026-09-21, `stream/a` `01b1fa6`. `AttachDeveloperTools` left uncalled: current Avalonia docs require portal licence credentials (paid tier). Smoke-launch via `LOREFETCH_SMOKE_EXIT_MS=3000` independently re-run: starts in Fakes mode against generated frames in `%TEMP%`, exits 0. A leaked temp folder per launch was found and sent back with A2.*
+- [x] **A1** App shell and composition root: — *done 2026-09-21, `stream/a` `01b1fa6`. `AttachDeveloperTools` left uncalled: current Avalonia docs require portal licence credentials (paid tier). Smoke-launch via `LOREFETCH_SMOKE_EXIT_MS=3000` independently re-run: starts in Fakes mode against generated frames in `%TEMP%`, exits 0. A leaked temp folder per launch was found; the first fix (`d5b0b2d`) still leaked on the smoke path, because Avalonia's `Shutdown()` never raises `ShutdownRequested` (verified in the 12.1.2 source). The fix in `bcfe815` disposes on `Exit`, idempotently; re-verified 0 → 0 folders across a smoke launch.*
   - `AppComposition` offers a `Fakes` mode, with `Real` added at integration
   - it calls `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`, then `RunAsync` once
   - a status line
@@ -626,8 +626,8 @@ Global overrides for every C brief:
 - Drop frames before decoding them.
 - No test ever opens a device outside the `Hardware` trait.
 
-- [ ] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool).
-- [ ] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees.
+- [x] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool). — *done 2026-09-21, `stream/c` `f4a459f` + fixups `84979d7`. Review sent back 4 `xUnit1051` warnings and an enumerator test that *hung* rather than failed when its guard was removed; both fixed, and the test is now bounded by `WaitAsync`. Also replaces StreamC's placeholder with real internal-touching tests, closing the `InternalsVisibleTo` thread.*
+- [x] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees. — *done 2026-09-21, `stream/c` `1f8380b`. Independent chaos: swapping the 90°/270° mappings fails the marker-corner test at both angles.*
 - [ ] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts.
 - [ ] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
   - enumerate and log every descriptor with its backend
