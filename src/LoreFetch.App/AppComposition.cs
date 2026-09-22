@@ -27,6 +27,7 @@ public enum CompositionMode
 public sealed class AppSession : IAsyncDisposable
 {
     private readonly Action? _onDisposed;
+    private int _disposed;
 
     public AppSession(
         IScanPipeline pipeline,
@@ -77,8 +78,24 @@ public sealed class AppSession : IAsyncDisposable
     /// task raises on a normal shutdown are swallowed; a caller that wants
     /// to observe a real failure should inspect `RunTask` itself before
     /// calling this.
+    ///
+    /// Idempotent: App.axaml.cs wires teardown to both
+    /// `IClassicDesktopStyleApplicationLifetime.ShutdownRequested` and
+    /// `.Exit`. On a cooperative shutdown (window close, `TryShutdown`, an
+    /// OS shutdown request) both fire — `ShutdownRequested` first, then
+    /// `Exit` unconditionally once teardown actually proceeds. Only
+    /// `desktop.Shutdown()` (used by the smoke-exit path) skips
+    /// `ShutdownRequested` entirely and goes straight to `Exit`. Guarding
+    /// here, rather than trusting callers to invoke this exactly once, is
+    /// what makes both hooks safe to wire without caring which one fires or
+    /// how many times.
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
         await Pipeline.DisposeAsync().ConfigureAwait(false);
 
         try

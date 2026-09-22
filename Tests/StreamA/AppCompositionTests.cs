@@ -74,6 +74,49 @@ public class AppCompositionTests
         Assert.Equal(1, onDisposedCallCount);
     }
 
+    /// Orchestrator review (2026-09-21): the smoke-exit leak's actual root
+    /// cause. App.axaml.cs's `MaybeScheduleSmokeExit` calls
+    /// `desktop.Shutdown()`, and in Avalonia 12.1's
+    /// `ClassicDesktopStyleApplicationLifetime.DoShutdown`, `Shutdown()`
+    /// passes `force: true`, which skips the `ShutdownRequested` invoke
+    /// entirely (`if (!force) ShutdownRequested?.Invoke(...)`) — only
+    /// `Exit` fires unconditionally, on every path. So App.axaml.cs now
+    /// wires teardown to *both* `ShutdownRequested` (fired on a cooperative
+    /// shutdown: window close, `TryShutdown()`, an OS request) and `Exit`
+    /// (fired on every path, including `Shutdown()`), and on a cooperative
+    /// shutdown both fire for the same session. This proves
+    /// `AppSession.DisposeAsync` tolerates that — a second call is a no-op
+    /// rather than double-disposing the frame source or invoking
+    /// `onDisposed` twice.
+    [Fact]
+    public async Task DisposeAsync_CalledTwice_IsIdempotent()
+    {
+        var factory = new CountingFrameSourceFactory();
+        var settings = new ScanSettings();
+        var onDisposedCallCount = 0;
+
+        var session = await AppComposition.ComposeAsync(
+            factory,
+            new StubCardDetector(cardCount: 0),
+            new StubRectifier(),
+            new StubCardIdentifier(),
+            new AutoCaptureTrigger(settings),
+            settings,
+            NullLoggerFactory.Instance,
+            TestContext.Current.CancellationToken,
+            onDisposed: () => onDisposedCallCount++);
+
+        await session.RunTask;
+
+        // Simulates ShutdownRequested and Exit both firing for the same
+        // shutdown, as they do on a cooperative shutdown path.
+        await session.DisposeAsync();
+        await session.DisposeAsync();
+
+        Assert.Equal(1, factory.Source.DisposeAsyncCallCount);
+        Assert.Equal(1, onDisposedCallCount);
+    }
+
     /// The concrete regression from orchestrator review: launching in
     /// Fakes mode creates a real temp folder for `FolderFrameSourceFactory`
     /// (`DemoFrames.CreateFolder`), and before this fix nothing ever

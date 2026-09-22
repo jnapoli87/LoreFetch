@@ -50,7 +50,28 @@ public partial class App : Application
                 _session.Pipeline.SourceDescription);
 
             desktop.MainWindow = new MainWindow(_session);
+
+            // Both events are wired to the same teardown, and AppSession's
+            // own DisposeAsync is idempotent (guarded internally), because
+            // the two paths are not mutually exclusive. `ShutdownRequested`
+            // is raised for a cooperative shutdown (window close, an OS
+            // request, or `TryShutdown()`) but NOT for `desktop.Shutdown()`
+            // itself, which is `DoShutdown(..., force: true, ...)` — and
+            // that `force` skips the `ShutdownRequested` invoke entirely
+            // (see ClassicDesktopStyleApplicationLifetime.DoShutdown: the
+            // event only fires `if (!force)`). `Exit`, in contrast, fires
+            // unconditionally at the end of `DoShutdown` on every path that
+            // actually tears down (force or not, cooperative or OS-driven),
+            // which is why it — not `ShutdownRequested` — is the one safe
+            // place to guarantee cleanup runs.
+            //
+            // Concretely: this was the smoke-exit leak. `MaybeScheduleSmokeExit`
+            // below calls `desktop.Shutdown()`, which never raised
+            // `ShutdownRequested`, so the old single-hook version never
+            // disposed the session and leaked one
+            // `%TEMP%/lorefetch-demo-frames-<guid>` folder per smoke run.
             desktop.ShutdownRequested += OnShutdownRequested;
+            desktop.Exit += OnExit;
 
             MaybeScheduleSmokeExit(desktop);
         }
@@ -58,13 +79,19 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    private void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)
+    private void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e) => Shutdown();
+
+    private void OnExit(object? sender, ControlledApplicationLifetimeExitEventArgs e) => Shutdown();
+
+    private void Shutdown()
     {
         _shutdownCts?.Cancel();
 
         // Blocking here is acceptable: shutdown is already underway, the
         // session's teardown is bounded (cancel + drain, no real I/O
         // waits), and there is nothing left for the UI thread to do.
+        // Safe to call from both handlers above: AppSession.DisposeAsync
+        // guards itself so only the first call does any work.
         _session?.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
