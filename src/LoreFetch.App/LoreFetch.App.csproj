@@ -11,7 +11,14 @@
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.Controls.DataGrid" />
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" />
+    <!--
+      AvaloniaUI.DiagnosticsSupport 2.2.3 ships with no licence at all — no
+      <license> in the nuspec, no licence file in the package. No licence
+      means no grant to redistribute it, so it must never reach a shipped
+      build. Debug-only: DevTools stays available for UI development, and
+      Release builds (what gets published for win-x64) never carry it.
+    -->
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Condition="'$(Configuration)' == 'Debug'" />
     <PackageReference Include="CommunityToolkit.Mvvm" />
 
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />

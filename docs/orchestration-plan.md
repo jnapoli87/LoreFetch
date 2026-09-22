@@ -418,6 +418,20 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the Mac A/D session, 2026-09-22
+
+**Newest handoff; the ones below still apply.** Covers the Mac's lanes only (A, C3, D). The B/PC handoffs below remain the truth for their lanes. Checkboxes and their per-item notes are authoritative.
+
+**State — the Mac's entire workload is complete.** A4, A5, A6, A7 (+ the retain-on-lock test), A8, A9 are ticked; C3 is ticked; D4, D5 (real Moxfield import verified) and D6 are ticked. `stream/a` is rebased onto `origin/stream/a` (`9e4c228`) with A4–A9 replayed on top (tip `ac55852` pre-rebase), **ahead 8 / behind 0 — a clean fast-forward**, clean worktree. StreamA is **106 passed / 0 failed** (2 `WindowsOnly` screenshot tests excluded on macOS), Integration **143 passed / 8 skipped**. Each A package was verified independently (scope, build, both suites, smoke-launch, `grep -ri moxfield src/LoreFetch.App` empty) plus one un-briefed chaos case — which found and closed a real gap in A7 (retain-cohort-on-`CollectionStoreException` was untested; `97615f3` covers it).
+
+**Push status.** `stream/c` (`7bf2632`) and `stream/d` (`fb24715`) were pushed earlier this session; the PC has since **merged `stream/c` to `main`** (Stream C complete — C2 + C4 hardware-verified on the C920). `stream/a` and the A5–A9 `main` ticks are pushed at session end **with the user's approval**.
+
+**Next for the PC (A lane):** **A10** 🧭👤 — the done-when hardware run on `stream/a`: all three layouts, a keyboard-only loop, all four tile states reached (two via configured `StubCardIdentifier` distances, two via user action), memory flat for 5 min under `dotnet-counters`; record fps + memory, then write **README §A**. **A10 is A's merge gate → P2.** Everything A needs is on `stream/a`; it depends on nothing from B or D. C4 is already done. B continues per its own handoff (B7 → B2 → B5c → B6 → B8).
+
+**Adjacent finds.**
+1. 9 pre-existing `xUnit1051` analyzer warnings in `Tests/StreamA/TileInteractionTests.cs` (A6) — non-blocking; the repo already treats `xUnit1051` as worth fixing (see C1a). A cheap cleanup when A is next touched.
+2. The named-chaos escape-valve earned its place again: A7's brief-named chaos all failed correctly, but the *un-briefed* case is what surfaced the retain-on-lock coverage gap. Same lesson as the B session's finding #4.
+
 ### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
 
 **Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
@@ -541,6 +555,30 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 | `InternalsVisibleTo` Capture → Tests.StreamC is declared but unprovable — `Capture` has no code yet | **C1a** should replace StreamC's placeholder with a real internal-touching test |
 | `THIRD-PARTY-NOTICES` advisory is non-empty by design until **I5** | the hook prints it, deduplicated, on every commit |
 
+### Approved frozen-surface change — `AvaloniaUI.DiagnosticsSupport` Debug-only, 2026-09-22 (user)
+
+`src/LoreFetch.App/LoreFetch.App.csproj` is frozen; the user approved this change explicitly, which is what the freeze process requires. Landed on `main` as `fb78c66`.
+
+**Why:** the package (2.2.3) declares **no licence at all** — no `<license>` element in its `.nuspec`, no licence file in the package. No licence means no grant to redistribute, which is worse than a restrictive licence because the terms are simply absent. It was referenced unconditionally, so it would have shipped inside the `win-x64` single-file exe, contradicting RECONCILIATION's "nothing is redistributed".
+
+**Why Debug-only rather than removal:** there are **no `AttachDevTools()` call sites anywhere in `src/`**, so the package is currently unused and could have been deleted outright. It is kept under `Condition="'$(Configuration)' == 'Debug'"` because A10 is a hands-on UI run where DevTools is exactly the tool you would want, and the condition costs nothing.
+
+**Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
+
+⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+
+### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
+
+**Measured, not inferred: all 8 of B1b's `WindowsOnly`-traited golden hashes, generated on win-x64, pass bit-exact on this arm64-darwin Mac** (`--filter Category=WindowsOnly` → 8 passed, 0 failed).
+
+That **contradicts the premise behind the trait**, which CLAUDE.md states as "since `macos-latest` is ARM64, a shared golden cannot pass there, so the leg would be permanently red". On this machine it passes.
+
+**Likely mechanism, worth stating because it is reassuring rather than lucky:** the hash is a *thresholded* bit pattern — each bit is "pixel > the median of its own 8×8 cell". A sub-LSB interpolation difference only flips a bit if that pixel straddles its cell median. So the 1024-bit quantisation absorbs precisely the class of error `INTER_AREA`'s ARM64 divergence produces. 8 goldens × 1024 bits = 8,192 bit observations in agreement.
+
+**Evidence, not proof** — a pixel sitting exactly on its cell median could still flip, and OpenCV #24163 is a real confirmed bug. So `thresholds.json` stays `provisional` until win-x64 re-measurement. But two consequences are worth acting on:
+1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
+2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
+
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
 
@@ -557,22 +595,55 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
 **Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
 
+### Geometry — re-ruled 2026-09-22 (user), superseding the ~9.75″ locked height and the camera-rotation requirement
+
+**The camera stays landscape and unrotated. The operating height is 12″, and the accuracy sweep is 12″ and 20″. The 3×3 layout is laid out with its cards rotated**, long edge across the frame.
+
+Why the old numbers changed — both were arithmetic, re-derived rather than assumed. Frame coverage at height *h* is `1920/(1360/h)` × `1080/(1360/h)` inches; the 3×3 footprint is 7.7″ × 10.7″.
+
+1. **`CLAUDE.md` locks the mount at "about 9.75″" because that is where a 3×3 *first* fits. It fits with 0.04″ of margin — one millimetre.** That is a geometric floor, not an operating height: a card leaves the frame if the mat shifts. 10″ is only 0.24″. **12″ gives 1.83″.**
+2. **The "1920 axis along the table's depth" requirement, and the 38%-resolution-loss warning behind it, silently assumed the 3×3 is laid out with its cards portrait** — footprint 7.7″ across × 10.7″ deep. Rotating the cards makes it 10.7″ × 7.7″, which fits a landscape frame at 12″ with 1.83″ to spare **at identical pixel resolution**: the card is 283×397 px either way, because px/inch is the same on both axes. So rotating the *layout* substitutes for rotating the *camera*, and the 38% loss never occurs. This is a third option the doc did not consider, and it is strictly simpler than twisting the camera.
+
+Fit matrix, landscape, computed:
+
+| Layout at 12″ | needs (across × deep) | result |
+|---|---|---|
+| 1 card | 2.5 × 3.5 | fits, +6.03″ |
+| 3 in a line, running across | 10.7 × 2.5 | fits, +6.24″ |
+| 3×3, cards portrait | 7.7 × 10.7 | **does not fit, −1.17″** |
+| 3×3, cards **rotated** | 10.7 × 7.7 | fits, +1.83″ |
+
+At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×238 px — still inside SpellTable's proven 130–215 px range, which is the point of shooting it as the stress bound).
+
+**Consequence — `ScanSettings.CameraRotationDegrees` = 0**, which closes the rotation-direction question C4 left open ("whether 90° or 270° is upright is decided at H1 mount time"). The property already accepts 0, so this is a composition-time value at I3 and **not** a frozen-surface edit. The `ScanSettings` default remains 90° and is not changed.
+
+**Derive each fixture's height from its frame, not from a tape measure:** `height_inches = 1360 × 2.5 / card_pixel_width`. It runs through the real optics and hands E1 its "predicted X, measured Y" calibration for free. **Evidence this matters:** the 12 ad-hoc frames are recorded as shot at "~12″", but their ~260 × 370 px card implies **13.1″** from the width and 12.9″ from the height — both axes agree, and 13″ predicts 262×366 against the measured 260×370. The tape was an inch out; the `1360` constant is vindicated, not suspect. A mislabelled height does not fail loudly — it reads as mysteriously poor accuracy in B6's per-height table, which is why `capture-fixtures.sh` makes the label a validated argument.
+
+**Fixtures are `.png`, not `.jpg`** (ruled 2026-09-22). The Stream C hardware harness saves a lossless PNG of the decoded BGR frame, and the camera's own MJPG artifacts are already baked into those pixels — re-encoding to JPEG to satisfy `test-images/README.md`'s stated extension would stack a second lossy generation on top for nothing.
+
+**Follow-ups owed on `main`, not yet done:** `CLAUDE.md` §Geometry still states the ~9.75″ lock, the "1920 axis along the table's depth" requirement and the 38% warning; `docs/PLAN.md` may repeat them; and `test-images/README.md` still says `.jpg`. All three need correcting to match this ruling.
+
 ### Human track H (parallel, may start at G0)
-- [ ] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth.
+- [x] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth. — *done 2026-09-22. Mount printed and adjustable to any height in range. **Superseded in part by the geometry re-ruling below:** the height is not locked at 9.75″ and the camera is not rotated. Operating height **12″**, sweep **12″ and 20″**, camera **landscape, unrotated**.*
 - [ ] **H2** 👤 Lighting and mat:
   - put the SAD lamp off-axis at a shallow angle
   - check a blank frame for PWM banding
   - try light, mid and dark mats, and record which one detects best
 - [ ] **H3** 👤 Capture the fixture corpus:
-  - heights 8, 10, 12, 14 and 20″
-  - 1, 3 and 9 layouts, some rotated
+  - heights **12″ and 20″** (re-ruled 2026-09-22, was 8/10/12/14/20 — see the geometry ruling below)
+  - 1, 3 and 9 layouts. **The 9 layout is laid out with its cards rotated**, long edge across the frame — portrait does not fit at 12″
   - lands, normal cards and stretch cards
   - store them in the gitignored `test-images/fixtures/<height>in/<layout>/…jpg` (same relative path on the Mac and the PC; see `test-images/README.md`)
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
 
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
+  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
+  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
+  ruling below.
+
   Gates B6.
-- [ ] **H4** 👤 A Moxfield account. Gates D5.
+- [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
 - [x] **H6** 👤 A C920 attached to the Windows PC. Gates C4. — *confirmed attached 2026-09-21 (G0.3).*
 
 ### Stream A — UI · worktree `stream-a` · scope `src/LoreFetch.App/**`, `src/LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, README §A
@@ -607,20 +678,21 @@ Global overrides for every A brief:
 
   Accept: unit tests for the pure `PixelConvert` function (BGR24/BGRA32 with padded strides).
 - [x] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry. — *done 2026-09-21, `stream/a` `8d2c30c`. A pure `FrameToControlTransform` (scale = min, centred offsets) and `Polygon` children on a hit-test-invisible canvas. Independent chaos: swapping the X/Y offsets fails all 3 transform tests. **The smoke launch caught a crash no unit test could:** `RequestAnimationFrame` was called from the pipeline thread and asserts UI-thread access; the call is now marshalled through `Dispatcher.UIThread.Post`.*
-- [ ] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`.
+- [x] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`. *(stream/a `d30d7bd` + `163c2e9`; first view model `MainViewModel` writes through to `ScanSettings.ExpectedCount`/`AutoCaptureEnabled`, 3 radio buttons no `IsDefault`, `LOREFETCH_FRAMES_DIR` with graceful fallback + logged error. 44 StreamA + 143 Integration green (Mac filter); smoke-launched exit 0; chaos found + closed an `IsImageFile` rejection-branch test gap. **Screenshot PNG is `WindowsOnly` — headless `CaptureRenderedFrame` returns null on macOS ARM64, so pixel verification is deferred to the PC leg; a cross-platform visual-tree test runs on Mac.**)*
   **Added 2026-09-22 (user ruling):** a `LOREFETCH_FRAMES_DIR` environment variable. When set, Fakes mode's `FolderFrameSourceFactory` reads that folder instead of `DemoFrames`' generated rectangles, so the user's real captures in `test-images/ad-hoc/` (12 × 1920×1080, 4 cards × black/brown/white surfaces, ~12″) cycle through the preview. Unset → current behaviour. A missing or empty folder is a clear logged error, not a crash. The images are gitignored and never copied into the repo.
 
 **UI screenshots, standing from A4 onward (user ruling 2026-09-22).** The user wants to *see* the UI run, not only read test counts. Each of A4–A9 adds at least one `Avalonia.Headless` test that renders the window to a PNG — driving Space/Enter/Escape where the package is about keys — and writes it to the test's output directory, **never into the repo**. The orchestrator reads every PNG during verification and sends it to the user with `SendUserFile`. Where it helps, the orchestrator also smoke-launches the real exe with `LOREFETCH_FRAMES_DIR` and `LOREFETCH_SMOKE_EXIT_MS`, captures the screen, and sends that too. Neither replaces **A10**, which stays the user's hands-on keyboard run. The orchestrator has no desktop-control tools, so it cannot click a live window.
-- [ ] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state.
-- [ ] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
+- [x] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state. *(stream/a `6dccb9a`; `TileViewModel : ObservableObject` wraps `CohortTile` — reflects State/DisplayName(blank when Unresolved)/DistanceText(blank when null)/IsLowConfidence directly, never re-derives low-conf from ChosenDistance; `Refresh()` re-notifies for A6; exposes `Tile` so A6 reaches the mutators. `MainViewModel.Tiles` + `LoadCohort(Cohort)` (A7 wires capture). MainWindow.axaml cohort grid: ItemsControl+WrapPanel, four state visuals + amber low-conf border; ✕ marker IsVisible→ShowExcludedMarker. 18 new tests (62 StreamA total); cross-platform visual-tree check + WindowsOnly PNG. Verified: scope App+StreamA only, build 0 err, StreamA 62 pass, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos: inverted ShowExcludedMarker → visual-tree test fails Assert.Single (4 markers) at line 81 — ✕ binding is real, not vacuous.)*
+- [x] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
   - `AsyncPopulator`, filtering off the UI thread with `Take(20)`
   - `MinimumPrefixLength` of 2
   - `MinimumPopulateDelay` of 150 ms
   - ordinal matching
   - runners-up listed first
+  - *(stream/a `0368a35`; `TileViewModel.ToggleExcludedFromUi/SetManuallyFromUi/ClearFromUi` each = tile mutator + `Refresh()` (UI never assigns State/Chosen). `TypeAheadPopulator` built by `BuildPopulator`: yields off UI thread, honours cancellation, runners-up (`CohortTile.Candidates`) first then `IOracleCatalog.All`, `StartsWith(…,Ordinal)`, deduped by OracleId, capped `Take(20)`; `MinimumPrefixLength=2`/`MinimumPopulateDelay=150ms` set in code-behind `OnTypeAheadLoaded`. `IOracleCatalog` threaded via optional params (AppComposition builds `StubOracleCatalog()` 33k → AppSession → MainViewModel.LoadCohort → TileViewModel); all A4/A5 ctors still compile. New `CatalogItem` (App wrapper, `ToString()`=OracleName) avoids touching frozen Core. MainWindow: `Tapped`→toggle, `ContextMenu` (Set manually…/Clear), `AutoCompleteBox` overlay. **Override applied (V16): the doc's "few hundred entries / can't test 33k" is stale — stub is now 33k, cap tested against it.** No keyboard/capture (A7). 17 new tests (79 StreamA). Verified: scope App+StreamA only, build 0 err/0 warn, StreamA 79 pass, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos: catalog `StartsWith`→`Contains` → substring test fails at line 273 ("Lightning Bolt" leaks on prefix "Bolt") — prefix semantics genuinely enforced.)*
 
   Accept: a populator unit test against 33k entries (capped, cancellable).
-- [ ] **A7** Keyboard map:
+- [x] **A7** Keyboard map:
   - a window-level `Tunnel` handler, which returns without setting `Handled` when focus is in a `TextBox`
   - Space awaits `CaptureAsync`
   - Enter commits and keeps the cohort on `CollectionStoreException`
@@ -628,8 +700,9 @@ Global overrides for every A brief:
   - keys 1–9 are optional
 
   Accept: `Avalonia.Headless.XUnit` tests cover Space, Enter and Esc, and check that **a space typed into the type-ahead still arrives**.
-- [ ] **A8** Collection view and export: a sortable `DataGrid` over `ListAsync` (keep the DataGrid theme include), and an exporter picker with an `IsVerified` badge. No per-format code: `grep -ri moxfield src/LoreFetch.App` must return nothing.
-- [ ] **A9** Non-happy states:
+  - *(stream/a `7b3accb` + test `97615f3`; window-level `AddHandler(KeyDownEvent, …, Tunnel)` — focus bail (`FocusManager.GetFocusedElement() is TextBox` → return without `Handled`, the WM_CHAR trap), no `IsDefault` button. `MainViewModel.CaptureFromPipelineAsync` runs `CaptureAsync` off-thread and marshals `LoadCohort` back (no-op on null/0 detections); `CommitCohortAsync` no-op when store/cohort null; `ClearPendingCohort`/`HasPendingCohort`. Enter handler clears **only on success**; catches `CollectionStoreException` and keeps the cohort (retry banner deferred to A9); `AutoCaptured` subscribed + marshaled. `ICollectionStore` threaded via optional params (`StubCollectionStore` in `CreateFakesAsync`). 1–9 toggles: see report. All A4–A6 ctors still compile. Verified: scope App+StreamA only, build 0 err, **StreamA 87 pass**, Integration 143 pass/8 skip, smoke-launch exit 0. Un-briefed chaos found the retain-on-failure path had **no test** (clearing in the catch left all 86 green) → closed by `97615f3`; re-ran the chaos against the new test and it fails `Expected 2, Actual 0` at line 190, right reason.)*
+- [x] **A8** Collection view and export: a sortable `DataGrid` over `ListAsync` (keep the DataGrid theme include), and an exporter picker with an `IsVerified` badge. No per-format code: `grep -ri moxfield src/LoreFetch.App` must return nothing. *(stream/a `4c7426a`; `CollectionViewModel` (Rows from `ListAsync`, `ExporterItems`, testable `ExportToStreamAsync(exporter, stream, ct)`), `ExporterItem` wrapper exposing `IsUnverified` for the badge. MainWindow: `DataGrid x:Name=CollectionGrid` (sortable, 6 cols) + `ListBox x:Name=ExporterList` with a `Border IsVisible={Binding IsUnverified}` "unverified" badge; DataGrid Fluent theme include kept. Exporters threaded via optional `AppSession.Exporters` (`CreateFakesAsync` wires two `StubCollectionExporter`s — one verified, one not — to exercise the badge; real Native+Moxfield wired at integration). Export uses `StorageProvider.SaveFilePickerAsync`→stream→`ExportToStreamAsync`; UI has zero per-format code. Verified: scope App+StreamA only, build 0 err/0 warn, **StreamA 91 pass**, Integration 143 pass/8 skip, `grep -ri moxfield src/LoreFetch.App` empty, smoke-launch exit 0. Un-briefed chaos: forced badge `IsVisible=False` → visual-tree test fails `Assert.NotEmpty (empty)` at line 162 — badge binding + tree walk are load-bearing. Non-happy states (empty placeholder, store-locked banner, source-failed) deferred to A9.)*
+- [x] **A9** Non-happy states:
   - empty collection
   - no frame source
   - `SourceFailed`
@@ -637,6 +710,7 @@ Global overrides for every A brief:
   - a missing index or thresholds file
 
   No stack traces in the UI.
+  - *(stream/a `ac55852`; empty-collection placeholder (`CollectionViewModel.IsEmpty`/`HasRows`), `SourceFailed` banner (subscribed + marshalled, `.Message` only, unsubscribed on close), store-lock retry banner on `CollectionStoreException` from commit/export with a Retry that re-attempts and clears on success (cohort retained — builds on A7), startup-error surface via `MainViewModel.StartupErrorMessage` string (composition sets it — **no contract change; STOP not triggered**), and a visible "Set card manually…" hint on `Unresolved` tiles. No stack traces in any surface. Verified: scope App+StreamA only, **StreamA 106 pass/0 fail** (2 WindowsOnly screenshots excluded), Integration 143 pass/8 skip, `grep -ri moxfield src/LoreFetch.App` empty, smoke-launch exit 0. Un-briefed chaos: `ex.Message`→`ex.ToString()` in the SourceFailed handler → no-stack-trace test fails on "System." at line 213 — the invariant is real. Adjacent find: 9 pre-existing `xUnit1051` analyzer warnings in A6's `TileInteractionTests.cs` (non-blocking).)*
 - [ ] **A10** 🧭👤 Done-when run on the Windows PC:
   - all three layouts work
   - a keyboard-only loop works
@@ -720,7 +794,7 @@ Global overrides for every B brief:
 
   Item text: Accept: a known quad on a synthetic frame produces the expected corner pixels. Extends the B5a Lab `detect` command to write each rectified 488×680 crop from the ad-hoc frames next to its overlay PNG, for a by-eye check.
   **Early real-path smoke (user ruling 2026-09-22):** once B4c exists, build a small labelled subset index that includes those four cards' arts. Sol Ring should then retrieve its own `ArtworkId` through detect → rectify → identify. Record the distance. This is a smoke check, not an accuracy number: B6 still needs the H3 corpus.
-- [ ] **B7** Lab synthetic generator:
+- [x] **B7** Lab synthetic generator:
   - px/inch = 1360/height
   - keystone, blur, noise and JPEG artefacts
   - a bare-mat generator
@@ -728,8 +802,60 @@ Global overrides for every B brief:
   - CI uses procedural card-like images and an index built inside the test (V13)
 
   Accept: an integration test in `Tests/StreamB` confirms that a generated card at 9.75″ retrieves its own artwork.
-- [ ] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
-- [ ] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+
+  *Done 2026-09-22, Mac, `stream/b` `abe9ac8` + `eaf07dc` + `d520d29`. `SyntheticFrameGenerator` (downscale `INTER_AREA` → keystone → mat composite → blur → Gaussian noise → JPEG round trip), `BareMatGenerator` at light/mid/dark, and a `lab synth card|mat` command refusing in-repo output. Noise and JPEG use a seeded `System.Random` rather than OpenCV's RNG, for cross-platform determinism. StreamB 163 → **184** (183 passed, 1 soft-skip); Integration unchanged at 143/8.*
+
+  **Round trip, procedural in-test index (V13), both heights:** 9.75″ rank-1 **64** / rank-2 103; 12″ rank-1 **68** / rank-2 113. Probing all 24 in-index seeds gave **24/24 correct@1** at distances 40–102. The 12″ case was added after the geometry re-ruling; note 12″ costs 4 bits of distance but *gains* 6 bits of margin, so moving the operating height there is free.
+
+  🔴 **Two review rounds, both on reviewer-checklist item 2 ("`INTER_AREA` at every resize, including inside the synthetic generator") — and this is the pattern's third and fourth appearance in stream B.** The implementer's own briefed chaos case reported honestly that swapping the generator's downscale `INTER_AREA`→`INTER_LINEAR` **left all 179 tests green**; sent back and closed with a *differential* pin (`SyntheticFrameOptions.DownscaleInterpolation`, default asserted + a different value must change the pixels) rather than a golden, because only the filter *choice* is at risk here and a differential pin is architecture-independent, where a golden would have to be `WindowsOnly` and generated on the PC. Then **orchestrator chaos on a spot no brief named** found the same hole one step down: keystone warp `Linear`→`Nearest` **left all 182 green**. Closed the same way (`KeystoneInterpolation`). Both pins were verified to actually reach their `Cv2` calls rather than merely being declared.
+
+  **`BorderTypes.Replicate` was examined and deliberately *not* pinned, with reasoning** — the right outcome, not a miss. The composite mask is filled from the destination quad's own geometric corners, and the keystone inset only pulls corners inward, so a border mode can only supply pixels strictly outside the true quad — exactly the region the mask always excludes. A border-mode change is therefore structurally unobservable downstream, not merely untested; swapping to `BorderTypes.Constant` left all 184 green for a provably different and non-actionable reason. Recorded inline at the call site instead of pinned.
+
+  **Independent chaos beyond the brief:** dropping the JPEG round trip was caught by exactly 1 of 179 tests, confirming that test is non-redundant. The standing practice this package produced is now in `docs/TESTING.md` §*pin every interpolation flag and border mode*. Lab production code is ~1,504 lines total, reported against the tripwire and accepted — it is a multi-command dev harness, not one package doing several jobs.
+- [x] **B2** Round-trip gate. It runs locally and is artifact-gated on the external cache and the committed index: Scryfall render → `RectifiedCard` → `Identify`. It asserts that rank 1 has the **same `ArtworkId`** and a distance ≤ the recorded floor bound. It writes `referenceFloor` and the margin to the best different artwork into `thresholds.json`. It uses a fixed sample, for example 200 renders spread across the ladder. **If the rank-1 artwork rate is below 99%, stop and ask.** Record the floor here.
+
+  *Done 2026-09-22, **Mac (arm64-darwin)**, `stream/b` `ce5d407`. Ran against the full 48,750-artwork committed index and the complete real cache (48,750 renders re-pulled on the Mac from the ported manifest in 738 s at 66/s, 0 failures). Fixed sample of 200, seed `20260922`. StreamB 184 → **197**; Integration unchanged 143/8. `data/index/thresholds.json` written at the path Stream 0 already froze, with `goodDistance`/`okDistance` deliberately absent so `ThresholdsFile.Load` throws "missing required field" until B6 sets them — loud, not a fabricated placeholder.*
+
+  | Measure | Value |
+  |---|---|
+  | **referenceFloor** | **55** (own distance min 9, mean 22.3, median 21) |
+  | Margin to best *different* artwork | min **63**, mean 204.1, median 203, max 322 |
+  | **Rank-1 `ArtworkId` rate** | **100.00% (200/200)** — lands 20/20, non-lands 180/180 |
+
+  The worst margin (63) exceeds the floor (55), so every sampled artwork is separated from its nearest impostor by more than the whole spread of own-distances. Far above the 99% stop-and-ask bar. **Marked `provisional: true` / `measuredOn: arm64-darwin`** per Machine split rule 4; the PC promotes it. The thresholds file now records its own provenance (architecture, OS, index SHA-256, sample size, seed), which turns rule 4 from a rule someone must remember into a mechanism.
+
+  🔴 **The gate has a structural limit, found by the implementer's briefed chaos case and worth understanding before anyone trusts it further than it goes.** Swapping the query transform for the reference transform on the query side **did not fail** the rank-1 or bound assertions — the reported distance *improved to 0*. Cause: the queried render's own index entry was built by that same reference pipeline from the same bytes, so forcing the two sides into symmetry only makes a self-match better. **A render-self-match gate is therefore biased toward passing when the two sides converge, even wrongly, and cannot by itself guard reference/query divergence.** Closed as far as it can be by cross-checking `Identify`'s reported distance against an independent raw-scan distance (catches the mutation: expected 17, actual 0). The real guards on divergence remain B1b's goldens and B2's new witness — which is what CLAUDE.md's "golden hashes **plus** a round-trip test" already implies; the risk was reading the round-trip gate as doing more than it does.
+
+  **Query-hash witness (orchestrator addition to the brief).** 50 query-side 1024-bit hashes for a fixed seed, committed as text. **Its trait choice is better than the brief asked for:** rather than copying B1b's `WindowsOnly`, it reads the runtime architecture and compares against the witness's recorded `measuredOn` — same architecture asserts bit-exact, foreign architecture skips with the measured bit-difference count in the message. That matters concretely: `scripts/lorefetch.sh` filters `WindowsOnly` out on macOS, so the goldens are *not* run in a script-driven Mac run, while the witness is. **Orchestrator chaos confirms it:** mutating `QueryTransform`'s `BGR2GRAY` to `RGB2GRAY` is caught by exactly two tests — a golden and the witness — and the witness is the one that survives the macOS filter.
+- [x] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+
+  *Done 2026-09-22, Mac, `stream/b` `65b9e54`. StreamB 197 → **213**; Integration unchanged 143/8; 0 warnings. `lab crop-scale`, `CropScaleTransform`, and the curve + findings in `docs/accuracy.md`. **`HashCardIdentifier`, `ContourCardDetector` and `PerspectiveRectifier` are provably untouched** (verified by an empty diff against those paths).*
+
+  **The curve — 150 non-land renders, isotropic crop error, full 48,750-artwork index:**
+
+  | Crop error | Rank-1 rate |
+  |---|---|
+  | ±0–4% | **98–100%** |
+  | +6% | 75.3% |
+  | +8% | 31.3% |
+
+  **Rank-1 starts breaking at ~5–6% crop error**, and the outset direction degrades roughly symmetrically. That is the number the package existed to produce.
+
+  **`plains_black`'s real inset is 10.1% width / 6.9% height** — measured from actual detector geometry against the `plains_white`/`plains_brown` ground truth, and **worse than B5b's by-eye "5% / 3–4%" estimate**. So the observed failure sits well past the tolerance, which explains the confident wrong match. A compensating correction at −8% to −10% **recovers Plains to rank 1** (distance 221); −3% and −5% are insufficient, so the fraction has to be in the right neighbourhood rather than merely nonzero. Note the doc's own caveat: crop error alone was **not** sufficient to produce a wrong match in the synthetic population, so `plains_black` is crop error *compounding* with black-on-black contrast loss, not crop error by itself.
+
+  **DECISION: DEFERRED to after B6, deliberately — not "no".** The 3-scale sweep works and is safe (0/150 false positives on well-framed queries, negligible margin cost) but costs **~6×: 53 ms → 295 ms for a 9-card cohort**, against B3b's 50 ms soft budget — which the *baseline* already exceeds on this Mac (the PC measured 28–35 ms, so the budget comparison belongs on win-x64). The implementer correctly hit the brief's stop condition and changed no production code.
+
+  **Why deferring is right rather than lazy:** B5c measured 150 *synthetic* crops plus exactly **one** real failing frame. What decides the fix is how often real captures actually exceed 5% inset, and H3's corpus supplies that — 30 real frames across three mats. If insets only appear on dark mats with black-bordered cards, then "use a light mat", documented with numbers, is a **zero-cost** fix and the honest one. If light mats inset too, the sweep earns its cost.
+
+  **Sequencing that keeps B6's number honest:** run B6 **without** the sweep first and record that figure; only then decide. If the sweep is adopted, re-measure and report **both** numbers. Choosing an architecture from corpus failure rates is mild fitting to the test set, and reporting both is what keeps the headline accuracy meaningful.
+
+  **The four options on the table, for the record:**
+  1. **Light mat + documented limitation** — zero cost, matches the user's own stated fallback, and B5c's data supports it precisely.
+  2. **Unconditional 3-scale sweep** — 6× query cost. Worth noting 295 ms is *inside* the interaction budget: the 50 ms figure was a soft budget proving brute force beats the rejected early-rejection optimisation, not a UI requirement, and auto mode already waits a **500 ms** count-gated settle. Identification runs once per cohort on Space, not per frame.
+  3. **Conditional sweep**, escalating only when confidence is low — ~1× typical cost. ⚠ Needs a contract ruling first: CLAUDE.md rejected upstream's early rejection as "threshold-keyed and inadmissible", and although a conditional *escalation* never prunes or reorders (so it is not the same defect), it does make identifier behaviour threshold-dependent when `ICardIdentifier` says thresholds belong to the pipeline.
+  4. **Detector fix** — find the true outer edge on a dark mat. Addresses the cause rather than the symptom, but is a materially harder vision problem and was not attempted.
+
+  **Contingent cleanup:** `CropScaleTransform` (93 lines) sits in `Core/Imaging`, so it ships in the product assembly although it is diagnostic-only. That placement is correct *if* option 2 or 3 is adopted, since the sweep would live in `HashCardIdentifier` and use it. **If the sweep is rejected, move it to `Lab`.**
 - [ ] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
   - the margin distribution
@@ -752,7 +878,7 @@ Global overrides for every C brief:
 - [x] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool). — *done 2026-09-21, `stream/c` `f4a459f` + fixups `84979d7`. Review sent back 4 `xUnit1051` warnings and an enumerator test that *hung* rather than failed when its guard was removed; both fixed, and the test is now bounded by `WaitAsync`. Also replaces StreamC's placeholder with real internal-touching tests, closing the `InternalsVisibleTo` thread.*
 - [x] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees. — *done 2026-09-21, `stream/c` `1f8380b`. Independent chaos: swapping the 90°/270° mappings fails the marker-corner test at both angles.*
 - [x] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts. — *done 2026-09-21, `stream/c` `72503b5` + `8382f25` + `56b1b9b`. Generic over `IAsyncEnumerable<T>` so C2 can wrap either stage; injectable `TimeProvider`. The finishing implementer found a real bug: disposing an async iterator while its `MoveNextAsync` is pending throws `NotSupportedException`, so disposal is deferred until the pending call settles. Review strengthened two tests. The healthy stream now spans six frame-timeout periods, because at one period the only-reset-once regression was caught in just 3 of 5 runs; it is now 5 of 5. And using the first-frame timeout for mid-stream gaps passed all 18 tests, so the stall test now pins both the detection time (< 2 s) and the timeout value in the message.*
-- [ ] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
+- [x] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
   - enumerate and log every descriptor with its backend
   - zero descriptors gets its own diagnosis
   - select 1920×1080, `PixelFormats.JPEG`, `(double)fps >= 30`, or throw with the full list
@@ -761,8 +887,29 @@ Global overrides for every C brief:
   - `Description` reports what was negotiated
 
   Accept: unit tests of the selection logic over plain descriptor data objects.
-- [ ] **C3** ∥ README §C (including the macOS compile-only note).
-- [ ] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+
+  *Done 2026-09-22, Windows PC, `stream/c` `1f60ec0` + fix `cd53e54`.* 37 StreamC tests; the implementer's five chaos cases (`==` for `>=`, VfW in the preference list, swapped preference, first-characteristic fallback, hardcoded `Description`) each failed the right test.
+  🔴 **Review caught a defect every unit test passed: the device was opened but never `StartAsync`-ed.** FlashCap delivers nothing to an un-started device, so every real open would have ended in the 10 s first-frame timeout, misdiagnosed as unplugged / in use / permission denied. It is not unit-testable (FlashCap devices cannot be faked from outside its assembly), so the C4 hardware harness is its guard. The fix also releases the device if anything throws after `OpenAsync`, and logs time-to-first-frame.
+- [x] **C3** ∥ README §C (including the macOS compile-only note). *(stream/c `7bf2632`; README-only. §C covers the FlashCap→`IFrameSource` pipeline (`WebcamFrameSourceFactory` entry point, DropOldest single-frame, `ArrayPool` no-garbage, first-frame/mid-stream watchdogs), the C920 USB-2 MJPG-30fps negotiation asserted from `EnumerateDescriptors()`, MJPEG decode as this stream's job (`Cv2.ImDecode`→BGR24, in-source `Cv2.Rotate`), and a `> [!IMPORTANT]` win-x64-only callout (FlashCap #182 native crash → macOS compile-only in CI). Verified: scope README-only; API refs fact-checked against ScanSettings (`FirstFrameTimeoutMs`=10s, `FrameWatchdogMs`=2s, `CameraRotationDegrees` default 90°) and the contract-pinned factory name.)*
+- [x] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+
+  *Done 2026-09-22 with the user at the C920. Harness `e7cf54a` + fix `039d768`, docs `d313a51`, C3 merged from origin `e2b1305`: `Category=Hardware` tests in `Tests/StreamC/Hardware/`, the unplug test additionally `Interactive=Unplug`. Output goes to `%TEMP%\lorefetch-hw`, never the repo.*
+
+  | Check | Measured |
+  |---|---|
+  | Negotiated | `HD Pro Webcam C920 1920x1080 MJPG @30fps (DirectShow)`, from the device's own characteristics. DShow 35 characteristics, MF 335; VfW "Default" enumerated and skipped |
+  | Delivered | **28.6 fps** over 10 s; first frame ~720–790 ms after `StartAsync` |
+  | **JPEG decode** | **11–15 ms mean** per 150-frame window, max 42 ms (one outlier). ~40% of one core at a full 30 fps; drop-before-decode means only consumed frames pay it |
+  | Sustained, 3 min | 5,035 frames; private bytes oscillated 180–190 MB, post-warm-up growth **9.5 MB** (bound 100 MB) |
+  | Slow consumer | 500 ms/frame for 60 s: **+5.7 MB**; capture→consume latency mean 33 ms, max 77 ms, not trending |
+  | Unplug | `FrameSourceException` **2,002 ms** after the last frame (`FrameWatchdogMs` 2000); `DisposeAsync` 23 ms |
+  | Replug | Reopen OK, first frame 719 ms |
+
+  **Orchestrator chaos, the case the brief did not name:** deleting `StartAsync` first failed the live test for the **wrong reason**. The harness's 5 s per-`MoveNext` bound was shorter than `FirstFrameTimeoutMs` (10 s), and its `finally` disposed the async iterator mid-`MoveNext` → `NotSupportedException`, masking the product's diagnosis. Fixed in `039d768`: bounds are derived from the settings, and the harness cancels, then settles, then disposes. A non-hardware unit test pins both halves, and each was chaos-tested. Re-run on hardware, the chaos now fails with the product's own `FrameSourceException: No frame arrived within 10000 ms of opening the capture device…`. The four unattended tests pass on the fixed harness (4/4). The unplug test ran on the pre-fix harness; its fix touched only the bound, which was already 130 s.
+
+  **Open, physical, not a C blocker:** rotation *direction*. The captured frame was shot before the mount (table depth ran across the frame), so whether 90° or 270° is upright is decided at H1 mount time. It is a `ScanSettings.CameraRotationDegrees` value, not code.
+  **Merged and pushed 2026-09-22:** `main` `c26ae12` (full local suite green on Windows), `stream/c` `e2b1305`. CI [run 35757384775](https://github.com/jnapoli87/LoreFetch/actions/runs/35757384775): `windows-latest` ✅. `macos-latest` ❌ **at Test, with Restore and Build green**. The log needs a signed-in account and was not read. Suspected, unconfirmed: the first macOS-CI test to call OpenCV natively (C1b's `ImEncode`/`ImDecode`), i.e. Risk 7's `osx.arm64` runtime. **User ruling (2026-09-22): macOS passing is not a requirement. Do not spend effort on this leg.** Its Build step still proves `Core` portability. A red Test step there is expected until someone chooses to look.
+  **Found in passing, outside C:** `AvaloniaUI.DiagnosticsSupport` 2.2.3 declares no licence, yet `App.csproj` references it unconditionally, so it would ship in the single-file exe. That contradicts RECONCILIATION's "nothing is redistributed". Spun off as a main-only task: make it Debug-only.
 
 ### Stream D — Collection & export · worktree `stream-d` · scope `src/LoreFetch.Core/Collection/**`, `src/LoreFetch.Core/Export/**`, `Tests/StreamD/**`, README §D
 Global overrides for every D brief:
@@ -798,9 +945,9 @@ Global overrides for every D brief:
   - `ListAsync` on a missing file returns an empty list
 
   Accept: the blank-condition round trip yields 1 row with quantity 2; nine Forests return 9; a file locked with `FileShare.None` throws and leaves the original byte-identical; the temp file lives in the target directory.
-- [ ] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors.
-- [ ] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`.
-- [ ] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.**
+- [x] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors. *(stream/d `68e749f`; also `ed60d6c` marks the write-lock test WindowsOnly — macOS `rename(2)` replaces an open target. 70 StreamD + 143 Integration green on Mac filter; chaos: CRLF flip fails 9 tests, line endings pinned.)*
+- [x] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`. *(stream/d `bd106e0`; user imported a 6-card sample via Moxfield's Collection-view CSV upload on 2026-09-22 — all 6 names intact incl. `+2 Mace`/`Borrowing 100,000 Arrows`/`Kongming, "Sleeping Dragon"`/`Lim-Dûl's Vault`, `Forest` merged to qty 9, blank Condition → Near Mint, printings auto-assigned by Moxfield as expected for oracle-name-only rows. `IsVerified` flipped false→true; StreamD metadata test now asserts true, chaos-checked. README §D amended with the import instruction + verified result. StreamD 70 pass, Integration 143 pass/8 skip.)*
+- [x] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.** *(stream/d `844c7f3`; native SOT + Moxfield, unsupported table for ManaBox/Archidekt/Deckbox/Dragon Shield, `+2 Mace` `> [!NOTE]`, oracle-name-only limitation cross-referenced. Only README.md; anchor + links verified. D5 will amend §D with the verification record.)*
 
 ### Integration I (on `main`, after the relevant streams have merged)
 - [ ] **I1** After D merges: implement `Real` in `Tests/Integration` for the store and exporters, and switch `AppComposition` to use them.
