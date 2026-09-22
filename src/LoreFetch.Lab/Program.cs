@@ -27,6 +27,7 @@ return await (command switch
     "query-hash-witness" => QueryHashWitnessCommand.RunAsync(rest),
     "crop-scale" => CropScaleCommand.RunAsync(rest),
     "retrieval-experiment" => RetrievalExperimentCommand.RunAsync(rest),
+    "accuracy" => AccuracyCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -118,5 +119,14 @@ static void PrintUsage()
                                    2x2 sweep over test-images/a_corpus/,
                                    plus the identify pass on the best
                                    cell. See docs/accuracy.md.
+          accuracy [--index <path>] [--ok-distance N] [--max-wrong N]
+                                   Package B6: runs the accuracy harness
+                                   against whatever subset of
+                                   test-images/ground-truth.csv +
+                                   test-images/fixtures/ exists on disk.
+                                   Reports correct@1/wrong@1/no-match per
+                                   height and per rung, the margin
+                                   distribution, and the lands-excluded
+                                   count. Never writes thresholds.json.
         """);
 }

@@ -479,3 +479,217 @@ Two residual items for whoever does that follow-up:
    *were* detected as clean quads — and were not chased further here;
    they may be the same crop-scale phenomenon Part 2 of this document's
    B5c section already measured, at these specific grid positions.
+
+---
+
+# Accuracy — B6 harness (correct@1 / wrong@1 / no-match)
+
+**This section documents the HARNESS, not an accuracy result.** Package
+B6's job was to build and debug a correct accuracy harness before the H3
+fixture corpus exists — the corpus is being captured separately, and
+nothing here should be read as a LoreFetch accuracy figure. The results
+table at the end is a placeholder, explicitly labelled as such.
+
+Production code: `src/LoreFetch.Lab/Accuracy/*` (`GroundTruthCsv`,
+`GroundTruthFrame`/`GroundTruthOracleLookup`, `SlotMapper`,
+`AccuracyFrameRunner`, `AccuracyStatistics`/`AccuracyGateResult`,
+`AccuracyCorpusLoader`, `AccuracyReportFormatter`, `ThresholdsCalibration`)
+and `src/LoreFetch.Lab/Synthetic/MultiCardFrameGenerator.cs`. CLI: `lab
+accuracy [--index <path>] [--ok-distance N] [--max-wrong N]`. Tests:
+`Tests/StreamB/Accuracy/*`.
+
+## Definitions
+
+Every ground-truth slot (`test-images/ground-truth.csv`, one row per card:
+`file,height_in,layout,slot,oracle_name,rung,mat`) is classified into
+exactly one of four outcomes, computed by `AccuracyFrameRunner.Run` from
+the SAME `ICardDetector` → `IRectifier` → `ICardIdentifier` calls the
+scanner itself makes:
+
+| Outcome | Meaning |
+|---|---|
+| **Correct** | Rank-1's `OracleId` matches the ground truth. Distance is irrelevant to this classification — matching the RoundTrip gate's (B2) own definition. |
+| **Wrong** | Rank-1's `OracleId` does NOT match, **and** its distance is ≤ `OkDistance` — a *confident* wrong answer. |
+| **Unresolved** | Identification ran (the frame's detected count matched its layout) but returned no candidates, or a wrong rank-1 beyond `OkDistance` — an honest "don't know." |
+| **DroppedFrame** | The frame's detected card count did not match its ground-truth layout, so this slot was never mapped or queried at all. |
+
+**Reporting rule (orchestration-plan.md B6, "the three buckets sum to
+100%"):** the headline table reports exactly three buckets —
+**correct@1**, **wrong@1**, and **no-match** — and `Unresolved` +
+`DroppedFrame` both fold into **no-match** for that sum (from the
+collection's point of view, a slot the harness never identified is
+indistinguishable from one it identified with no confidence — neither
+ends up in the CSV). They stay two distinct `SlotOutcome` values
+internally, and the full breakdown table still reports them separately
+(`(Unres. Dropped)` columns), so a detection failure is never hidden
+behind an identification failure. `AccuracyBucketCounts.AssertBucketsSumToTotal`
+asserts the sum in code on every aggregation, not by eye.
+
+**Headline scope:** non-land (`IsBasicLand`, resolved from the loaded
+index — never the `rung` string) **and** `rung == "normal"`. Lands are
+still classified and reported in the full per-height/per-rung breakdown
+(a smoke test, per CLAUDE.md's Ladder), with the excluded count printed
+next to the headline. `AccuracyHarnessSyntheticTests` deliberately tests
+this with a land whose `rung` is mislabelled `"normal"`, specifically to
+prove the exclusion is enforced by the flag and not by the label.
+
+**Margin distribution:** rank-1 distance vs. the best DIFFERENT
+`OracleId`'s distance, for every slot that returned ≥2 candidates
+(`MaxCandidates` defaults to 3). `DroppedFrame` slots have no margin —
+`Identify` was never called for them.
+
+## Quad → slot mapping: row-BANDED, not a strict two-key sort
+
+**Corrected mid-review against live evidence from a real captured frame,
+before this package shipped.** The first implementation sorted quad
+centroids by `OrderBy(Y).ThenBy(X)` — ascending Y, then ascending X. That
+is wrong: hand-placed cards in one physical row never share exactly one Y
+value (placement wobble, slight camera tilt), and a strict two-key sort
+interleaves rows the moment one row's Y range gets close to its
+neighbour's.
+
+Confirmed on a real 3×3 frame's own detected centroids — the true top row
+was `(593,92)`, `(839,99)`, `(1109,96)`, a 7px Y spread — which the naive
+sort orders as `(593,92)`, `(1109,96)`, `(839,99)`: **slots 2 and 3
+swapped**, on a frame where detection and identification both worked. A
+synthetic grid with perfectly-aligned rows cannot catch this; it only
+shows up when same-row members differ slightly in Y, which real frames
+always do. `SlotMapperTests.SortRowMajor_RealCapturedTopRowWithYJitter_StillOrdersByXAscending`
+pins these exact coordinates as a permanent regression test, and a
+temporary chaos revert to the naive sort was confirmed to reproduce the
+swap exactly (then reverted).
+
+**The fix — `SlotMapper.SortRowMajor` — bands rows before ordering
+within them:**
+1. Compute each quad's centroid and a per-quad "height" (average of its
+   two side-edge lengths).
+2. Sort by centroid Y ascending.
+3. Walk the sorted list, greedily grouping into bands: a quad joins the
+   current band when its Y is within `tolerance` of that band's running
+   average Y; otherwise it starts a new band. Because the input is
+   already Y-sorted, this is a single linear pass.
+4. Concatenate the bands (already top-to-bottom by construction) and sort
+   each band's own members by centroid X ascending.
+
+`tolerance` is **half the MEDIAN quad height of the frame's own detected
+quads** — not a fixed pixel constant, because card pixel size scales with
+camera height (~216×303px at 15in, ~165×235px at 20in per CLAUDE.md's
+`px/inch = 1360/height_inches`; a fixed tolerance would be wrong at one
+height or the other). Real row spacing is about one full card height, so
+half a card height safely bands same-row jitter while staying clear of
+the next row.
+
+**Composes with the count-mismatch rule below without special-casing:** a
+SHORT row (e.g. an 8-of-9 frame missing one card) still bands and orders
+correctly on its own — `SortRowMajor` makes no assumption about row size,
+so a short row never shifts another row's members into the wrong band.
+`SlotMapperTests.SortRowMajor_ShortRowMissingOneMember_DoesNotShiftOtherRows`
+pins this directly.
+
+## Count mismatch: never paired by position
+
+If `ICardDetector.Detect(frame, maxCards: frame.Layout)` returns a count
+different from `frame.Layout`, `SlotMapper.TryMapToSlots` returns `false`
+and no mapping at all — there is no code path that zips quads to slots by
+index when the counts disagree. Every slot in that frame is then reported
+as `DroppedFrame` by `AccuracyFrameRunner`, and `ICardIdentifier.Identify`
+is never called for any of them (pinned by a scripted identifier that
+throws if called with zero programmed responses left).
+
+Because `Detect`'s own contract is "at most `maxCards`", and the runner
+always asks for exactly `frame.Layout`, the detected count can never
+exceed the layout through this call — the only reachable mismatch is
+UNDER-detection, matching B5a's own real-capture evidence (a sleeved card
+went undetected; nothing false-positived an extra card into an
+already-full count). `SlotMapper.TryMapToSlots` still refuses an
+over-count defensively as a general property of its own contract.
+
+**This is the single highest-value test in the package**
+(orchestration-plan.md H3 note), and it is run twice: once as pure
+`SlotMapper`/`AccuracyFrameRunner` logic against stub quads (no image),
+and once end-to-end through the real `ContourCardDetector` →
+`PerspectiveRectifier` → `HashCardIdentifier` on a synthetic 3-card frame
+whose ground truth claims a 4th, absent card
+(`AccuracyHarnessSyntheticTests.Run_LayoutClaimsOneMoreCardThanIsPhysicallyPresent_DropsEveryHouseSlot_NoMisalignment`) —
+asserting not just that every slot drops, but that none of the three
+genuinely-present, genuinely-identifiable cards leak through as a
+Correct/Wrong classification under the wrong slot.
+
+## Coverage and partial-corpus labelling
+
+H3 delivers the fixture corpus in batches. The harness runs on whatever
+subset of `test-images/ground-truth.csv`'s frames has a file on disk
+(`AccuracyCorpusLoader.SplitByPresence`) and every report — console, test
+output, and (when this section's placeholder is filled in) this document —
+opens with a coverage line naming exactly how many frames were found, and
+which heights/rungs/mats they cover, so a partial run is never
+presentable as the full result. Ground-truth rows naming a fixture not
+yet on disk are skipped, not counted as failures.
+
+## Thresholds: calibrated, but never written by this package
+
+`ThresholdsCalibration.Suggest` computes a candidate `goodDistance`
+(largest own-distance among headline `Correct` slots) and `okDistance`
+(one less than the smallest rank-1 distance among headline `Wrong`
+slots, falling back to `AccuracyHarnessOptions.OkDistance`'s own
+documented prior — CardSpotter's upstream `myOkMatchScore` default, 270 —
+when no wrong slot was observed). `ThresholdsCalibration.Write` merges
+those into `data/index/thresholds.json` without disturbing B2's existing
+fields. **Neither is called anywhere in this package against synthetic
+data** — those two values must be calibrated from the REAL H3 corpus, and
+writing them from procedural test cards would plant a fabricated
+threshold that reads as a real measurement. `data/index/thresholds.json`
+is unmodified by this package.
+
+## Harness self-test (synthetic, in-memory index — NOT an accuracy result)
+
+`AccuracyHarnessSyntheticTests` drives the full real pipeline
+(`ContourCardDetector` → `PerspectiveRectifier` → `HashCardIdentifier`)
+against `MultiCardFrameGenerator`-composited frames of procedural
+"card-like" images (never a real Scryfall render or camera photo) and a
+9-entry in-memory index. Full report from the 9-card-grid test (one
+entry deliberately marked a basic land):
+
+```
+=== HARNESS SELF-TEST (synthetic, in-memory index) -- NOT a LoreFetch accuracy result ===
+Full corpus -- 1 of 1 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Options: OkDistance=270, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=8 (100.0%)  wrong@1=0 (0.0%)  no-match=0 (0.0%) [unresolved=0, dropped-frame=0]  total=8
+
+Lands excluded from the headline: 1
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. Dropped)  Total  Correct%
+    15in normal          9      0        0        0         0      9    100.0%
+
+Margin distribution (rank-1 vs. best different OracleId), n=9: min=27, mean=93.0, median=105, max=139.
+
+Gate: PASS -- wrong@1 = 0 (headline: non-land, normal-rung slots), within the bound of 0 at OkDistance=270.
+```
+
+## Interaction with the real-corpus detection investigation above
+
+The retrieval-mode/mat-contrast investigation earlier in this document
+found that on real 3×3 frames, the shipped `RETR_EXTERNAL` default
+detects only 1–2 of 9 cards (nesting), while `RETR_LIST` recovers 8–9 of
+9 at 15in but only ~3 of 9 at 20in — and the shipped default has not been
+changed pending a user ruling. **When B6 eventually runs against the real
+H3 corpus, a low correct@1 will very likely reflect that unresolved
+detection question, not an identification failure** — most slots on an
+under-detected frame become `DroppedFrame`, not `Wrong`, which is exactly
+why this harness reports the two separately rather than folding detection
+failures into the identification numbers.
+
+## Results — PLACEHOLDER, pending the real H3 corpus
+
+**Not yet run against real fixtures.** `test-images/ground-truth.csv` and
+`test-images/fixtures/` do not exist in this worktree as of this writing
+(`AccuracyHarnessRealCaptureTests` skips with that exact reason). When H3
+delivers a batch, run `lab accuracy` (or let
+`AccuracyHarnessRealCaptureTests` run un-skipped) and replace this
+section with the real coverage line, the headline bucket counts, the full
+breakdown table, the margin distribution, and the gate result — labelled
+with the coverage they actually had, per the partial-corpus rule above.
