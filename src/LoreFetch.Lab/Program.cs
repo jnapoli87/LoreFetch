@@ -25,6 +25,7 @@ return await (command switch
     "synth" => SynthCommand.RunAsync(rest),
     "round-trip-gate" => RoundTripGateCommand.RunAsync(rest),
     "query-hash-witness" => QueryHashWitnessCommand.RunAsync(rest),
+    "crop-scale" => CropScaleCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -104,5 +105,10 @@ static void PrintUsage()
                                    Package B2: writes a fixed sample of
                                    query-side hashes for later
                                    cross-architecture comparison.
+          crop-scale --cache <dir> [--index <path>] [--sample N] [--seed N]
+                                   Package B5c: sweeps a synthetic crop-
+                                   scale error over sampled non-land
+                                   renders and reports the rank-1 rate and
+                                   distance/margin distributions per level.
         """);
 }
