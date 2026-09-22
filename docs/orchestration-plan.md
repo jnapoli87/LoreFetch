@@ -51,6 +51,8 @@ A proposal raised after Stream 0's contract work: identification already produce
 
 **Executed** at `0bf9d76` (Sonnet implementer, main checkout), **pulled ahead of A's merge**, because the user's new real 3×3 corpora (`test-images/a_corpus`, `b_corpus`, `d_corpus`) needed it for UI validation. `QuadOrdering.ReadingOrder` in `Core/Scanning` is applied in `ScanPipeline` after area selection and before tiles are built. `FrameProcessed`/`DetectionSnapshot` keep the detector's area order. The optional `CohortTile.Quad` was **not** taken. Integration 143 → **155 passed / 8 skipped** (orchestrator re-ran it). All 5 chaos cases fail correctly; cases 4 (mean vs median) and 5 (order before selection) needed new tests, which are now committed. **No overlap with B's "grid inference":** that is `SlotMapper` in the B6 accuracy harness (Lab), which maps detections to ground-truth slots and does not change detector output order. **Still to do:** merge `main` into `stream/b` and `stream/d`. Leave that to their own sessions; the change touches no file in their scopes.
 
+**Pinned against real data, 2026-09-22 (Windows PC), `37734b0`.** B's handoff said the reading-order change should be a lift of `SlotMapper.TryInferGrid`. It had already been written independently, with the same half-median-height rule, so no lift was needed. Two real-data cases pinned only in B's `SlotMapperTests` are now pinned against `ReadingOrder` itself: the captured row (593,92)/(839,99)/(1109,96), and 8-of-9 captures with the missing card in the middle row and in the first row. The existing 7-of-9 test never left the middle row short. Integration **155 → 158 passed / 8 skipped**. Three chaos cases fail correctly: a naive `OrderBy(Y).ThenBy(X)`, a row threshold of 0, and fixed chunks of 3 per row. **The new Integration baseline is 158/8**; a handoff quoting 143/8 predates the reading-order change.
+
 **The problem (seen in the user's live A10 run, 9-card layout):** the cohort grid does not match the physical 3×3 grid. `ScanPipeline` builds tiles in detector order, and `ICardDetector` returns quads **by descending area**. That is correct for choosing the top N, but meaningless as an order: with nine near-equal cards it is effectively arbitrary. The user's verdict: "a terrible experience without fixing this". The user also noted that **the nine cards will sit about 10 px apart in the frame**, a much tighter grid than the stub's widely spaced layout.
 
 **Why the fix belongs in the pipeline, not the UI:** `CohortTile` does not carry its quad, so the App cannot re-sort tiles. Area order must stay, because it selects which N quads survive when more are detected. **The order has to be imposed after selection and before tiles are built**, in `ScanPipeline`, which is frozen `Core/Scanning`. So this is a contract change: **land it on `main`, then merge `main` into every stream branch**, following the `ArtworkId` precedent above.
@@ -468,9 +470,34 @@ Rules that follow from the split:
 
 Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 errors; StreamA **132/132**; Integration **155 passed / 8 skipped**; StreamC **39/39** (`Category!=Hardware`); StreamB 1 and StreamD 1 (placeholders until those streams merge).
 
-**Next, in order:**
-1. **P2 push** of `main` (user approval). Until it lands, any session merging "main" into a stream is merging a `main` nobody else has. That is exactly how the two `main`s diverged today.
-2. **Merge `main` into `stream/b` and `stream/d`** (reading order + stream A). This belongs to their sessions or the new orchestrator. Nothing in their scopes changes.
+**Update, later the same evening. The table above is superseded where it disagrees.**
+
+| Item | Where things stand |
+|---|---|
+| **P2** (stream A) | **Pushed** by the user. `main` `1b24dfa` and `stream/a` `9c5c195`. CI #24 is green. |
+| **P5** (stream D) | D merged at `0ee2d29`, with no conflicts. **Pushed** as `main` `0998420`, with the user's approval. Suites before the push: StreamD **71/71**, and every other suite unchanged. |
+| **Stream C** | Already in `main` (`c26ae12`). Nothing further on `origin/stream/c`. |
+| **`stream/b`** | Fast-forwarded to `origin/stream/b` `8e4e7aa`, then `main` merged in at `6503632`, with no conflicts. **Pushed.** It now carries A, C, D and the reading-order change. |
+
+Suites in the `stream-b` worktree after that merge: build 0 warnings / 0 errors; StreamB 275 passed / 5 skipped; StreamA 132; Integration 155/8; StreamD 71; StreamC 39. The 5 skips are artifact-gated, because that worktree has no `test-images/`. **Only B remains to merge.** After B: cleanup (the two A bugs, `test-images/README.md` for the a/b/d corpora), then I1–I6 and E1–E3.
+
+**Ruling (user, 2026-09-22): keep every stream worktree until the end of the hackathon.**
+
+| Worktree | Why it stays |
+|---|---|
+| `stream-b` | Active. |
+| `stream-a` | Where the two known A bugs get fixed while B runs. |
+| `stream-c`, `stream-d` | Hotfixes that E1 or the I steps turn up. |
+| `ui-validation` | Stays until I2 gives `main` a real Real mode, then it can go. |
+| `agent-arch-review-plan-f0e4ed` | A detached leftover, safe to remove. |
+
+Two rules make keeping them safe:
+1. **Merge `main` into a stream branch before starting new work in it.** Known bug 2 was exactly a stale `stream/a` tested without a change already on `main`.
+2. **Integration work (I1–I6) happens in the main checkout, never in a worktree.** It edits `Tests/Integration`, `AppComposition` and frozen project files, which `guard-write.sh` refuses inside any linked worktree. Worktrees are for stream-scoped fixes only.
+
+**Next, in order (revised):**
+1. ~~P2 push~~ done.
+2. ~~Merge `main` into `stream/b` and `stream/d`~~ `stream/b` is done. `stream/d` is merged into `main` and finished.
 3. **Fix the open known A bugs** (A10's "Known bugs, deferred"): bug 1 (type-ahead focus) and bug 3 (overlay vertical offset, confirmed live by the user). Bug 2 is **resolved**: the user confirmed tile order is correct from `main`.
 4. **B:** B6 → B8 → merge → P3. **Follow "Handoff — the shortest path to closing B, for the Windows PC"** in the B section (the Mac session's handoff, merged in from `origin/main` at `f0a9e2a`). **Correction to it:** it says `test-images/b_corpus/` and `d_corpus/` are Mac-only, but **both are present on the Windows PC** in `C:\Repos\LoreFetch\test-images\` (6 and 2 frames, used by this session's probes), along with `a_corpus/`. Only `ground-truth.csv` still has to come from the Mac. **D:** merge → P5. Then **I1–I6**. I2 is where `LOREFETCH_DETECTOR=real`-style wiring becomes the real `Real` mode, and I3 must set `CameraRotationDegrees = 0` (geometry re-ruling).
 
@@ -1158,7 +1185,7 @@ Global overrides for every B brief:
   4. **Detector fix** — find the true outer edge on a dark mat. Addresses the cause rather than the symptom, but is a materially harder vision problem and was not attempted.
 
   **Contingent cleanup:** `CropScaleTransform` (93 lines) sits in `Core/Imaging`, so it ships in the product assembly although it is diagnostic-only. That placement is correct *if* option 2 or 3 is adopted, since the sweep would live in `HashCardIdentifier` and use it. **If the sweep is rejected, move it to `Lab`.**
-- [ ] **B6** Accuracy harness, gated on H3 and B4d:
+- [x] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
   - the margin distribution
   - lands excluded by the `IsBasicLand` flag, with the excluded count printed
@@ -1167,6 +1194,14 @@ Global overrides for every B brief:
   - it writes `goodDistance` and `okDistance` into `thresholds.json` and the table into `docs/accuracy.md`
 
   **If correct@1 on normal cards is below 90% at the chosen height, stop and ask** (stream-b Fallbacks). Record the results here.
+
+  *Done 2026-09-22 on the **Windows PC (win-x64)**, `stream/b` `f6e827f`, `d379df3`.* **Index rebuilt with the digital-only filter** from a fresh bulk snapshot (`unique-artwork-20260922210231`): cascade 54,774 raw → … → 48,751 after set types → **47,418 arts / 32,743 oracle ids / 1,852 basic lands** after the digital-only step, with 0 `A-` names left. The prediction was ~47,417 / ~32,743. **10,175,665 bytes, SHA-256 `b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402`.** The old index is kept outside git as `C:\LoreFetchData\index-out\cards.48750.lfidx`. **`lab accuracy`: correct@1 38/54 = 70.4%, wrong@1 0, no-match 16** (11 unresolved, 5 no-detection, 0 dropped frames). The 90% gate is waived by the user's ruling above. Correct rank-1 distances run 82–208, and every raw mismatch sits at ≥272 (272, 288, 296, 299, 314, 314), so the 63-point window survived the rebuild unchanged. **`thresholds.json`: `goodDistance` 208** (the largest correct distance observed) **and `okDistance` 240** (the midpoint of the empty 209–271 window). The low-confidence band (209, 240] is therefore exactly the region the corpus has no evidence for. **B2 re-run on win-x64 against the new index:** 200/200 rank-1 `ArtworkId`, **`referenceFloor` 61**, margin min 130. It is `provisional: false`, measured on the ship architecture rather than promoted from the Mac's 55. The Mac figure came from the old index, so the two are not an architecture comparison. **Found and fixed on the way:**
+  (1) The cache-gated B2 tests default to `~/LoreFetchData`, so on this PC they had been **silently skipping**. Set `LOREFETCH_SCRYFALL_CACHE=C:\LoreFetchData\scryfall-cache`.
+  (2) The gate pins the index SHA, and it now pins the new one.
+  (3) `lab round-trip-gate` rewrote `thresholds.json` without `goodDistance`/`okDistance`. It now preserves them.
+  (4) The harness hardcoded `OkDistance` 270. It now reads it from `thresholds.json`.
+  StreamB **290 total, 288 passed / 2 skipped** (the witness, and the perf soft-skip). Integration on `stream/b` is 155/8, because that branch predates `37734b0`. Every new test was chaos-tested.
+  **B8 item 6 closed as well:** `IOracleCatalog.All` over the real committed index has exactly 32,743 entries, one per oracle id, with truncation and duplication each chaos-failing. A prefix search finds "Freya" and "Sol Ring". The A session had already root-caused its bug independently (`PlacementTarget`, fixed at `5d1bbb4`).
 - [ ] **B8** 🧭 Done-when review against stream-b §Done when. Then README §B. **Merge gate, then P3.**
 
 ### Stream C — Capture · worktree `stream-c` · scope `src/LoreFetch.Capture/**`, `Tests/StreamC/**`, README §C
@@ -1276,10 +1311,10 @@ Every checkpoint means: show the summary, get explicit approval, push, and see b
 | Checkpoint | When |
 |---|---|
 | P1 | End of Stream 0 |
-| P2 | Merge of stream A |
+| P2 | Merge of stream A — **done 2026-09-22** (`1b24dfa`, CI #24 green) |
 | P3 | Merge of stream B |
 | P4 | Merge of stream C |
-| P5 | Merge of stream D |
+| P5 | Merge of stream D — **done 2026-09-22** (`0998420`) |
 | P6 | Integration done |
 | P7 | Release |
 
