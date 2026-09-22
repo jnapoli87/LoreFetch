@@ -418,6 +418,23 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the A10 session, 2026-09-22, Windows PC
+
+**Newest handoff.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
+
+**State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**; the only open item is the user confirming the Excluded and ManuallySet states by hand (see A10's note). Everything else under A10 is measured and recorded.
+
+**Next, in order:**
+1. **Ask the user about the two A10 states, then tick A10.**
+2. **Merge gate:** `git merge --no-ff stream/a` into `main`, then the full suite on `main`. The expected baseline is StreamA 119/119 and Integration 143 passed / 8 skipped. Merging stream/a after main was merged into it should be conflict-free.
+3. **P2:** show the summary, and push only on approval. **Watch the macOS CI leg.** The two screenshot tests lost their `WindowsOnly` trait at A10-prep; if they fail on macOS, re-trait them with the real reason.
+4. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
+
+**Learned this session.**
+1. **A memory soak with zero GCs proves nothing.** On a quiet app, "rising memory" is just uncollected garbage. Force the question: `DOTNET_GCgen0size` shows gen0 behaviour, and `DOTNET_GCHeapHardLimit` forces gen2. Size the cap at about 2× the idle floor; at 1.5× it OOMs on a legitimate 8 MiB allocation.
+2. **An exclusion rationale ("fails on macOS ARM64") was never tested on the other platform.** The first Windows run showed the tests failed everywhere. When a test is traited out, verify the stated reason on the platform where it still runs.
+3. **A green unit suite can hide an app that can't be used.** Fakes mode left every tile Unresolved and the layout fixed at 1. Every view-model test passed because the tests set their own thresholds. Only launching the real exe exposed it.
+
 ### Handoff — end of the Mac A/D session, 2026-09-22
 
 **Newest handoff; the ones below still apply.** Covers the Mac's lanes only (A, C3, D). The B/PC handoffs below remain the truth for their lanes. Checkboxes and their per-item notes are authoritative.
@@ -670,7 +687,18 @@ Global overrides for every A brief:
 
   The fixes: `LayoutFollowingCardDetector` and `DemoCardIdentifier`. The demo identifier cycles confident → low-confidence → Unresolved per `Identify` call, with distances derived from the loaded good/ok values; the cycle runs across captures, so the 1-card layout also walks all three states. A `Diagnostics:` log line every 10 s reports preview fps (frames rendered), pipeline fps, managed memory, working set and GC counts. The 9 `xUnit1051` warnings are gone, and there is a new `A10-cohort-9.png` screenshot test. StreamA 106 + 2 failing → **119/119**, Integration 143/8, 0 warnings. All 6 briefed chaos cases fail correctly. **Independent chaos:** putting the low-confidence distance on the `good` boundary fails 2 tests.
   **Ruling (orchestrator, 2026-09-22): demo thresholds live in `src/LoreFetch.App/Fakes/DemoThresholds.cs` (good 100, ok 200).** The frozen `App.csproj` ships only `data/index/**`, stream B's scope, so a demo JSON file cannot ship from stream A. This is the one sanctioned App file with distance literals, it is used by Fakes mode only, and **I4 exempts it**. Real mode (I2) loads `DataFiles.ThresholdsPath`.
-  Adjacent finds for E2 polish, not blocking: the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
+  **A10 run, 2026-09-22 on the Windows PC.** Fakes mode, `LOREFETCH_FRAMES_DIR` = the 12 ad-hoc captures.
+  - **The user's hands-on run:** the 1/3/9 layouts and the Space/Enter/Escape loop. The user's verdict was "looks great".
+  - **fps:** preview 4.0 and pipeline 4.0. That is the folder source's 250 ms frame interval, not a limit in the app; real camera throughput waits for I3/E1.
+  - **Memory, four soaks, raw data in the session scratchpad only.**
+    1. **Plain soak:** managed memory 53 → 108 MB, but **zero GCs in 5 minutes**. Uncollected garbage, so inconclusive.
+    2. **`DOTNET_GCgen0size=0x200000`:** gen0 GCs ran and the small-object heap stayed flat. The **LOH grew 45 → 95 MB in 8 MiB steps**, which is `ArrayPool<byte>.Shared` rounding a 1920×1080×3 frame up to 2²³ bytes. The fake folder source's pooled buffer occasionally misses the pool, and a gen2 GC had yet to run.
+    3. **`DOTNET_GCHeapHardLimit` = 80 MB:** gen2 GCs reclaimed memory (73 → 60 MB), so the buffers are garbage, not retained. An 8 MiB decode then OOM'd because the cap was too tight against a 53 MB idle floor. It surfaced cleanly as `FrameSourceException` through `SourceFailed`, with no crash, which incidentally confirms A9.
+    4. **112 MB cap, 5.7 minutes, PASS:** no OOM and exit 0. Managed memory is a sawtooth from 69 to 78 MB that returns to 69 after every GC, and working set plateaus at about 233 MB from minute 2.5. **Memory is flat.**
+  - **Still open before ticking A10:** explicit user confirmation that Excluded (left-click) and ManuallySet (right-click → *Set card manually…*) were reached by hand. Both are covered by A6's headless tests.
+  - **README §A** and the stream A internals are done on `stream/a`: `0b445ec` + `e9f4a59` (low-confidence wording fixed on review).
+  - `main` was merged into `stream/a` at `700347e` with no conflicts.
+  Adjacent finds for E2 polish, not blocking: **the idle heap holds about 45 MB of LOH at startup** (suspects: the 33k `StubOracleCatalog`, demo setup), plus the two below. the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
 
 ### Stream B — Identification (critical path) · worktree `stream-b` · scope `src/LoreFetch.Core/Identification/**`, `src/LoreFetch.Core/Imaging/**`, `src/LoreFetch.Lab/**`, `Tests/StreamB/**`, `data/index/**`, `docs/accuracy.md`, README §B
 Global overrides for every B brief:
