@@ -19,22 +19,38 @@
 #
 # Usage:
 #   scripts/capture-fixtures.sh --height <in> --layout <n> --mat <mat> \
-#     --rung <rung> --card <name> [--card <name> ...] [--force] [--dry-run]
+#     --rung <rung> --card <name> [--card <name> ...] [--catalog <path>] \
+#     [--force] [--dry-run]
+#   scripts/capture-fixtures.sh --verify <ground-truth.csv> [--catalog <path>]
 #
-# Required:
+# Required (capture mode):
 #   --height <in>   one of: 8 10 12 14 20
 #   --layout <n>    one of: 1 3 9 — also the number of --card values required
 #   --mat <mat>     one of: light mid dark
 #   --rung <rung>   one of: land normal stretch
 #   --card <name>   the oracle name for one slot. Repeat in slot order —
 #                   the FIRST --card is slot 1, the second is slot 2, etc.
-#                   Must appear exactly <layout> times.
+#                   Must appear exactly <layout> times. Written to
+#                   ground-truth.csv verbatim and RFC-4180-quoted — commas,
+#                   quotes and accents are all fine (only a literal
+#                   newline/CR is refused, since it cannot be represented).
+#                   Checked against the Scryfall oracle catalog when one is
+#                   available (see --catalog); case-insensitive, but the
+#                   CSV always gets the catalog's canonical spelling.
 #
 # Options:
-#   --force         overwrite an existing frame for this exact cell, and
-#                   replace (rather than duplicate) its ground-truth rows
-#   --dry-run       validate everything and print what would be filed,
-#                   touching neither the camera nor the filesystem
+#   --catalog <path>  the oracle-name manifest to validate --card values
+#                      (or --verify's csv) against. Default:
+#                      scryfall-bulk/filtered-artworks.jsonl in the repo.
+#                      Missing manifest, or no `jq` to parse it, WARNS and
+#                      proceeds unvalidated rather than refusing to shoot.
+#   --verify <csv>     re-check an existing ground-truth.csv's oracle_name
+#                      column against the catalog, report unknown names by
+#                      line number, and exit — captures nothing.
+#   --force            overwrite an existing frame for this exact cell, and
+#                       replace (rather than duplicate) its ground-truth rows
+#   --dry-run           validate everything and print what would be filed,
+#                       touching neither the camera nor the filesystem
 #
 # Examples:
 #   scripts/capture-fixtures.sh --height 10 --layout 1 --mat light \
@@ -44,8 +60,10 @@
 #     --rung normal --card "Lightning Bolt" --card Counterspell \
 #     --card "Birds of Paradise" --dry-run
 #
+#   scripts/capture-fixtures.sh --verify test-images/ground-truth.csv
+#
 # This runs the real capture only on the Windows PC (the C920 is attached
-# there); --help and --dry-run work anywhere.
+# there); --help, --dry-run and --verify work anywhere.
 #
 # Height/layout are cross-checked against each other, not just against
 # their own allowed sets: the C920's frame at height h covers only
@@ -93,8 +111,27 @@ FILTER="FullyQualifiedName~HardwareCameraTests.Negotiates1080pMjpgAndDeliversLiv
 
 HEIGHT=""; LAYOUT=""; MAT=""; RUNG=""; FORCE=0; DRY_RUN=0
 CARDS=""
+VERIFY_CSV=""
+CATALOG_FILE="$REPO/scryfall-bulk/filtered-artworks.jsonl"
+
+# Isolated single-character NL/CR, built via command substitution (which
+# strips only a TRAILING newline, never an embedded one) and trimmed on
+# both sides. Used both to reject a literal newline/CR in a --card value
+# (below) and, later, by csv_quote_field's RFC 4180 quoting.
+NL=$(printf 'x\nx'); NL=${NL#x}; NL=${NL%x}
+CR=$(printf 'x\rx'); CR=${CR#x}; CR=${CR%x}
 
 add_card() {
+  # A literal newline/CR must be rejected HERE, before it ever joins
+  # CARDS — CARDS itself uses a bare newline as the slot separator (see
+  # the split below), so a card name containing one would silently split
+  # into two slots. It would also make one ground-truth row span more
+  # than one physical line, which breaks --force's line-based grep
+  # dedup. Comma and double-quote are fine now — see csv_quote_field.
+  case "$1" in
+    *"$NL"*|*"$CR"*)
+      die "--card '$1' contains a literal newline or carriage return, which this script cannot represent: ground-truth.csv is line-oriented (--force's row replacement greps by whole line) and --card values are joined internally on newline" ;;
+  esac
   if [ -z "$CARDS" ]; then CARDS=$1; else CARDS="$CARDS
 $1"; fi
 }
@@ -147,6 +184,265 @@ compute_fit() {  # $1 = height (inches), $2 = layout
 }
 
 # --------------------------------------------------------------------------
+# RFC 4180 field quoting — mirrors src/LoreFetch.Core/Collection/
+# NativeCsvCodec.cs's QuoteField exactly, so this script's ground-truth.csv
+# and the native collection format agree on one quoting rule rather than
+# growing a second CSV dialect: quote a field that contains a comma, a
+# double quote, or a CR/LF, doubling any embedded quote; never trim, never
+# sanitise the content itself (an oracle name is written verbatim). Every
+# field is run through this, not just oracle_name — cheap, and it means no
+# field is ever silently unquoted because "that column can't have a comma".
+# --------------------------------------------------------------------------
+csv_quote_field() {
+  field=$1
+  case "$field" in
+    *,*|*'"'*|*"$NL"*|*"$CR"*)
+      printf '"%s"' "$(printf '%s' "$field" | sed 's/"/""/g')"
+      ;;
+    *)
+      printf '%s' "$field"
+      ;;
+  esac
+}
+
+# --------------------------------------------------------------------------
+# Oracle-name validation against the Scryfall manifest.
+#
+# ground-truth.csv's oracle_name is B6's answer key: a typo means the hash
+# identified the card correctly but B6 scores it wrong@1 anyway, and a
+# typo'd row is a LOW-distance wrong answer (the match itself was right),
+# which is exactly what B6 uses to calibrate okDistance — so an unnoticed
+# typo tightens the shipped threshold. Validating here, at capture time,
+# catches it before it ever reaches B6.
+#
+# The manifest (scryfall-bulk/filtered-artworks.jsonl, field OracleName) is
+# gitignored and machine-local, so this degrades on purpose: no manifest,
+# or no jq to parse it, means a clear warning and an UNVALIDATED capture —
+# never a refusal to shoot. --catalog overrides the path.
+# --------------------------------------------------------------------------
+CATALOG_AVAILABLE=0
+CATALOG_NAMES_TMP=""
+
+load_catalog() {
+  if [ ! -f "$CATALOG_FILE" ]; then
+    note "WARNING: oracle catalog not found at $CATALOG_FILE — card names will NOT be validated against Scryfall; proceeding unvalidated"
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    note "WARNING: jq not found on PATH — cannot parse the oracle catalog at $CATALOG_FILE; card names will NOT be validated against Scryfall; proceeding unvalidated"
+    return 0
+  fi
+
+  CATALOG_NAMES_TMP=$(mktemp "${TMPDIR:-/tmp}/capture-fixtures-catalog.XXXXXX")
+  # jq decodes the file's \uXXXX escapes (diacritics, curly quotes) into
+  # real UTF-8 on the way out — a plain grep/sed extraction would leave
+  # "Andúril" instead of "Andúril" and every accented name would
+  # silently fail to match.
+  if ! jq -r '.OracleName' "$CATALOG_FILE" > "$CATALOG_NAMES_TMP" 2>/dev/null; then
+    note "WARNING: failed to parse $CATALOG_FILE as JSONL — card names will NOT be validated against Scryfall; proceeding unvalidated"
+    rm -f "$CATALOG_NAMES_TMP"
+    CATALOG_NAMES_TMP=""
+    return 0
+  fi
+
+  CATALOG_AVAILABLE=1
+}
+
+# The awk program shared by resolve_cards and verify_ground_truth's name
+# check: one pass over the catalog (first file) builds an exact-match set
+# and a lowercase→canonical map, so the catalog is loaded ONCE per run
+# regardless of how many cards or rows follow, then a second pass resolves
+# each query line against it. \037 (unit separator) joins multiple
+# candidates on one output line — vanishingly unlikely to appear in a card
+# name, unlike comma or pipe.
+CATALOG_MATCH_AWK='
+  BEGIN { US = sprintf("%c", 31) }
+  FNR == NR {
+    name = $0
+    if (length(name) == 0) { next }
+    catalog[name] = 1
+    lc = tolower(name)
+    if (!(lc in lcmap)) { lcmap[lc] = name; lccount[lc] = 1 }
+    else if (lcmap[lc] != name) { lcmap[lc] = lcmap[lc] US name; lccount[lc]++ }
+    next
+  }
+  {
+    q = $0
+    if (q in catalog) { print "OK\t" q; next }
+    lc = tolower(q)
+    if (lc in lcmap) {
+      if (lccount[lc] == 1) { print "OK\t" lcmap[lc]; next }
+      else { print "AMBIG\t" lcmap[lc]; next }
+    }
+    # Close-match suggestions: cheap, not Levenshtein — every catalog name
+    # that contains one of the query'"'"'s own words (>=3 chars) as a
+    # case-insensitive substring, ranked by how many words it contains.
+    nwords = split(lc, rawwords, /[^a-z0-9]+/)
+    delete qw; nu = 0
+    for (k = 1; k <= nwords; k++) { if (length(rawwords[k]) >= 3) { nu++; qw[nu] = rawwords[k] } }
+    if (nu == 0) { for (k = 1; k <= nwords; k++) { nu++; qw[nu] = rawwords[k] } }
+    delete cscore; maxscore = 0
+    for (c in catalog) {
+      lcc = tolower(c); score = 0
+      for (k = 1; k <= nu; k++) { if (index(lcc, qw[k]) > 0) { score++ } }
+      if (score > 0) { cscore[c] = score; if (score > maxscore) { maxscore = score } }
+    }
+    out = ""; count = 0
+    for (s = maxscore; s >= 1 && count < 12; s--) {
+      for (c in cscore) { if (cscore[c] == s && count < 12) { out = (out == "" ? c : out US c); count++ } }
+    }
+    print "MISS\t" out
+  }
+'
+
+# Resolves each of "$@" (raw --card values, in slot order) against the
+# catalog and prints the resolved list, one per line, in the same order —
+# it never edits "$@" itself (a shell function cannot: bash/dash give every
+# function call its own positional-parameter scope, restored on return), so
+# the caller re-splits stdout the same way CARDS itself is split. Any
+# unknown/ambiguous name dies with every offending slot and its close
+# matches — inside this command substitution, "set -eu" still propagates
+# die's exit 1 out to the whole script (die writes to stderr, which is not
+# captured, so the message still reaches the terminal).
+resolve_cards() {
+  if [ "$CATALOG_AVAILABLE" -ne 1 ]; then
+    printf '%s\n' "$@"  # unvalidated: pass through exactly as typed
+    return 0
+  fi
+
+  queries_tmp=$(mktemp "${TMPDIR:-/tmp}/capture-fixtures-queries.XXXXXX")
+  for c in "$@"; do printf '%s\n' "$c" >> "$queries_tmp"; done
+
+  results_tmp=$(mktemp "${TMPDIR:-/tmp}/capture-fixtures-resolved.XXXXXX")
+  awk "$CATALOG_MATCH_AWK" "$CATALOG_NAMES_TMP" "$queries_tmp" > "$results_tmp"
+  rm -f "$queries_tmp"
+
+  resolved=""
+  errors=""
+  err_count=0
+  i=0
+  for c in "$@"; do
+    i=$((i + 1))
+    line=$(sed -n "${i}p" "$results_tmp")
+    status=$(printf '%s' "$line" | cut -f1)
+    payload=$(printf '%s' "$line" | cut -f2-)
+    case "$status" in
+      OK)
+        canon=$payload
+        ;;
+      AMBIG)
+        cands=$(printf '%s' "$payload" | tr '\037' ',' | sed 's/,/, /g')
+        errors="$errors
+  slot $i ('$c'): matches the catalog only case-insensitively, and more than one canonical spelling differs only by case — type the exact case. Candidates: $cands"
+        err_count=$((err_count + 1))
+        canon=$c
+        ;;
+      *)
+        if [ -n "$payload" ]; then
+          cands=$(printf '%s' "$payload" | tr '\037' ',' | sed 's/,/, /g')
+        else
+          cands="(no close matches found)"
+        fi
+        errors="$errors
+  slot $i ('$c'): not found in the oracle catalog. Close matches: $cands"
+        err_count=$((err_count + 1))
+        canon=$c
+        ;;
+    esac
+    if [ -z "$resolved" ]; then resolved=$canon; else resolved="$resolved
+$canon"; fi
+  done
+  rm -f "$results_tmp"
+
+  if [ "$err_count" -gt 0 ]; then
+    die "unknown or ambiguous --card name(s) against $CATALOG_FILE:$errors"
+  fi
+
+  printf '%s\n' "$resolved"
+}
+
+# --verify <csv>: re-checks an existing ground-truth.csv's oracle_name
+# column against the catalog and reports unknown names with their line
+# numbers, WITHOUT capturing anything. Parses each row with the same RFC
+# 4180 quoting rule csv_quote_field writes (quoted fields, doubled quotes)
+# rather than a naive comma split, because this script's own quoting can
+# legally put a comma inside a quoted oracle_name. Safe to read line-by-line
+# because a literal newline inside a field can never reach this file — see
+# add_card's rejection.
+verify_ground_truth() {
+  csv=$1
+  [ -f "$csv" ] || die "--verify: file not found: $csv"
+
+  load_catalog
+  if [ "$CATALOG_AVAILABLE" -ne 1 ]; then
+    die "--verify needs the oracle catalog to check names against, but it is unavailable (see the warning above) — nothing to verify"
+  fi
+
+  say "Verifying oracle_name column of $csv against $CATALOG_FILE"
+
+  report_tmp=$(mktemp "${TMPDIR:-/tmp}/capture-fixtures-verify.XXXXXX")
+  awk '
+    function parsecsv(line, fields,    i, field, inq, n, ch, L) {
+      n = 0; field = ""; inq = 0; L = length(line)
+      for (i = 1; i <= L; i++) {
+        ch = substr(line, i, 1)
+        if (inq) {
+          if (ch == "\"") {
+            if (i < L && substr(line, i + 1, 1) == "\"") { field = field "\""; i++ }
+            else { inq = 0 }
+          } else { field = field ch }
+        } else {
+          if (ch == "\"" && field == "") { inq = 1 }
+          else if (ch == ",") { fields[++n] = field; field = "" }
+          else { field = field ch }
+        }
+      }
+      fields[++n] = field
+      return n
+    }
+    FNR == NR {
+      name = $0
+      if (length(name) == 0) { next }
+      catalog[name] = 1
+      lc = tolower(name)
+      if (!(lc in lcmap)) { lcmap[lc] = name }
+      next
+    }
+    FNR == 1 { next }
+    {
+      n = parsecsv($0, f)
+      if (n < 5) { printf "ERR\t%d\t(expected >=5 columns, found %d)\n", FNR, n; next }
+      name = f[5]
+      if (name in catalog) { next }
+      lc = tolower(name)
+      if (lc in lcmap) { printf "CASE\t%d\t%s\t%s\n", FNR, name, lcmap[lc]; next }
+      printf "UNKNOWN\t%d\t%s\n", FNR, name
+    }
+  ' "$CATALOG_NAMES_TMP" "$csv" > "$report_tmp"
+
+  unknown_count=0
+  case_count=0
+  err_count=0
+  while IFS='	' read -r kind lineno a b; do
+    [ -n "$kind" ] || continue
+    case "$kind" in
+      UNKNOWN) unknown_count=$((unknown_count + 1)); note "line $lineno: unknown oracle_name '$a'" ;;
+      CASE)    case_count=$((case_count + 1));       note "line $lineno: '$a' matches the catalog only case-insensitively (canonical: '$b')" ;;
+      ERR)     err_count=$((err_count + 1));          note "line $lineno: could not parse row $a" ;;
+    esac
+  done < "$report_tmp"
+  rm -f "$report_tmp"
+
+  say "Verify summary"
+  note "$unknown_count unknown, $case_count non-canonical case, $err_count unparseable, against $CATALOG_FILE"
+
+  if [ "$unknown_count" -gt 0 ] || [ "$err_count" -gt 0 ]; then
+    exit 1
+  fi
+  exit 0
+}
+
+# --------------------------------------------------------------------------
 # Arguments
 # --------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
@@ -155,14 +451,25 @@ while [ $# -gt 0 ]; do
     --layout) shift; [ $# -gt 0 ] || die "--layout needs a value"; LAYOUT=$1 ;;
     --mat)    shift; [ $# -gt 0 ] || die "--mat needs a value"; MAT=$1 ;;
     --rung)   shift; [ $# -gt 0 ] || die "--rung needs a value"; RUNG=$1 ;;
-    --card)   shift; [ $# -gt 0 ] || die "--card needs a value"; add_card "$1" ;;
+    --card)    shift; [ $# -gt 0 ] || die "--card needs a value"; add_card "$1" ;;
+    --catalog) shift; [ $# -gt 0 ] || die "--catalog needs a value"; CATALOG_FILE=$1 ;;
+    --verify)  shift; [ $# -gt 0 ] || die "--verify needs a value"; VERIFY_CSV=$1 ;;
     --force)   FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '3,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,81p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         die "unknown argument: $1  (try --help)" ;;
   esac
   shift
 done
+
+# --------------------------------------------------------------------------
+# --verify is a separate mode: it never touches the camera or the height/
+# layout/mat/rung/card arguments below, so it dispatches before any of
+# those are required.
+# --------------------------------------------------------------------------
+if [ -n "$VERIFY_CSV" ]; then
+  verify_ground_truth "$VERIFY_CSV"
+fi
 
 # --------------------------------------------------------------------------
 # Validate every label. Fail loudly and name the offending argument —
@@ -214,11 +521,20 @@ CARD_COUNT=$#
 
 [ "$CARD_COUNT" -eq "$LAYOUT" ] || die "layout $LAYOUT needs exactly $LAYOUT --card value(s), one per slot in order — got $CARD_COUNT"
 
-for c in "$@"; do
-  case "$c" in
-    *,*) die "--card '$c' contains a comma, which breaks ground-truth.csv's flat format" ;;
-  esac
-done
+# A comma (or a quote, or non-ASCII) in a name is no longer rejected here —
+# it is legal RFC 4180 content and csv_quote_field below writes it
+# correctly. (A literal newline/CR was already rejected in add_card, before
+# it could ever join CARDS.) Instead, validate the names themselves against
+# the real oracle catalog and rewrite "$@" to its canonical spelling — see
+# load_catalog/resolve_cards above.
+load_catalog
+RESOLVED_CARDS=$(resolve_cards "$@")
+set -f
+IFS='
+'
+set -- $RESOLVED_CARDS
+unset IFS
+set +f
 
 # --------------------------------------------------------------------------
 # Derive the destination path, filename and ground-truth rows. Computed
@@ -247,7 +563,7 @@ ROWS=""
 slot=0
 for c in "$@"; do
   slot=$((slot + 1))
-  row="$CSV_FILE_FIELD,$HEIGHT,$LAYOUT,$slot,$c,$RUNG,$MAT"
+  row="$(csv_quote_field "$CSV_FILE_FIELD"),$(csv_quote_field "$HEIGHT"),$(csv_quote_field "$LAYOUT"),$(csv_quote_field "$slot"),$(csv_quote_field "$c"),$(csv_quote_field "$RUNG"),$(csv_quote_field "$MAT")"
   if [ -z "$ROWS" ]; then ROWS=$row; else ROWS="$ROWS
 $row"; fi
 done
