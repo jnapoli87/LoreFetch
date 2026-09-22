@@ -24,7 +24,8 @@
 #   scripts/capture-fixtures.sh --verify <ground-truth.csv> [--catalog <path>]
 #
 # Required (capture mode):
-#   --height <in>   one of: 8 10 12 14 20
+#   --height <in>   a number of inches, 6..30 (decimals OK, e.g. 9.75 or
+#                    13.5) — see compute_fit below for the real gate
 #   --layout <n>    one of: 1 3 9 — also the number of --card values required
 #   --mat <mat>     one of: light mid dark
 #   --rung <rung>   one of: land normal stretch
@@ -66,9 +67,9 @@
 # there); --help, --dry-run and --verify work anywhere.
 #
 # Height/layout are cross-checked against each other, not just against
-# their own allowed sets: the C920's frame at height h covers only
+# --height's own numeric range: the C920's frame at height h covers only
 # (1920/ppi) x (1080/ppi) inches (ppi = 1360/h), so a 3x3 grid's 7.7"x10.7"
-# footprint does not fit at every height on HEIGHTS. A combination whose
+# footprint does not fit at every height in that range. A combination whose
 # margin is negative is refused outright, and one under 0.5" is filed with
 # a warning — the frame looks fine either way, which is exactly what makes
 # a bad fit a silent-corruption risk rather than an obvious one.
@@ -92,15 +93,34 @@ die()  { printf 'capture-fixtures: %s\n' "$1" >&2; exit 1; }
 say()  { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
 note() { printf '    %s\n' "$1"; }
 
-HEIGHTS="8 10 12 14 20"
 LAYOUTS="1 3 9"
 MATS="light mid dark"
 RUNGS="land normal stretch"
 
-# 9.75" is deliberately absent from HEIGHTS: it is where a 3x3 grid FIRST
-# fits (0.04" of margin — one millimetre), a geometric floor rather than a
-# usable operating height. The project's recorded operating height is
-# moving to 12" (1.83" of margin) — see compute_fit below.
+# --height has no fixed allowlist. compute_fit() below is the real guard —
+# it is strictly better validation than any fixed set of "sensible" heights,
+# because it refuses combinations that physically cannot work (negative
+# margin) and warns under 0.5" of margin, rather than requiring a list that
+# has to grow every time the bench needs a new height. Only a sane NUMERIC
+# range is checked up front (MIN_HEIGHT/MAX_HEIGHT below); everything past
+# that is compute_fit()'s job.
+#
+# 9.75" is the clearest illustration of why the range alone was never the
+# real guard: it is where a 3x3 grid FIRST fits at all (0.04" of margin —
+# one millimetre), a geometric floor rather than a usable operating height.
+# It is now ACCEPTED by the range check, and that's correct — compute_fit()
+# surfaces the WARN and tells the operator the real reason, which is a
+# better outcome than a blanket refusal. The project's recorded operating
+# height is 12" (1.83" of margin) — see compute_fit below.
+
+# Sane numeric bounds for --height, inches. Below ~6" not even the smallest
+# footprint (1 card, 2.5"x3.5" — CLAUDE.md's Geometry table) fits
+# comfortably. Above ~30" a card is under ~113px wide (1360/30 * 2.5 =
+# 113.3) — well past anything useful for hashing or for a human to frame by
+# hand. Anything inside this range is only a candidate; compute_fit() still
+# decides per layout.
+MIN_HEIGHT=6
+MAX_HEIGHT=30
 
 STREAMC_CSPROJ="$REPO/Tests/StreamC/LoreFetch.Tests.StreamC.csproj"
 # Narrow enough to select exactly ONE test: the single frame-saving Hardware
@@ -140,6 +160,21 @@ in_set() {  # $1 = value, $2 = space-separated allowed set
   needle=$1; hay=$2
   for x in $hay; do [ "$x" = "$needle" ] && return 0; done
   return 1
+}
+
+# Numeric range check for --height. The case match rejects anything that
+# isn't digits-and-at-most-one-dot (letters, signs, a bare ".", a leading
+# or trailing dot, two dots) using a bracket-class glob rather than reaching
+# for a regex tool that might not be on PATH; awk then does the actual
+# float comparison against MIN_HEIGHT/MAX_HEIGHT; because /bin/sh only has
+# integer arithmetic and this must accept 9.75 and 13.5.
+in_height_range() {  # $1 = value
+  v=$1
+  case "$v" in
+    ''|*[!0-9.]*|*.*.*|.|*.|.*) return 1 ;;
+  esac
+  awk -v v="$v" -v lo="$MIN_HEIGHT" -v hi="$MAX_HEIGHT" \
+    'BEGIN { exit !(v + 0 >= lo && v + 0 <= hi) }'
 }
 
 slugify() {
@@ -456,7 +491,7 @@ while [ $# -gt 0 ]; do
     --verify)  shift; [ $# -gt 0 ] || die "--verify needs a value"; VERIFY_CSV=$1 ;;
     --force)   FORCE=1 ;;
     --dry-run) DRY_RUN=1 ;;
-    -h|--help) sed -n '3,81p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,82p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)         die "unknown argument: $1  (try --help)" ;;
   esac
   shift
@@ -476,21 +511,21 @@ fi
 # silent acceptance of a bad label is the exact failure this script exists
 # to prevent.
 # --------------------------------------------------------------------------
-[ -n "$HEIGHT" ] || die "missing required --height (one of: $HEIGHTS)"
+[ -n "$HEIGHT" ] || die "missing required --height (a number of inches in ${MIN_HEIGHT}..${MAX_HEIGHT}, e.g. 12 or 9.75)"
 [ -n "$LAYOUT" ] || die "missing required --layout (one of: $LAYOUTS)"
 [ -n "$MAT" ]    || die "missing required --mat (one of: $MATS)"
 [ -n "$RUNG" ]   || die "missing required --rung (one of: $RUNGS)"
 [ -n "$CARDS" ]  || die "missing required --card (at least one, in slot order)"
 
-in_set "$HEIGHT" "$HEIGHTS" || die "invalid --height '$HEIGHT' (expected one of: $HEIGHTS)"
+in_height_range "$HEIGHT" || die "invalid --height '$HEIGHT' (expected a number of inches in ${MIN_HEIGHT}..${MAX_HEIGHT}, e.g. 12 or 9.75)"
 in_set "$LAYOUT" "$LAYOUTS" || die "invalid --layout '$LAYOUT' (expected one of: $LAYOUTS)"
 in_set "$MAT" "$MATS"       || die "invalid --mat '$MAT' (expected one of: $MATS)"
 in_set "$RUNG" "$RUNGS"     || die "invalid --rung '$RUNG' (expected one of: $RUNGS)"
 
 # Height and layout are also validated AGAINST EACH OTHER: a layout can be
 # geometrically too big for a height even though both are individually
-# allowed (a 3x3 grid does not fit the C920's frame at every height on
-# HEIGHTS). A frame that is too small still looks like a normal photo — it
+# allowed (a 3x3 grid does not fit the C920's frame at every height in
+# range). A frame that is too small still looks like a normal photo — it
 # just crops cards off the edge — which is exactly the silent-corruption
 # failure this whole script exists to prevent, so a negative margin is
 # refused outright rather than filed and discovered later in B6.
