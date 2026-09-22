@@ -232,7 +232,7 @@ public class TileInteractionTests
 
         var vm = new TileViewModel(tile, catalogWithLightning);
 
-        var results = await CallPopulator(vm.TypeAheadPopulator, "Li");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Li", TestContext.Current.CancellationToken);
 
         // Both entries start with "Li".
         // The runner-up (oracle-Lightning Bolt) must appear BEFORE the catalog entry.
@@ -249,7 +249,7 @@ public class TileInteractionTests
         var catalog = new StubOracleCatalog(); // 33,000 entries
 
         var vm = new TileViewModel(tile, catalog);
-        var results = await CallPopulator(vm.TypeAheadPopulator, "Synthetic");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Synthetic", TestContext.Current.CancellationToken);
 
         Assert.True(results.Count <= 20, $"Expected ≤20 results, got {results.Count}");
     }
@@ -267,7 +267,7 @@ public class TileInteractionTests
         ]);
 
         var vm = new TileViewModel(tile, catalog);
-        var results = await CallPopulator(vm.TypeAheadPopulator, "Bolt");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Bolt", TestContext.Current.CancellationToken);
 
         // Only "Bolt" should appear; "Lightning Bolt" contains "Bolt" but doesn't start with it.
         Assert.All(results, r => Assert.StartsWith("Bolt", r.OracleName, StringComparison.Ordinal));
@@ -281,7 +281,7 @@ public class TileInteractionTests
         var catalog = new StubOracleCatalog(); // includes "+2 Mace"
 
         var vm = new TileViewModel(tile, catalog);
-        var results = await CallPopulator(vm.TypeAheadPopulator, "+2");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "+2", TestContext.Current.CancellationToken);
 
         Assert.Contains(results, r => r.OracleName == "+2 Mace");
     }
@@ -321,7 +321,7 @@ public class TileInteractionTests
             Good, Ok);
 
         var vm = new TileViewModel(tile, catalog: null);
-        var results = await CallPopulator(vm.TypeAheadPopulator, "Li");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Li", TestContext.Current.CancellationToken);
 
         // Runner-up "Lightning Bolt" starts with "Li" → should appear.
         Assert.Contains(results, r => r.OracleName == "Lightning Bolt");
@@ -335,9 +335,9 @@ public class TileInteractionTests
         var vm = new TileViewModel(tile, catalog);
 
         // Prefix shorter than 2 chars → empty, regardless of catalog size.
-        var results1 = await CallPopulator(vm.TypeAheadPopulator, "L");
-        var results0 = await CallPopulator(vm.TypeAheadPopulator, "");
-        var resultsNull = await CallPopulator(vm.TypeAheadPopulator, null);
+        var results1 = await CallPopulator(vm.TypeAheadPopulator, "L", TestContext.Current.CancellationToken);
+        var results0 = await CallPopulator(vm.TypeAheadPopulator, "", TestContext.Current.CancellationToken);
+        var resultsNull = await CallPopulator(vm.TypeAheadPopulator, null, TestContext.Current.CancellationToken);
 
         Assert.Empty(results1);
         Assert.Empty(results0);
@@ -361,7 +361,7 @@ public class TileInteractionTests
         ]);
 
         var vm = new TileViewModel(tile, catalog);
-        var results = await CallPopulator(vm.TypeAheadPopulator, "Li");
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Li", TestContext.Current.CancellationToken);
 
         // "Lightning Bolt" should appear exactly once.
         var bolts = results.Where(r => r.OracleName == "Lightning Bolt").ToList();
