@@ -31,6 +31,7 @@
     -->
     <Border DockPanel.Dock="Top" Padding="8,4" Background="#2D2D2D"
             x:DataType="vm:MainViewModel">
+
       <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
         <TextBlock Text="Count:" VerticalAlignment="Center" Foreground="#CCCCCC" />
         <RadioButton GroupName="ExpectedCount"
@@ -51,6 +52,75 @@
                   VerticalAlignment="Center"
                   Foreground="#CCCCCC" />
       </StackPanel>
+    </Border>
+
+    <!--
+      A9: Startup-error banner. Shown when composition signals that a
+      required resource (e.g. hash index, thresholds file) is missing
+      or unreadable. Driven by MainViewModel.StartupErrorMessage — set
+      by code-behind or tests; never shows a stack trace. DockPanel.Dock
+      Top so it appears immediately below the toolbar.
+    -->
+    <Border x:Name="StartupErrorBanner"
+            DockPanel.Dock="Top"
+            Background="#7A1111"
+            Padding="8,5"
+            IsVisible="{Binding HasStartupError}"
+            x:DataType="vm:MainViewModel">
+      <TextBlock x:Name="StartupErrorText"
+                 Text="{Binding StartupErrorMessage}"
+                 Foreground="White"
+                 FontSize="12"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <!--
+      A9: SourceFailed banner. Shown when IScanPipeline.SourceFailed fires
+      (device unplugged, taken by another app, watchdog timeout). The
+      message comes ONLY from FrameSourceException.Message — never a stack
+      trace. Subscription/unsubscription lives in the session ctor and
+      OnClosed; the handler marshals to the UI thread before setting the
+      property.
+    -->
+    <Border x:Name="SourceErrorBanner"
+            DockPanel.Dock="Top"
+            Background="#7A1111"
+            Padding="8,5"
+            IsVisible="{Binding HasSourceError}"
+            x:DataType="vm:MainViewModel">
+      <TextBlock x:Name="SourceErrorText"
+                 Text="{Binding SourceErrorMessage}"
+                 Foreground="White"
+                 FontSize="12"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <!--
+      A9: Store-lock banner. Shown when Enter-commit or export throws
+      CollectionStoreException (most often Excel holding the CSV open on
+      Windows). The pending cohort is RETAINED (A7 contract) so the user
+      can close the blocking program and click Retry. The Retry button
+      re-invokes OnEnterAsync; on success the banner clears automatically.
+    -->
+    <Border x:Name="StoreLockBanner"
+            DockPanel.Dock="Top"
+            Background="#7A5511"
+            Padding="8,5"
+            IsVisible="{Binding HasStoreLock}"
+            x:DataType="vm:MainViewModel">
+      <DockPanel>
+        <Button x:Name="StoreLockRetryButton"
+                DockPanel.Dock="Right"
+                Content="Retry"
+                Click="OnStoreLockRetryClick"
+                Margin="8,0,0,0" />
+        <TextBlock x:Name="StoreLockText"
+                   Text="{Binding StoreLockMessage}"
+                   Foreground="White"
+                   FontSize="12"
+                   VerticalAlignment="Center"
+                   TextWrapping="Wrap" />
+      </DockPanel>
     </Border>
 
     <!--
@@ -100,6 +170,12 @@
           CanUserSortColumns="True" — DataGrid sorts natively when the column
           header is clicked; no custom sort comparer needed for simple fields.
           IsReadOnly="True" — v1 never edits rows through the UI.
+
+          A9: EmptyCollectionHint overlays the DataGrid and is only visible
+          when Rows is empty (IsEmpty=true). Grid stacking (all children
+          in cell 0,0) means the DataGrid and the placeholder coexist in
+          the same column; ZIndex is not needed because the DataGrid is
+          transparent when empty.
         -->
         <DataGrid x:Name="CollectionGrid"
                   Grid.Column="0"
@@ -137,6 +213,23 @@
                                 SortMemberPath="LastScannedAt" />
           </DataGrid.Columns>
         </DataGrid>
+
+        <!--
+          A9: Empty-collection placeholder. Overlaid on the DataGrid
+          (same Grid.Column="0") and visible only when Rows is empty.
+          When rows are present the DataGrid is populated and this
+          TextBlock is hidden. IsHitTestVisible="False" so it never
+          intercepts clicks intended for the DataGrid.
+        -->
+        <TextBlock x:Name="EmptyCollectionHint"
+                   Grid.Column="0"
+                   Text="No cards yet — start scanning"
+                   IsVisible="{Binding IsEmpty}"
+                   IsHitTestVisible="False"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#555555"
+                   FontSize="13" />
 
         <!--
           Column 1: export picker sidebar.
@@ -351,6 +444,25 @@
                           BorderBrush="#4488FF"
                           IsVisible="{Binding IsManuallySet}"
                           IsHitTestVisible="False" />
+
+                  <!--
+                    A9: "Set manually" hint on Unresolved tiles (A9). Visible
+                    only when ShowSetManuallyHint is true, i.e. the tile is
+                    Unresolved. Directs the user to the right-click context menu
+                    so they don't assume the app is broken when a card goes
+                    unrecognised. IsHitTestVisible="False" — interaction still
+                    goes through the outer Grid's Tapped handler and ContextMenu.
+                  -->
+                  <TextBlock x:Name="SetManuallyHint"
+                             Text="Right-click to set"
+                             Foreground="#FF8888"
+                             FontSize="7"
+                             FontStyle="Italic"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             Margin="0,0,0,32"
+                             IsVisible="{Binding ShowSetManuallyHint}"
+                             IsHitTestVisible="False" />
 
                   <!--
                     A6: Type-ahead overlay for "Set card manually…".

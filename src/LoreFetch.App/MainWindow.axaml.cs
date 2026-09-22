@@ -124,6 +124,11 @@ public partial class MainWindow : Window
         // marshal to the UI thread before touching the cohort grid.
         _pipeline.AutoCaptured += OnAutoCaptured;
 
+        // A9: SourceFailed fires on the pipeline's background thread
+        // immediately before RunAsync faults. Marshal to the UI thread
+        // and show the error banner — Message only, never a stack trace.
+        _pipeline.SourceFailed += OnSourceFailed;
+
         Closed += OnClosed;
 
         // A4: wire the expected-count selector and auto-capture toggle
@@ -158,6 +163,7 @@ public partial class MainWindow : Window
         {
             _pipeline.FrameProcessed -= OnFrameProcessed;
             _pipeline.AutoCaptured -= OnAutoCaptured;  // A7
+            _pipeline.SourceFailed -= OnSourceFailed;  // A9
             _pipeline = null;
         }
 
@@ -193,7 +199,14 @@ public partial class MainWindow : Window
         }
         catch (CollectionStoreException)
         {
-            // A8 happy-path: just don't crash. A9 adds the retry banner.
+            // A9: show the store-lock banner. Refresh is called on the UI
+            // thread so we can set StoreLockMessage directly.
+            if (DataContext is ViewModels.MainViewModel vm)
+            {
+                vm.StoreLockMessage =
+                    "The collection file is open in another program (e.g. Excel). " +
+                    "Close it and click Retry.";
+            }
         }
         catch (OperationCanceledException)
         {
@@ -247,7 +260,17 @@ public partial class MainWindow : Window
         }
         catch (CollectionStoreException)
         {
-            // A8 happy-path: just don't crash. A9 adds the error banner.
+            // A9: export reads from the store (ListAsync) before writing — a
+            // CollectionStoreException means the store file is locked. Show
+            // the same retry banner as the Enter-commit path. Marshal to UI
+            // because ExportToStreamAsync uses ConfigureAwait(false).
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (DataContext is ViewModels.MainViewModel vm)
+                    vm.StoreLockMessage =
+                        "The collection file is open in another program (e.g. Excel). " +
+                        "Close it and click Retry.";
+            });
         }
         catch (OperationCanceledException)
         {
@@ -255,7 +278,7 @@ public partial class MainWindow : Window
         }
         catch (IOException)
         {
-            // Disk write error — A8 happy-path, ignore; A9 adds error UX.
+            // Disk write error — not a CollectionStoreException; no retry banner.
         }
     }
 
@@ -465,6 +488,33 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// A9: Fired on the pipeline's background thread when the frame source
+    /// fails (device unplugged, taken by another app, watchdog timeout).
+    /// Marshals to the UI thread and shows the SourceFailed banner with
+    /// <see cref="FrameSourceException.Message"/> only — never a stack trace.
+    /// </summary>
+    private void OnSourceFailed(FrameSourceException ex)
+    {
+        var message = ex.Message; // capture before marshalling (ex may be GC'd)
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+                vm.SourceErrorMessage = message;
+        });
+    }
+
+    /// <summary>
+    /// A9: "Retry" button on the store-lock banner. Re-invokes
+    /// <see cref="OnEnterAsync"/> which attempts the pending commit again.
+    /// On success the banner is cleared automatically; on another failure
+    /// the banner message is refreshed.
+    /// </summary>
+    private void OnStoreLockRetryClick(object? sender, RoutedEventArgs e)
+    {
+        _ = OnEnterAsync();
+    }
+
+    /// <summary>
     /// Window-level tunnel key handler for Space / Enter / Escape.
     /// Registered in the session ctor with <c>RoutingStrategies.Tunnel</c>
     /// so it runs before any focused control's bubble-phase handler.
@@ -506,7 +556,8 @@ public partial class MainWindow : Window
     /// <summary>
     /// Commits the pending cohort off the UI thread, then clears the grid
     /// on the UI thread on success. On <see cref="CollectionStoreException"/>:
-    /// leaves the grid intact so the user can retry (A9 adds the retry banner).
+    /// leaves the grid intact so the user can retry; A9 adds the visible
+    /// retry banner (StoreLockMessage).
     /// </summary>
     private async Task OnEnterAsync()
     {
@@ -518,14 +569,27 @@ public partial class MainWindow : Window
             // temp-rename). ConfigureAwait(false) keeps that off the UI thread.
             await vm.CommitCohortAsync(_cts.Token).ConfigureAwait(false);
 
-            // Success: clear the pending cohort on the UI thread.
-            Dispatcher.UIThread.Post(vm.ClearPendingCohort);
+            // Success: clear the pending cohort and any retry banner on the
+            // UI thread.
+            Dispatcher.UIThread.Post(() =>
+            {
+                vm.ClearPendingCohort();
+                vm.StoreLockMessage = null; // A9: clear the retry banner
+            });
         }
         catch (CollectionStoreException)
         {
             // A7 contract: do not crash; keep the pending cohort intact so
             // the user can retry after closing the blocking process (e.g.
-            // Excel holding the CSV). A9 adds the retry dialog/banner.
+            // Excel holding the CSV).
+            // A9: show the retry banner — Message only, no stack trace.
+            const string msg =
+                "The collection file is open in another program (e.g. Excel). " +
+                "Close it and click Retry.";
+            Dispatcher.UIThread.Post(() =>
+            {
+                vm.StoreLockMessage = msg;
+            });
         }
         catch (OperationCanceledException)
         {

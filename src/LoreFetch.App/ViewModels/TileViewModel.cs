@@ -90,6 +90,14 @@ public sealed class TileViewModel : ObservableObject
     /// </summary>
     public bool ShowExcludedMarker => _tile.State == TileState.Excluded;
 
+    /// <summary>
+    /// True when the tile is <see cref="TileState.Unresolved"/> and the
+    /// "Set manually" affordance hint should be shown. Gives users a
+    /// visible cue to right-click, so they don't assume the app is broken
+    /// when a card goes unrecognised (A9).
+    /// </summary>
+    public bool ShowSetManuallyHint => _tile.State == TileState.Unresolved;
+
     // ------------------------------------------------------------------
     // Display text
     // ------------------------------------------------------------------
@@ -165,6 +173,7 @@ public sealed class TileViewModel : ObservableObject
         OnPropertyChanged(nameof(IsUnresolved));
         OnPropertyChanged(nameof(IsManuallySet));
         OnPropertyChanged(nameof(ShowExcludedMarker));
+        OnPropertyChanged(nameof(ShowSetManuallyHint));
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(DistanceText));
         OnPropertyChanged(nameof(IsLowConfidence));

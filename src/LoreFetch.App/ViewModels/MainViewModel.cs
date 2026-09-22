@@ -208,6 +208,71 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public bool HasPendingCohort => _currentCohort is not null;
 
+    // ------------------------------------------------------------------
+    // A9: error-state properties — banners, no stack traces
+    // ------------------------------------------------------------------
+
+    private string? _sourceErrorMessage;
+
+    /// <summary>
+    /// Set when <see cref="IScanPipeline.SourceFailed"/> fires. Carries only
+    /// <see cref="FrameSourceException.Message"/> — never a stack trace.
+    /// Null means no banner shown.
+    /// </summary>
+    public string? SourceErrorMessage
+    {
+        get => _sourceErrorMessage;
+        set
+        {
+            if (SetProperty(ref _sourceErrorMessage, value))
+                OnPropertyChanged(nameof(HasSourceError));
+        }
+    }
+
+    /// <summary>True when there is a source-failure message to display.</summary>
+    public bool HasSourceError => _sourceErrorMessage is not null;
+
+    private string? _storeLockMessage;
+
+    /// <summary>
+    /// Set when <see cref="ICollectionStore.CommitCohortAsync"/> (or an
+    /// export read) throws <see cref="CollectionStoreException"/> — e.g.
+    /// Excel has the CSV open. Cleared on a successful commit or Retry.
+    /// Null means no banner shown.
+    /// </summary>
+    public string? StoreLockMessage
+    {
+        get => _storeLockMessage;
+        set
+        {
+            if (SetProperty(ref _storeLockMessage, value))
+                OnPropertyChanged(nameof(HasStoreLock));
+        }
+    }
+
+    /// <summary>True when there is a store-lock message to display.</summary>
+    public bool HasStoreLock => _storeLockMessage is not null;
+
+    private string? _startupErrorMessage;
+
+    /// <summary>
+    /// Set by composition when a startup condition cannot be met — e.g.
+    /// the hash-index file is missing. Carries only the short diagnostic
+    /// message, never a stack trace. Null means no startup-error surface.
+    /// </summary>
+    public string? StartupErrorMessage
+    {
+        get => _startupErrorMessage;
+        set
+        {
+            if (SetProperty(ref _startupErrorMessage, value))
+                OnPropertyChanged(nameof(HasStartupError));
+        }
+    }
+
+    /// <summary>True when there is a startup-error message to display.</summary>
+    public bool HasStartupError => _startupErrorMessage is not null;
+
     /// <summary>
     /// Capture path used by the Space key handler and by auto-capture:
     /// calls <see cref="IScanPipeline.CaptureAsync"/> off the UI thread, then

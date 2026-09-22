@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.App.ViewModels;
@@ -27,7 +28,7 @@ namespace LoreFetch.App.ViewModels;
 /// completes synchronously, so no thread switch happens anyway.
 /// </para>
 /// </remarks>
-public sealed class CollectionViewModel
+public sealed class CollectionViewModel : ObservableObject
 {
     private readonly ICollectionStore? _store;
 
@@ -49,6 +50,13 @@ public sealed class CollectionViewModel
             .Select(e => new ExporterItem(e))
             .ToList();
         Rows = [];
+
+        // A9: fire IsEmpty / HasRows whenever the observable collection changes.
+        Rows.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(HasRows));
+        };
     }
 
     /// <summary>
@@ -56,6 +64,18 @@ public sealed class CollectionViewModel
     /// <see cref="LoadAsync"/>; empty until that is called.
     /// </summary>
     public ObservableCollection<CollectionRow> Rows { get; }
+
+    /// <summary>
+    /// True when <see cref="Rows"/> is empty. Bound to the empty-collection
+    /// placeholder visibility (A9).
+    /// </summary>
+    public bool IsEmpty => Rows.Count == 0;
+
+    /// <summary>
+    /// True when <see cref="Rows"/> has at least one row. Inverse of
+    /// <see cref="IsEmpty"/>; exposed so XAML can bind either direction.
+    /// </summary>
+    public bool HasRows => Rows.Count > 0;
 
     /// <summary>
     /// One <see cref="ExporterItem"/> per registered
