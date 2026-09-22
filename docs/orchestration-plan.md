@@ -1185,7 +1185,7 @@ Global overrides for every B brief:
   4. **Detector fix** — find the true outer edge on a dark mat. Addresses the cause rather than the symptom, but is a materially harder vision problem and was not attempted.
 
   **Contingent cleanup:** `CropScaleTransform` (93 lines) sits in `Core/Imaging`, so it ships in the product assembly although it is diagnostic-only. That placement is correct *if* option 2 or 3 is adopted, since the sweep would live in `HashCardIdentifier` and use it. **If the sweep is rejected, move it to `Lab`.**
-- [ ] **B6** Accuracy harness, gated on H3 and B4d:
+- [x] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
   - the margin distribution
   - lands excluded by the `IsBasicLand` flag, with the excluded count printed
@@ -1194,6 +1194,14 @@ Global overrides for every B brief:
   - it writes `goodDistance` and `okDistance` into `thresholds.json` and the table into `docs/accuracy.md`
 
   **If correct@1 on normal cards is below 90% at the chosen height, stop and ask** (stream-b Fallbacks). Record the results here.
+
+  *Done 2026-09-22 on the **Windows PC (win-x64)**, `stream/b` `f6e827f`, `d379df3`.* **Index rebuilt with the digital-only filter** from a fresh bulk snapshot (`unique-artwork-20260922210231`): cascade 54,774 raw → … → 48,751 after set types → **47,418 arts / 32,743 oracle ids / 1,852 basic lands** after the digital-only step, with 0 `A-` names left. The prediction was ~47,417 / ~32,743. **10,175,665 bytes, SHA-256 `b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402`.** The old index is kept outside git as `C:\LoreFetchData\index-out\cards.48750.lfidx`. **`lab accuracy`: correct@1 38/54 = 70.4%, wrong@1 0, no-match 16** (11 unresolved, 5 no-detection, 0 dropped frames). The 90% gate is waived by the user's ruling above. Correct rank-1 distances run 82–208, and every raw mismatch sits at ≥272 (272, 288, 296, 299, 314, 314), so the 63-point window survived the rebuild unchanged. **`thresholds.json`: `goodDistance` 208** (the largest correct distance observed) **and `okDistance` 240** (the midpoint of the empty 209–271 window). The low-confidence band (209, 240] is therefore exactly the region the corpus has no evidence for. **B2 re-run on win-x64 against the new index:** 200/200 rank-1 `ArtworkId`, **`referenceFloor` 61**, margin min 130. It is `provisional: false`, measured on the ship architecture rather than promoted from the Mac's 55. The Mac figure came from the old index, so the two are not an architecture comparison. **Found and fixed on the way:**
+  (1) The cache-gated B2 tests default to `~/LoreFetchData`, so on this PC they had been **silently skipping**. Set `LOREFETCH_SCRYFALL_CACHE=C:\LoreFetchData\scryfall-cache`.
+  (2) The gate pins the index SHA, and it now pins the new one.
+  (3) `lab round-trip-gate` rewrote `thresholds.json` without `goodDistance`/`okDistance`. It now preserves them.
+  (4) The harness hardcoded `OkDistance` 270. It now reads it from `thresholds.json`.
+  StreamB **290 total, 288 passed / 2 skipped** (the witness, and the perf soft-skip). Integration on `stream/b` is 155/8, because that branch predates `37734b0`. Every new test was chaos-tested.
+  **B8 item 6 closed as well:** `IOracleCatalog.All` over the real committed index has exactly 32,743 entries, one per oracle id, with truncation and duplication each chaos-failing. A prefix search finds "Freya" and "Sol Ring". The A session had already root-caused its bug independently (`PlacementTarget`, fixed at `5d1bbb4`).
 - [ ] **B8** 🧭 Done-when review against stream-b §Done when. Then README §B. **Merge gate, then P3.**
 
 ### Stream C — Capture · worktree `stream-c` · scope `src/LoreFetch.Capture/**`, `Tests/StreamC/**`, README §C
