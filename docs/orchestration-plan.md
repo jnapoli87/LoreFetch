@@ -499,7 +499,7 @@ Global overrides for every A brief:
   - it resolves `AttachDeveloperTools` licensing in its first hour, and leaves it uncalled if the tool turns out to be paid
 
   Accept: the app launches against `FolderFrameSourceFactory`.
-- [ ] **A2** Preview:
+- [x] **A2** Preview: — *done 2026-09-21, `stream/a` `6b47e28` + fix `22d373c`. **Review found a data race:** the render callback took a reference to the one shared staging buffer and converted it after releasing the lock, so the pipeline thread could overwrite it mid-conversion (torn frames, hidden by the slow fake source). Now a three-slot `FrameHandoff` guarantees the producer never writes the slot being converted. Its 20,000-frame uniformity test fails 20/20 when the rotation is collapsed, and an independent chaos case (the consumer never marks its slot taken) fails 5/5. The ~15 fps gate used to drop a frame arriving inside the interval, so the last frame before a stall was never drawn; it now defers with a timer, still at most one render outstanding.*
   - one `WriteableBitmap` for the life of the app
   - lock, copy and dispose the lock every frame
   - BGR→BGRA conversion that switches on `Layout` and respects `RowBytes`
