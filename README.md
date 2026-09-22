@@ -21,7 +21,7 @@ Cataloging Magic cards shouldn't mean a monthly subscription or holding your pho
 
 Cards are identified by **perceptual hash**, not OCR. Nothing reads the card name — at a realistic overhead camera height the name is about five pixels tall, which rules text-reading out entirely. Instead each card is rectified, reduced to a 32×32 thumbnail and turned into a 1024-bit fingerprint, then matched by Hamming distance against a prebuilt index.
 
-That approach isn't novel here: it's a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause), which is the engine behind Wizards of the Coast's own SpellTable. Using a technique already proven in production at this exact camera geometry was the single biggest risk reduction available.
+That approach isn't novel here: it's a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause), a perceptual-hash card matcher proven against real webcam capture. Note that CardSpotter identifies a card the user *clicks on*; LoreFetch additionally has to find the cards, unassisted, which is the harder half.
 
 ## Planned scope for v0.1.0
 

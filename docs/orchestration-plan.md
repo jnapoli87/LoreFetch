@@ -671,7 +671,17 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 
 **Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
 
-⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+✅ **Merged into every stream branch, 2026-09-22, at the clean boundary after B5c.** `main` → `stream/a`, `stream/b`, `stream/d` (`stream/c` is already merged *into* `main`, so it needed nothing). All four worktrees were confirmed clean first. Each branch re-verified after its merge, with the macOS filter the test script itself applies:
+
+| Branch | Own suite | Integration | Build |
+|---|---|---|---|
+| `stream/a` | 106 passed / 0 failed | 143 / 8 skipped | 0 errors, **9 pre-existing `xUnit1051` warnings** (A6's `TileInteractionTests`, a known adjacent find — not merge damage) |
+| `stream/b` | 212 passed / 1 soft-skip / 213 | 143 / 8 skipped | 0 errors, 0 warnings |
+| `stream/d` | 70 passed / 0 failed | 143 / 8 skipped | 0 errors, 0 warnings |
+
+This also removes a live trap: the fixed `capture-fixtures.sh` now exists in the stream worktrees, so running the stale copy from inside one is no longer possible.
+
+⚠ **A precision on the `WindowsOnly` trait, learned while verifying these merges — do not over-generalise the goldens finding.** Run unfiltered on this Mac, `stream/a` fails 2 and `stream/d` fails 1, and they are *exactly* the `WindowsOnly`-traited tests: A's two Avalonia screenshot tests, and D's `Commit_WhenTheTargetCannotBeReplaced_…` write-lock test (macOS `rename(2)` replaces an open target, recorded at D4 `ed60d6c`). **So `WindowsOnly` is load-bearing for A and D** — those behaviours genuinely differ by platform. The finding that the trait looks unnecessary applies **only to stream B's golden hashes**, which pass bit-exact on ARM64. Anyone acting on that finding must scope it to B's goldens; dropping the trait wholesale would make the macOS leg permanently red for real reasons.
 
 ### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
 
@@ -684,6 +694,128 @@ That **contradicts the premise behind the trait**, which CLAUDE.md states as "si
 **Evidence, not proof** — a pixel sitting exactly on its cell median could still flip, and OpenCV #24163 is a real confirmed bug. So `thresholds.json` stays `provisional` until win-x64 re-measurement. But two consequences are worth acting on:
 1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
 2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
+
+### Measured — ARM64 index divergence is real but vanishing, 2026-09-22
+
+**Settled by experiment, not inference.** Rebuilt the full index on the Mac (arm64-darwin) from the **identical** manifest and image cache the committed win-x64 index was built from:
+
+| | |
+|---|---|
+| win-x64 committed | SHA-256 `6495314eb3e5f37e3c1bd5830aa506d6efc617e23303c46f87851edef09e4dd3` |
+| arm64 rebuild | SHA-256 `9fac40ee20537f7facfc168806fd45817a5f2531ded6c9bbe72a4e260ec7d9fd` |
+| size / counts | **identical** — 10,460,648 bytes, 48,750 arts / 33,612 oracle / 1,882 lands |
+| **differing bytes** | **7** of 10,460,648 (0.0001%) |
+| **differing bits** | **11** of 49,920,000 hash bits |
+
+Two conclusions, and they point opposite ways:
+
+1. **Machine split rule 4 STANDS for the index.** The SHA differs, so a Mac-built index must never be committed. This is now measured rather than assumed.
+2. **Rule 4's *threshold* clause is demonstrably over-cautious.** At ~1 divergent bit per 4.5 million, a card's distance to its own reference entry shifts by at most a bit or two — against `referenceFloor` 55 and margins of 60+, that is noise. **B2's `referenceFloor` 55 measured on arm64 is promotable rather than requiring re-measurement.**
+
+⚠ **This corrects the "the `WindowsOnly` trait looks unnecessary" reading recorded above.** The goldens *do* pass on arm64 (8/8, verified) — but that is a small-sample consequence of this divergence rate, not evidence of bit-exactness: 8 goldens are 8,192 bits, and at ~1 bit per 4.5M the probability any is touched is tiny. The trait's stated premise ("a shared golden cannot pass there") is wrong; the trait itself is defensible caution. **Do not act on the earlier reading without this correction.** The mechanism proposed for it does hold, and is now quantified: the per-cell median threshold absorbs **99.999978%** of sub-LSB resize error.
+
+### Found by B6's first real run — digital-only cards are same-art impostors, 2026-09-22
+
+**The index contains 132 Alchemy (`A-` prefixed) entries, 0.27% of 48,750 — and 128 of them have their non-Alchemy twin also present.** Alchemy cards are digital-only MTG Arena cards; they share artwork with the paper card, so the hash **cannot** distinguish them, and they can never be the correct answer for a physical scan — only a confidently wrong one.
+
+This is not theoretical: it is the single gate failure in B6's first real run. `Young Red Dragon // Bathe in Gold` rank-1-matched `A-Young Red Dragon // A-Bathe in Gold` at **distance 93, margin 12** — well inside any plausible `OkDistance`, so a *confident* wrong answer, which CLAUDE.md calls "permanent bad inventory."
+
+B4a's cascade already excludes `art_series` and `token` layouts. **This is the same category of exclusion and was simply missed**, and it is a Risk 5 instance that is *fixable* rather than inherent — unlike two paper printings sharing art, a digital-only card is never a legitimate answer. Fix in progress; filtering must be keyed on Scryfall's own `games`/`digital`/`set_type` fields, **not** the `A-` name prefix, which is a symptom.
+
+**Consequence for the shippable artifact:** the filtered index must be **rebuilt on win-x64** (see the divergence finding above). A Mac rebuild verifies the fix but cannot produce the committed file.
+
+### B6 first real run — the frame-drop policy was hiding the result, 2026-09-22
+
+Against a real 54-slot corpus (6 frames, 15″, light mat, ground truth validated name-by-name against the 33,596-name oracle catalog):
+
+| Retrieval mode | correct@1 | wrong@1 | no-match | scored slots |
+|---|---|---|---|---|
+| `RETR_EXTERNAL` (baseline) | 0 | 0 | 54 (all dropped-frame) | **0 of 54** |
+| `RETR_LIST` | 14 (25.9%) | 1 | 39 (36 dropped-frame) | **18 of 54** |
+
+**The 25.9% is an artifact of dropping any frame whose detected count ≠ the layout count.** Detection yields 8–9 per frame and only two frames hit exactly 9, so four frames — 36 slots — were discarded wholesale. **Of the 18 slots actually scored, 14 were correct (78%)**, 3 were correctly flagged above `OkDistance`, and 1 was the Alchemy collision.
+
+The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked exactly as designed on real data.** Detection found 1–2 of 9, and rather than pairing two quads against nine slots and manufacturing seven wrong answers, the harness refused each frame and reported it in its own bucket. That guard exists because of a user question about slot ordering.
+
+**Two harness findings to fix:**
+1. **The gate passes at 0% correct.** `wrong@1 = 0` is satisfied by identifying nothing at all, so the gate alone can be met by total failure. The done-when separately requires ≥90% correct@1; **both conditions must be checked**, and CI must not gate on the exit code alone.
+2. **"Full corpus" overstates.** It means every ground-truth row has its file on disk, not that the corpus is complete. The coverage line beside it is honest; the header is not.
+
+### Rulings — the 90% gate and B5c's sweep, 2026-09-22 (user)
+
+**1. The ≥90% correct@1 gate is waived for v1. 70.4% is accepted.** Stream B's *Done when* requires ≥90% correct@1 on real normal-card fixtures, and the measured figure on the 54-slot corpus is **70.4%** (38/54), which triggered the recorded stop-and-ask. The user's ruling: accept it for v1 and take the plan's own fallback — the **candidate-list flow**, surfacing the top 3 and letting the confirmation grid resolve the rest. That costs no rework: `CohortTile.Candidates` is already *"ranked, unfiltered"* at the contract level and Stream A already renders ranked candidates.
+
+**What justifies waiving it** rather than treating it as a failure: the metric the stream doc itself calls more important is satisfied with room to spare. `wrong@1` is **0** at any `OkDistance` between **209 and 271** — a 63-point window — because every correct match across six independent frames lands at ≤208 and every wrong one at ≥272. *"A silent miss is recoverable, a confident wrong answer is permanent bad inventory."* Seven cards in ten identify outright; the other three are **flagged**, not silently entered wrong. **The accuracy table must state 70.4% plainly** — it is not to be rounded up or described as "about 90%".
+
+**2. B5c's 3-scale crop sweep is REJECTED for v1.** B5c deferred the decision pending corpus evidence, and the corpus answered it: every wrong match sits at **272–344**, far outside the ~5% crop tolerance the curve identified, so crop error is not what is failing these cards. The sweep would cost **~6× query time** (53 ms → 295 ms per 9-card cohort) to fix a failure mode the data does not show.
+
+**Consequent cleanup owed:** `CropScaleTransform` (93 lines) sits in `Core/Imaging` and is diagnostic-only. Its placement there was correct *if* the sweep were adopted; since it is rejected, **move it to `Lab`** so it does not ship in the product assembly. Keep `lab crop-scale` working — the curve is real evidence and should stay reproducible.
+
+### B8 done-when review — scorecard, 2026-09-22 🧭
+
+Against `docs/stream-b-identification.md` §*Done when*:
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Round-trip gate passes, floor recorded | ✅ B2 — 200/200 rank-1 `ArtworkId`, `referenceFloor` **55** |
+| 2 | ≥90% correct@1 on real normal-card fixtures | ❌ **70.4%** — **waived by user ruling**, candidate-list fallback taken |
+| 3 | `wrong@1` ≤ explicit count at calibrated `OkDistance`, asserted by the harness | ✅ **0**, and the assertion is proven live — the gate *did* fail on the Alchemy collision. ⏳ needs the filtered committed index |
+| 4 | Goldens committed, win-x64, green on the Windows leg, `WindowsOnly`-traited | ✅ B1b — 8 goldens |
+| 5 | `GoodDistance`/`OkDistance` committed as measured values with margin data | ❌ **not written** — the one hard blocker |
+| 6 | `IOracleCatalog` returns every oracle card in the index | ⚠ **no test exists** — gap found in this review |
+| 7 | Detection returns 0 on an empty mat, right count on a partial grid | ✅ B7's bare-mat generator (light/mid/dark) + detector tests |
+| 8 | The accuracy table is committed | ⚠ partial — in `docs/accuracy.md`, but the numbers were measured against the *unfiltered* index |
+
+**Items 3, 5 and 8 all resolve from one PC task** (the filtered win-x64 index rebuild). Item 2 is waived. Item 6 needs a small test.
+
+⚠ **Item 6 is worth closing before A resumes, not after.** `IOracleCatalog.All` is what backs Stream A's *"Set card manually…"* type-ahead over the oracle catalog — and the PC's A10 run found that **"Set card manually… does nothing."** An empty or truncated `All` would present as exactly that symptom. `HashIndexFileTests` asserts the index *file's* oracle-table count, which is the reader, not the interface implementation on `HashCardIdentifier`. A test that loads the real committed index and asserts `All.Count` equals the index's oracle count would rule out half of A10's bug for free.
+
+### Handoff — the shortest path to closing B, for the Windows PC
+
+Approved by the user 2026-09-22. `stream/b` is pushed at `8e4e7aa`; `main` is pushed at whatever this section's own commit is — check `git log`, and do not trust a SHA quoted in prose here, because this file is edited on both machines.
+
+🔴 **STEP 0, AND STEP 2 IS IMPOSSIBLE WITHOUT IT: the fixture corpus and its ground truth exist ONLY on the Mac, and they are gitignored.** `AccuracyCorpusLoader` requires both at exact paths:
+
+| Needed at | What it is | Where it exists |
+|---|---|---|
+| `test-images/ground-truth.csv` | **54 hand-validated rows**, every `oracle_name` checked against the 33,596-name oracle catalog | **Mac only.** Never committed, cannot be |
+| `test-images/fixtures/15in/9/a_1.png` … `a_6.png` | the six 3×3 frames the whole accuracy number rests on | **Mac only** at that path (the PC has the raw captures elsewhere, unstructured) |
+
+**In practice only ONE file has to move.** The six fixture frames were verified **byte-identical** (SHA-256) to the PC's own `a_corpus/a_1.png`…`a_6.png`, and the filenames already match — so the PC places its own copies at `test-images/fixtures/15in/9/` and needs nothing transferred for them. **`ground-truth.csv` (3,494 bytes) is the only genuinely Mac-only artifact**, and it was handed to the user directly to move.
+
+`test-images/*` is gitignored tree-wide and the pre-commit hook rejects staged rasters, so **neither can travel through git** — deliberate, because the frames are WotC IP regardless of who shot them.
+
+**Do not regenerate the ground truth by hand on the PC.** It took an image-by-image read of all six frames plus a catalog validation pass that caught four Omen/Adventure cards whose oracle names carry both halves (`Young Red Dragon // Bathe in Gold`, `Whirlwing Stormbrood // Dynamic Soar`, `Dirgur Island Dragon // Skimming Strike`, `Sagu Wildling // Roost Seek`). Retyping it invites exactly the typo-becomes-fake-`wrong@1` failure the labels were validated to prevent — and a typo lands as a *low-distance* wrong answer, which would drag the calibrated `okDistance` tighter for no reason.
+
+**Decision recorded:** `ground-truth.csv` stays **uncommitted**. It carries no imagery and committing just the labels was considered, but it is meaningless without the frames — which can never be committed — and `test-images/*` is deliberately a blunt rule so nothing slips through on `git add -A`. The cost is that the 70.4% figure is **not independently reproducible from a fresh clone**; that limitation belongs in README §B rather than being quietly hidden.
+
+**Also Mac-only, lower priority:** `test-images/b_corpus/` (six 20″ frames) and `test-images/d_corpus/` (two dark-mat frames). Their detection numbers are already recorded above, and the v1 accuracy table is single-height/single-mat, so the PC does **not** need them to finish B — only to extend the table later.
+
+**Step 1 — rebuild the index, filtered.** On `stream/b`, from the worktree, with the 5.1 GB cache already present on that machine:
+```
+lab bulk        --out scryfall-bulk
+lab images      --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache
+lab build-index --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache --out C:\LoreFetchData\index-out\cards.lfidx
+```
+Expect roughly **47,417 arts / 32,743 oracle ids** — the digital-only filter removes ~1,333 arts / ~869 oracle ids. Images resume and skip what is present, so this is not a fresh 6 GB pull. Copy the result over `data/index/cards.lfidx`, commit it, and **record the new SHA-256 here**. `*.lfidx` is pinned binary in `.gitattributes`, so it round-trips safely.
+
+⚠ **Re-run `lab bulk` deliberately**, unlike previous sessions: the cascade changed, so the manifest must be regenerated. Note this means a *newer* bulk snapshot than the one behind the 48,750 index — so counts may differ slightly from the figures above. That is expected; record what you actually get.
+
+**Step 2 — re-run B6 and write the thresholds.** `lab accuracy` against the new index. `wrong@1` should be **0**; `AccuracyHarnessRealCaptureTests` should go green, clearing the one red test on `stream/b`. Then write `goodDistance`/`okDistance` into `data/index/thresholds.json`. **`OkDistance` has a 63-point window: every correct match ≤8 lands ≤208, every wrong one ≥272.** ~240 is the natural midpoint. Also **promote `referenceFloor` 55 from `provisional`** — the ARM64 divergence was measured at 11 bits of 49.9M, so the Mac figure holds.
+
+**Step 3 — close item 6**, the `IOracleCatalog.All` test.
+
+**Expected test counts, so a regression is visible:** `Tests/StreamB` is **280 total, 1 failing** right now (`AccuracyHarnessRealCaptureTests`). After step 2 it should be **280 passing**, and after step 3 **281**. `Tests/Integration` must stay **143 passed / 8 skipped** throughout — it guards the frozen contracts, so any change there means something went wrong.
+
+**Free measurement while you are there:** B2 committed a **query-hash witness** (50 query-side hashes, generated on arm64, arch-aware test). Regenerating it on win-x64 makes that test report the *query-side* divergence directly, which nothing has yet measured in isolation — the 11-bit figure above is whole-index. Cheap, and it closes the last open question on Risk 2.
+
+**Step 4 — B8**: README §B with the honest numbers (**70.4% correct@1, `wrong@1` 0, 91% detection at 15″** — not rounded up), the per-project README "Internals" line, then the merge gate and **P3**.
+
+**Also owed, lower priority:** move `CropScaleTransform` from `Core/Imaging` to `Lab` (sweep rejected, so it is diagnostic-only code shipping in the product assembly).
+
+🔴 **Coordination hazard — `stream/a` has DIVERGED. Read this before touching it.** The A10 handoff records `stream/a` local at **`e9f4a59`, not pushed** (A10-prep, a merge of `main`, README §A). Meanwhile the Mac pushed `origin/stream/a` to **`4e70123`** — a merge of `main` into the *older* tip `611dfb3`, carrying the approved `DiagnosticsSupport` Debug-only change. **So both machines merged `main` independently and the branch now has two heads.** On resuming: `git fetch` then **merge** `origin/stream/a` into the local branch. **Do not force-push, do not `git reset --hard`, and do not `git pull` expecting a fast-forward** — the local A10-prep commits exist only on that machine and a reset would destroy them. No conflict is expected (the Mac touched nothing in `src/LoreFetch.App/**` or README §A), but verify README §A survives the merge before committing.
+
+✅ **The cohort reading-order contract change already has its algorithm — do not write it twice.** The A10 session recorded *"Contract change — cohort tiles in grid (reading) order, requested… not yet executed"*, correctly diagnosing that `ScanPipeline` builds tiles in detector order while `ICardDetector` returns quads **by descending area** — arbitrary for nine near-equal cards. **Stream B independently built and chaos-tested exactly that inference this session:** `src/LoreFetch.Lab/Accuracy/SlotMapper.cs`, `TryInferGrid` — it infers rows and columns from quad centroids, places each quad by position, and emits a distinct `NoDetection` outcome for an empty cell. Measured on the real corpus it took correctly-assigned slots from **18/54 to 49/54**. So the contract change is a **promotion from `Lab` into `Core/Scanning`**, not new work. Two things it already handles that a fresh implementation would likely miss: a naive `OrderBy(Y).ThenBy(X)` **scrambles a row** whenever same-row centroids differ by a few pixels of tilt (pinned as a regression test with the real coordinates `(593,92)/(839,99)/(1109,96)`), and a short row must not shift the remaining slots. The A10 note that *"the nine cards will sit about 10 px apart"* is almost certainly the same root cause as `RETR_EXTERNAL` merging adjacent cards through the morphological close — one cause, two symptoms.
 
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
@@ -743,10 +875,35 @@ At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×23
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
 
-  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
-  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
-  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
-  ruling below.
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand. It validates every label, refuses a
+  height/layout/orientation combination that cannot physically fit, warns under 0.5″ of margin, validates each
+  `--card` against the 33,596-name oracle catalog and writes the catalog's **canonical** spelling, quotes per
+  RFC 4180, and writes the ground-truth row only after the frame lands. `--dry-run` validates a whole shot list
+  without touching the camera; `--verify <csv>` audits rows already written. Frames land as **`.png`**.
+
+  **Shot list, revised 2026-09-22 after the user chose portrait cards over rotating them:**
+
+  | Batch | Height | Layout | Mat | Captures |
+  |---|---|---|---|---|
+  | A — six groups of 9 | **15″** | 3×3 portrait | light | 6 |
+  | B — **same six groups** | 20″ | 3×3 portrait | light | 6 |
+  | C / D — two groups from A | 15″ | 3×3 portrait | mid / dark | 4 |
+  | E — lines | 12″ + 20″ | 3-in-a-line | light | 4 |
+  | F — singles | 12″ + 20″ | 1 card | light | 4 |
+  | G — lands | 15″ | 3×3 portrait | light | 2 |
+  | H — sleeved, foil | 15″ | 1 or 3 | light | 4 |
+
+  **15″, not 12″, for every 3×3** — a portrait 3×3 needs h ≥ **13.47″** (it wants 10.7″ on the 1080 axis), so 12″ portrait misses by −1.17″ and 14″ leaves only +0.42″. 15″ gives **+1.21″**, and at 15″ *both* orientations fit, so the height alone makes the geometry safe. A and B are **paired on the same cards** so height is isolated; C and D reuse A's groups so the mat is attributable. E and F stay at 12″ because a single card and a 3-line fit portrait at any height, which makes the card-width sweep three points — **283 / 227 / 170 px** — instead of two. Resolution is not the binding constraint: the reference side downsamples to **96 px wide**, so even 170 px carries ~1.8× what the index retains.
+
+  🔴 **Defect found and fixed 2026-09-22, before the bench session: `compute_fit()` hardcoded layout 9's ROTATED footprint**, so it silently overstated margin for portrait cards — at 12″ it reported a comfortable **+1.83″** when portrait actually runs **−1.17″** off the frame. It would have filed a frame with its top and bottom rows cropped away: precisely the silent crop-scale failure B5c had just finished quantifying as the cause of a confident *wrong* identification. Now `--orientation portrait|rotated`, **defaulting to portrait** (the stricter case), with the other orientation's margin printed as information. Verified: default at 12″/L9 refuses with the −1.17″ reason and points out rotated would fit; 15″ portrait reports +1.21″; 20″ portrait +5.18″; layouts 1 and 3 are byte-identical across orientations. **How it surfaced is the lesson:** the implementer hit a margin that disagreed with the orchestrator's brief and reported the disagreement as information rather than emitting the number the brief expected. Both numbers were right — for different card orientations — and the brief was the thing that was underspecified.
+
+  **`--height` is now a numeric range (6–30″, decimals allowed), not an allowlist**, because `compute_fit()` is the real guard and an allowlist had to grow every time the bench picked a new height. 9.75″ is consequently *accepted* now, and correctly warns at 0.04″ of margin — which tells the operator the real reason rather than refusing blankly.
+
+  **RULING — `ground-truth.csv` keeps its 7 columns; orientation does NOT become a column.** Its schema stays `file,height_in,layout,slot,oracle_name,rung,mat`. Three reasons: orientation is **invisible to identification by design** (B5a orders corners short-edge-first so a rectified card is always upright-or-180°, and B3b hashes both 180° orientations), so B6 does not need it to score; it is recoverable from the `file` path, which now carries `-portrait`/`-rotated` for layout 9, the only layout where it varies; and a schema change while the operator is mid-capture would orphan rows already written. If the orientation-invariance claim is ever worth falsifying, parsing it back out of the filename is sufficient for a one-off analysis.
+
+  **Cosmetic nit, not a bug:** the fit line labels the footprint "short x long" while printing portrait's as `10.70"x7.70"`. Those are the dimensions checked against the short and long *axes* respectively, not sorted by size. The verdicts and margins are correct; only the label reads oddly.
+
+  🔴 **B6 requirement, surfaced by a user question about slot order — do not skip it.** B6 must map detected quads back to slot numbers, and the only sane rule is sorting quad centroids **row-major: top-to-bottom, then left-to-right**. That rule must be pinned in code with its own test, and the operator must lay grids in aligned rows for it to be unambiguous. **Critically: if the detected count disagrees with the layout count, B6 must NOT pair by position** — a 3×3 frame that detects 8 of 9 would silently misalign every slot after the gap and manufacture eight wrong answers from one missed card. B5a proved missed detections happen (a sleeved card on black). B6 fails such a frame loudly, or resolves the gap by position rather than by index.
 
   Gates B6.
 - [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
