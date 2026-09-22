@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using LoreFetch.Capture;
 using LoreFetch.Core.Abstractions;
@@ -18,6 +19,23 @@ public class FrameWatchdogTests
     private static readonly TimeSpan ShortTimeout = TimeSpan.FromMilliseconds(60);
     private static readonly TimeSpan LongTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan FastFramePace = TimeSpan.FromMilliseconds(10);
+
+    // Deliberately far apart (5 s vs 100 ms) for MidStreamStall: the two
+    // timeouts must never be confusable by value alone. Pins the branch,
+    // not just the outcome — a watchdog that (bug) applies the first-frame
+    // timeout to every item would still eventually throw within
+    // TestTimeout's 10 s bound, so "an exception eventually arrives" alone
+    // doesn't prove the frame-timeout branch fired. Verified by
+    // chaos-testing exactly that bug: with the previous ShortTimeout
+    // (60 ms) used for both roles in that test, the wrong branch was
+    // indistinguishable from the right one.
+    private static readonly TimeSpan MidStreamFirstFrameTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MidStreamFrameTimeout = TimeSpan.FromMilliseconds(100);
+
+    // Generous against CI jitter, but two orders of magnitude below
+    // MidStreamFirstFrameTimeout — an exception arriving under this bound
+    // could not have come from the first-frame timer.
+    private static readonly TimeSpan MidStreamStallDetectionBound = TimeSpan.FromSeconds(2);
 
     // 60 frames * FastFramePace = 600 ms — six full periods of the healthy
     // test's 100 ms frameTimeout, not just one. See that test's comment.
@@ -55,6 +73,12 @@ public class FrameWatchdogTests
             }).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
             Assert.Contains("opening the capture device", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+            // Mirrors the frame-timeout assertion in MidStreamStall below:
+            // the message must report the timeout value that actually
+            // applied — here the first-frame budget, ShortTimeout — not
+            // just some plausible-sounding number.
+            Assert.Contains($"{ShortTimeout.TotalMilliseconds:F0} ms", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -68,9 +92,18 @@ public class FrameWatchdogTests
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         try
         {
-            var watchdog = new FrameWatchdog(firstFrameTimeout: LongTimeout, frameTimeout: ShortTimeout);
+            // firstFrameTimeout (5 s) is deliberately ~50x frameTimeout
+            // (100 ms) — see MidStreamFirstFrameTimeout's comment. Without
+            // that gap, "an exception eventually arrived" doesn't prove
+            // *which* timer fired: a watchdog that (bug) applied the
+            // first-frame timeout on every iteration instead of resetting
+            // to the frame timeout after the first item would still throw
+            // well inside TestTimeout's 10 s bound, and the assertions
+            // below are what actually catch that.
+            var watchdog = new FrameWatchdog(firstFrameTimeout: MidStreamFirstFrameTimeout, frameTimeout: MidStreamFrameTimeout);
 
             var seen = 0;
+            var stopwatch = Stopwatch.StartNew();
             var exception = await Assert.ThrowsAsync<FrameSourceException>(async () =>
             {
                 await foreach (var _ in watchdog.Watch(FramesThenStall(count: 3, pace: FastFramePace, stallAfter: true, ct: cts.Token), cts.Token))
@@ -78,13 +111,23 @@ public class FrameWatchdogTests
                     seen++;
                 }
             }).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
+            stopwatch.Stop();
 
             // The stall must be detected as a mid-stream gap, not confused
-            // with the first-frame case — the message (and this test)
-            // distinguish the two so a wrong branch can't hide behind a
-            // shared exception type.
+            // with the first-frame case. Three independent checks pin the
+            // branch, not just the outcome:
             Assert.Equal(3, seen);
             Assert.Contains("frames were flowing", exception.Message, StringComparison.OrdinalIgnoreCase);
+            // The message must name the *frame* timeout's own value, not
+            // just any number.
+            Assert.Contains($"{MidStreamFrameTimeout.TotalMilliseconds:F0} ms", exception.Message, StringComparison.OrdinalIgnoreCase);
+            // And it must have fired far sooner than the first-frame timer
+            // ever could — a bound two orders of magnitude below
+            // MidStreamFirstFrameTimeout, so this could not pass by
+            // accident if the wrong timer were driving it.
+            Assert.True(
+                stopwatch.Elapsed < MidStreamStallDetectionBound,
+                $"Expected the frame-timeout branch to fire within {MidStreamStallDetectionBound}, but it took {stopwatch.Elapsed} — closer to firstFrameTimeout ({MidStreamFirstFrameTimeout}) than frameTimeout ({MidStreamFrameTimeout}) suggests the wrong timer fired.");
         }
         finally
         {
