@@ -75,13 +75,15 @@ Log the discard reason for every rejected contour. Detection will find hands, sl
 
 The camera stays **landscape and unrotated** — `ScanSettings.CameraRotationDegrees` is **0** at composition time (the `ScanSettings` default itself stays 90°; this is a value set at composition, not a change to the frozen contract). C920 is 78° diagonal → HFOV 70.4°, VFOV 43.3° → **px/inch = 1360 / height_inches**.
 
-| Layout | Footprint | Geometric floor |
+| Layout | Footprint (across × deep) | Geometric floor |
 |---|---|---|
-| 1 card | 2.5″ × 3.5″ | 3.1″ |
-| 3 in a line | 2.5″ × 10.7″ | 7.6″ |
-| **3×3 grid, cards portrait** | 7.7″ × 10.7″ | **9.75″** ← binding |
+| 1 card | 3.5″ × 2.5″ | 3.1″ |
+| 3 in a line | 10.7″ × 2.5″ | 7.6″ |
+| **3×3 grid, cards rotated** | 10.7″ × 7.7″ | **9.75″** ← binding |
 
-That **9.75″ is a geometric floor, not an operating height**: a 3×3 laid out with its cards portrait first fits the landscape frame there with just **0.04″ of margin** — one millimetre, so a card leaves the frame if the mat shifts. The **operating height is 12″** (1.83″ of margin), and the accuracy sweep runs **12″ and 20″**.
+Each floor assumes the layout's long side runs across the frame — the 1920 axis — which is the arrangement the project uses throughout.
+
+That **9.75″ is a geometric floor, not an operating height**: a 3×3 laid out with its cards rotated first fits the landscape frame there with just **0.04″ of margin** — one millimetre, so a card leaves the frame if the mat shifts. The **operating height is 12″** (1.83″ of margin), and the accuracy sweep runs **12″ and 20″**.
 
 A 3×3 of portrait cards is far taller than wide while the sensor is 16:9, so laid out that way it costs 38% linear resolution in the wrong orientation — needing 13.5″ and yielding only 251×350 px. **The fix is to rotate the layout, not the camera**: the 3×3 grid is laid out with its cards **rotated**, long edge across the frame, giving it a 10.7″ × 7.7″ footprint that fits the landscape frame at 12″ with 1.83″ to spare, at **identical pixel resolution** — 283×397 px either way, since px/inch is the same on both axes. Rotating the layout substitutes for rotating the camera, so the camera mount stays landscape and unrotated for every layout; **the mount locks once** at 12″ (sweep also covers 20″), and 1/3/9 differ purely in software. The 3D printer's job is the adjustable camera mount (stand or gantry bracket) — nothing else.
 
