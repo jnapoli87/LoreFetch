@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using LoreFetch.App.ViewModels;
 using LoreFetch.Core.Abstractions;
@@ -73,6 +74,12 @@ public partial class MainWindow : Window
 
     private IScanPipeline? _pipeline;
 
+    // A8: collection view model — always non-null; initialised with empty state
+    // in the parameterless ctor, replaced with the session-wired instance in
+    // the session ctor. CollectionPanel.DataContext is set to this so bindings
+    // do not inherit the window's MainViewModel DataContext.
+    private CollectionViewModel _collectionVm;
+
     // A7: cancelled in OnClosed to signal any in-flight CaptureAsync or
     // CommitCohortAsync that the window is shutting down.
     private readonly CancellationTokenSource _cts = new();
@@ -92,6 +99,13 @@ public partial class MainWindow : Window
             state: null,
             dueTime: Timeout.Infinite,
             period: Timeout.Infinite);
+
+        // A8: initialise with an empty collection VM so CollectionPanel
+        // has a non-null DataContext even before a session is set (e.g.
+        // the XAML previewer). Prevents DataContext inheritance from the
+        // window's MainViewModel, which does not have Rows / ExporterItems.
+        _collectionVm = new CollectionViewModel();
+        CollectionPanel.DataContext = _collectionVm;
     }
 
     public MainWindow(AppSession session)
@@ -121,6 +135,12 @@ public partial class MainWindow : Window
         // A7: pass the store so the commit path has something to write to.
         DataContext = new MainViewModel(session.Settings, session.Catalog, session.Store);
 
+        // A8: replace the empty-state collection VM with one wired to the
+        // session's store and exporter list. Keeps CollectionPanel.DataContext
+        // separate from the window's DataContext (which is MainViewModel).
+        _collectionVm = new CollectionViewModel(session.Store, session.Exporters);
+        CollectionPanel.DataContext = _collectionVm;
+
         // A7: window-level tunnel handler for Space/Enter/Escape. Must use
         // RoutingStrategies.Tunnel explicitly — AddHandler's default is
         // Direct|Bubble, which would miss the tunnel pass (stream-a-ui.md
@@ -149,6 +169,94 @@ public partial class MainWindow : Window
         // ObjectDisposedException on token access.
         _cts.Cancel();
         _cts.Dispose();
+    }
+
+    // -----------------------------------------------------------------------
+    // A8: Collection refresh and export handlers
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// "Refresh" button click — reloads the collection rows from the store.
+    /// </summary>
+    private void OnRefreshCollectionClick(object? sender, RoutedEventArgs e)
+    {
+        _ = RefreshCollectionAsync();
+    }
+
+    private async Task RefreshCollectionAsync()
+    {
+        try
+        {
+            // LoadAsync is awaited on the UI thread so its continuation
+            // (ObservableCollection mutations) stays on the UI thread.
+            await _collectionVm.LoadAsync(_cts.Token);
+        }
+        catch (CollectionStoreException)
+        {
+            // A8 happy-path: just don't crash. A9 adds the retry banner.
+        }
+        catch (OperationCanceledException)
+        {
+            // Window closing while refresh was in flight — ignore.
+        }
+    }
+
+    /// <summary>
+    /// "Export…" button click — opens a save-file dialog and writes the
+    /// collection via the selected exporter. The dialog supplies the stream;
+    /// the actual write is delegated to
+    /// <see cref="CollectionViewModel.ExportToStreamAsync"/> so tests can
+    /// call that method directly with a <see cref="MemoryStream"/>.
+    /// </summary>
+    private void OnExportClick(object? sender, RoutedEventArgs e)
+    {
+        if (ExporterList.SelectedItem is not ExporterItem item) return;
+        _ = ExportAsync(item.Exporter);
+    }
+
+    private async Task ExportAsync(ICollectionExporter exporter)
+    {
+        var topLevel = GetTopLevel(this);
+        if (topLevel is null) return;
+
+        IStorageFile? file;
+        try
+        {
+            file = await topLevel.StorageProvider.SaveFilePickerAsync(
+                new FilePickerSaveOptions
+                {
+                    SuggestedFileName = "collection",
+                    DefaultExtension = exporter.Format.FileExtension.TrimStart('.'),
+                    FileTypeChoices =
+                    [
+                        new FilePickerFileType(exporter.Format.DisplayName)
+                        {
+                            Patterns = ["*" + exporter.Format.FileExtension]
+                        }
+                    ]
+                });
+        }
+        catch (OperationCanceledException) { return; }
+
+        if (file is null) return;
+
+        try
+        {
+            await using var stream = await file.OpenWriteAsync().ConfigureAwait(false);
+            await _collectionVm.ExportToStreamAsync(exporter, stream, _cts.Token).ConfigureAwait(false);
+        }
+        catch (CollectionStoreException)
+        {
+            // A8 happy-path: just don't crash. A9 adds the error banner.
+        }
+        catch (OperationCanceledException)
+        {
+            // Window closing during export — ignore.
+        }
+        catch (IOException)
+        {
+            // Disk write error — A8 happy-path, ignore; A9 adds error UX.
+        }
     }
 
     /// Raised on the pipeline's background thread for every processed frame

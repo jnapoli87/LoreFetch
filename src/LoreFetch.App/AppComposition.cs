@@ -45,6 +45,11 @@ public sealed class AppSession : IAsyncDisposable
     /// constructors continue to compile without change. When null,
     /// <c>MainViewModel.CommitCohortAsync</c> is a no-op.
     /// </param>
+    /// <param name="exporters">
+    /// Registered collection exporters for the A8 export picker. Optional so
+    /// that existing test constructors continue to compile without change. When
+    /// null or empty, the export picker shows nothing.
+    /// </param>
     /// <param name="onDisposed">Optional cleanup action run after the frame source is closed.</param>
     public AppSession(
         IScanPipeline pipeline,
@@ -53,6 +58,7 @@ public sealed class AppSession : IAsyncDisposable
         ScanSettings settings,
         IOracleCatalog? catalog = null,
         ICollectionStore? store = null,
+        IReadOnlyList<ICollectionExporter>? exporters = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -66,6 +72,7 @@ public sealed class AppSession : IAsyncDisposable
         Settings = settings;
         Catalog = catalog;
         Store = store;
+        Exporters = exporters;
         _onDisposed = onDisposed;
     }
 
@@ -107,6 +114,13 @@ public sealed class AppSession : IAsyncDisposable
     /// <c>CommitCohortAsync</c> is a no-op.
     /// </summary>
     public ICollectionStore? Store { get; }
+
+    /// <summary>
+    /// The registered collection exporters for the A8 export picker. May be
+    /// null or empty when composition does not supply any. <c>MainWindow</c>
+    /// passes this to <see cref="LoreFetch.App.ViewModels.CollectionViewModel"/>.
+    /// </summary>
+    public IReadOnlyList<ICollectionExporter>? Exporters { get; }
 
     /// Disposes the pipeline (which cancels and drains its loop), awaits the
     /// run task, then disposes the frame source itself — only at that point
@@ -201,6 +215,26 @@ public static class AppComposition
         // exists. Stream D replaces this with the real implementation.
         ICollectionStore store = new StubCollectionStore();
 
+        // A8: two stub exporters — one verified, one deliberately unverified —
+        // so the export picker's IsVerified badge is exercised end-to-end.
+        // The real exporters (native and third-party adapters) live on stream D
+        // and are wired at integration, NOT here. The UI must never name them.
+        IReadOnlyList<ICollectionExporter> exporters =
+        [
+            new StubCollectionExporter(new ExportFormat(
+                "stub-a",
+                "Stub Verified Export",
+                ".txt",
+                IsVerified: true,
+                Notes: null)),
+            new StubCollectionExporter(new ExportFormat(
+                "stub-b",
+                "Stub Unverified Export",
+                ".txt",
+                IsVerified: false,
+                Notes: "Not yet tested with a live tool.")),
+        ];
+
         // Best-effort cleanup of the temp folder DemoFrames created, run
         // from AppSession.DisposeAsync only after the frame source itself
         // (and therefore its decode loop) has stopped. Orchestrator review
@@ -222,6 +256,7 @@ public static class AppComposition
             ct,
             catalog: catalog,
             store: store,
+            exporters: exporters,
             onDisposed: onDisposed);
     }
 
@@ -307,6 +342,7 @@ public static class AppComposition
         CancellationToken ct,
         IOracleCatalog? catalog = null,
         ICollectionStore? store = null,
+        IReadOnlyList<ICollectionExporter>? exporters = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(frameSourceFactory);
@@ -322,7 +358,7 @@ public static class AppComposition
         var runTask = pipeline.RunAsync(ct);
 
         return new AppSession(pipeline, source, runTask, settings,
-            catalog: catalog, store: store, onDisposed: onDisposed);
+            catalog: catalog, store: store, exporters: exporters, onDisposed: onDisposed);
     }
 
     // A4: image extensions that FolderFrameSource can decode. Must stay in

@@ -54,6 +54,158 @@
     </Border>
 
     <!--
+      A8: Collection DataGrid and export picker.
+      DataContext is set in code-behind to a CollectionViewModel.
+      Docked Bottom BEFORE the scan Grid so the scan area fills remaining space.
+
+      Layout:
+        Row 0 — header bar: "Collection" label, Refresh button
+        Row 1 — split: DataGrid (left) | export sidebar (right)
+
+      The export sidebar shows a ListBox (not a ComboBox) so all items are
+      always instantiated in the visual tree — which lets the visual-tree test
+      confirm the "unverified" badge without opening a dropdown.
+
+      CollectionGrid is named so visual-tree tests can find it directly.
+      ExporterList is named so code-behind reads SelectedItem on export.
+    -->
+    <Grid DockPanel.Dock="Bottom"
+          RowDefinitions="Auto, 165"
+          x:Name="CollectionPanel"
+          x:DataType="vm:CollectionViewModel">
+
+      <!-- Row 0: collection header -->
+      <Border Grid.Row="0"
+              Background="#252525"
+              Padding="8,4"
+              BorderBrush="#3A3A3A"
+              BorderThickness="0,1,0,0">
+        <DockPanel>
+          <Button DockPanel.Dock="Right"
+                  Content="Refresh"
+                  Click="OnRefreshCollectionClick"
+                  Margin="0,0,4,0" />
+          <TextBlock Text="Collection"
+                     Foreground="#AAAAAA"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <!-- Row 1: DataGrid + export sidebar -->
+      <Grid Grid.Row="1" ColumnDefinitions="*, 210">
+
+        <!--
+          Column 0: DataGrid over ICollectionStore rows.
+          CanUserSortColumns="True" — DataGrid sorts natively when the column
+          header is clicked; no custom sort comparer needed for simple fields.
+          IsReadOnly="True" — v1 never edits rows through the UI.
+        -->
+        <DataGrid x:Name="CollectionGrid"
+                  Grid.Column="0"
+                  ItemsSource="{Binding Rows}"
+                  Background="#181818"
+                  RowBackground="#181818"
+                  CanUserSortColumns="True"
+                  CanUserReorderColumns="False"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Name"
+                                Binding="{Binding OracleName}"
+                                Width="*"
+                                SortMemberPath="OracleName" />
+            <DataGridTextColumn Header="Qty"
+                                Binding="{Binding Quantity}"
+                                Width="45"
+                                SortMemberPath="Quantity" />
+            <DataGridTextColumn Header="Condition"
+                                Binding="{Binding Condition}"
+                                Width="78"
+                                SortMemberPath="Condition" />
+            <DataGridTextColumn Header="Source"
+                                Binding="{Binding Source}"
+                                Width="66"
+                                SortMemberPath="Source" />
+            <DataGridTextColumn Header="Dist"
+                                Binding="{Binding BestMatchDistance}"
+                                Width="50"
+                                SortMemberPath="BestMatchDistance" />
+            <DataGridTextColumn Header="Last Scanned"
+                                Binding="{Binding LastScannedAt}"
+                                Width="148"
+                                SortMemberPath="LastScannedAt" />
+          </DataGrid.Columns>
+        </DataGrid>
+
+        <!--
+          Column 1: export picker sidebar.
+          ExporterList shows one row per ICollectionExporter with a
+          visible "unverified" badge on any whose IsVerified is false.
+          The badge is a Border whose IsVisible is bound to IsUnverified so
+          the visual-tree test can find it by walking the tree.
+          No per-format code exists here — the UI iterates ExporterItems
+          generically and never names any concrete exporter or format.
+        -->
+        <DockPanel Grid.Column="1"
+                   Background="#202020"
+                   LastChildFill="True">
+
+          <!-- Export button anchored to the bottom -->
+          <Button DockPanel.Dock="Bottom"
+                  Content="Export…"
+                  Click="OnExportClick"
+                  HorizontalAlignment="Stretch"
+                  Margin="8,4" />
+
+          <!-- "Export Format" label at the top -->
+          <TextBlock DockPanel.Dock="Top"
+                     Text="Export Format"
+                     Foreground="#888888"
+                     FontSize="10"
+                     Margin="8,6,8,2" />
+
+          <!--
+            ListBox (not ComboBox): all items are in the visual tree at all
+            times, so the test can confirm the "unverified" badge without
+            needing to open a dropdown.
+          -->
+          <ListBox x:Name="ExporterList"
+                   ItemsSource="{Binding ExporterItems}"
+                   SelectionMode="Single"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ExporterItem">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding DisplayName}"
+                             Foreground="#CCCCCC"
+                             FontSize="11"
+                             VerticalAlignment="Center" />
+                  <!--
+                    Unverified badge: IsVisible is bound to IsUnverified on the
+                    Border itself so the visual-tree test can filter on Border.IsVisible
+                    (the TextBlock child does NOT duplicate the binding — searching
+                    for the Border is more specific and unambiguous).
+                  -->
+                  <Border Background="#883333"
+                          CornerRadius="2"
+                          Padding="3,1"
+                          IsVisible="{Binding IsUnverified}"
+                          VerticalAlignment="Center">
+                    <TextBlock Text="unverified"
+                               Foreground="White"
+                               FontSize="9" />
+                  </Border>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+        </DockPanel>
+      </Grid>
+    </Grid>
+
+    <!--
       Main content: live preview on the left, cohort grid on the right.
 
       A2: ONE WriteableBitmap, allocated and mutated by MainWindow.axaml.cs
