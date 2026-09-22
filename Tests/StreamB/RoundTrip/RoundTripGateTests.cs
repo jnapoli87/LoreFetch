@@ -197,15 +197,61 @@ public class RoundTripGateTests
     /// parameter with that as the default, never a hardcoded constant"),
     /// overridable via `LOREFETCH_SCRYFALL_CACHE` for a machine whose
     /// cache lives somewhere else.
-    internal static string ResolveCacheDir()
+    ///
+    /// Resolution order:
+    /// 1. `$LOREFETCH_SCRYFALL_CACHE`, when set and non-blank -- an
+    ///    explicit override always wins, wherever it points.
+    /// 2. `~/LoreFetchData/scryfall-cache`, if that directory already
+    ///    exists -- the Mac-shaped path, and also the Windows path when a
+    ///    cache happens to live under the profile there.
+    /// 3. On Windows only, `C:\LoreFetchData\scryfall-cache`, if that
+    ///    directory exists -- the plan's documented Windows location, so
+    ///    the Windows PC finds its cache without ever setting the env var.
+    /// 4. Otherwise, the home path from step 2, even though it does not
+    ///    exist -- so a skip message still names a sensible place rather
+    ///    than silently picking whichever candidate happened to be tried
+    ///    last.
+    internal static string ResolveCacheDir() =>
+        ResolveCacheDir(
+            Environment.GetEnvironmentVariable,
+            Directory.Exists,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            OperatingSystem.IsWindows());
+
+    /// Testable overload: `getEnvironmentVariable` and `directoryExists`
+    /// are the two points of contact with real machine state, `home` and
+    /// `isWindows` are what would otherwise come from `Environment`/
+    /// `OperatingSystem`. See the resolution order documented on the
+    /// public-facing overload above -- this is the one function that
+    /// implements it; the parameterless overload is only the entry point
+    /// callers use.
+    internal static string ResolveCacheDir(
+        Func<string, string?> getEnvironmentVariable,
+        Func<string, bool> directoryExists,
+        string home,
+        bool isWindows)
     {
-        var overridePath = Environment.GetEnvironmentVariable("LOREFETCH_SCRYFALL_CACHE");
+        var overridePath = getEnvironmentVariable("LOREFETCH_SCRYFALL_CACHE");
         if (!string.IsNullOrWhiteSpace(overridePath))
         {
             return overridePath;
         }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(home, "LoreFetchData", "scryfall-cache");
+        var homeCandidate = Path.Combine(home, "LoreFetchData", "scryfall-cache");
+        if (directoryExists(homeCandidate))
+        {
+            return homeCandidate;
+        }
+
+        if (isWindows)
+        {
+            var windowsCandidate = Path.Combine("C:" + Path.DirectorySeparatorChar, "LoreFetchData", "scryfall-cache");
+            if (directoryExists(windowsCandidate))
+            {
+                return windowsCandidate;
+            }
+        }
+
+        return homeCandidate;
     }
 }
