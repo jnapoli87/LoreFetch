@@ -508,7 +508,7 @@ Global overrides for every A brief:
   - copy inside the `FrameProcessed` handler
 
   Accept: unit tests for the pure `PixelConvert` function (BGR24/BGRA32 with padded strides).
-- [ ] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry.
+- [x] **A3** Quad overlay: vector children over the `Image`, and a pure frame→control transform that handles `Uniform` letterboxing. Accept: transform unit tests with rotated (1080×1920) geometry. — *done 2026-09-21, `stream/a` `8d2c30c`. A pure `FrameToControlTransform` (scale = min, centred offsets) and `Polygon` children on a hit-test-invisible canvas. Independent chaos: swapping the X/Y offsets fails all 3 transform tests. **The smoke launch caught a crash no unit test could:** `RequestAnimationFrame` was called from the pipeline thread and asserts UI-thread access; the call is now marshalled through `Dispatcher.UIThread.Post`.*
 - [ ] **A4** ∥ Expected-count selector (1, 3 or 9) and an auto-capture toggle, both written through a view model to `ScanSettings`.
 - [ ] **A5** Cohort grid: a tile view model wraps `CohortTile` and raises INPC. It has the four state visuals plus a low-confidence highlight. Accept: view-model unit tests for each state.
 - [ ] **A6** Tile interactions: left-click calls `ToggleExcluded`, and the context menu offers `SetManually` and `Clear`. The type-ahead uses these `AutoCompleteBox` settings:
