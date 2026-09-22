@@ -418,6 +418,20 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the Mac A/D session, 2026-09-22
+
+**Newest handoff; the ones below still apply.** Covers the Mac's lanes only (A, C3, D). The B/PC handoffs below remain the truth for their lanes. Checkboxes and their per-item notes are authoritative.
+
+**State — the Mac's entire workload is complete.** A4, A5, A6, A7 (+ the retain-on-lock test), A8, A9 are ticked; C3 is ticked; D4, D5 (real Moxfield import verified) and D6 are ticked. `stream/a` is rebased onto `origin/stream/a` (`9e4c228`) with A4–A9 replayed on top (tip `ac55852` pre-rebase), **ahead 8 / behind 0 — a clean fast-forward**, clean worktree. StreamA is **106 passed / 0 failed** (2 `WindowsOnly` screenshot tests excluded on macOS), Integration **143 passed / 8 skipped**. Each A package was verified independently (scope, build, both suites, smoke-launch, `grep -ri moxfield src/LoreFetch.App` empty) plus one un-briefed chaos case — which found and closed a real gap in A7 (retain-cohort-on-`CollectionStoreException` was untested; `97615f3` covers it).
+
+**Push status.** `stream/c` (`7bf2632`) and `stream/d` (`fb24715`) were pushed earlier this session; the PC has since **merged `stream/c` to `main`** (Stream C complete — C2 + C4 hardware-verified on the C920). `stream/a` and the A5–A9 `main` ticks are pushed at session end **with the user's approval**.
+
+**Next for the PC (A lane):** **A10** 🧭👤 — the done-when hardware run on `stream/a`: all three layouts, a keyboard-only loop, all four tile states reached (two via configured `StubCardIdentifier` distances, two via user action), memory flat for 5 min under `dotnet-counters`; record fps + memory, then write **README §A**. **A10 is A's merge gate → P2.** Everything A needs is on `stream/a`; it depends on nothing from B or D. C4 is already done. B continues per its own handoff (B7 → B2 → B5c → B6 → B8).
+
+**Adjacent finds.**
+1. 9 pre-existing `xUnit1051` analyzer warnings in `Tests/StreamA/TileInteractionTests.cs` (A6) — non-blocking; the repo already treats `xUnit1051` as worth fixing (see C1a). A cheap cleanup when A is next touched.
+2. The named-chaos escape-valve earned its place again: A7's brief-named chaos all failed correctly, but the *un-briefed* case is what surfaced the retain-on-lock coverage gap. Same lesson as the B session's finding #4.
+
 ### Handoff — end of the B4–B5b session, 2026-09-22, Windows PC
 
 **Read this first; the older handoffs below still apply.** The checkboxes and their notes are the truth. This section adds only what is not recorded against an item.
