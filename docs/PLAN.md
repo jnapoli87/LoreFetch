@@ -171,6 +171,56 @@ A recorded demo is a deliverable, not an afterthought. App footage from `FolderF
 
 ---
 
+## Stretch goals · after v0.1.0
+
+v0.1.0 ships with modern-frame English cards (single-faced, non-foil), captures of 1, 3 or 9 cards with auto-capture, the opt-out grid, CSV and Moxfield export, and a fully offline `win-x64` exe. Everything below comes after that. The list is ordered by how likely each item is to make it in.
+
+| Stretch | What it needs |
+|---|---|
+| **"Worth sleeving" flag** | Detailed below. It needs a price column in the index, but not printing detection, which is why it's first. |
+| "Update card data" in the app | New sets need a new index. The Lab can already build one (`bulk` → `images` → `build-index`), but it's a developer tool that isn't shipped. Ship it with the app, or add the command to the app, so the index is always built by the same hashing code the app runs. The lighter alternative: publish just a new `cards.lfidx` per set, if the app loads the index from a file and rejects one built by a different hashing version. |
+| Foils | Polarized or diffuse light. Glare defeats the hash (Risk 6). |
+| Set and printing | OCR of the collector line and a lower mount (the v2 path under *Identification*). This unlocks exact prices, ManaBox and other export targets that need a set. |
+| Double-faced cards | Per-face images. The 3,440 objects without a top-level `image_uris` are skipped today. |
+| Supported macOS release | `Info.plist` camera entitlements, a `.app` bundle, Gatekeeper instructions, and testing with a Mac camera (see *Platform*). |
+| 3D printed mount | It was pushed back, so v0.1.0 runs on a hand-built PVC gantry. The gantry is deliberately tall: it sees a whole game board, like a SpellTable overhead camera. Extra height is built in and can come down after v1. |
+
+### "Worth sleeving" flag
+
+**Goal:** flag a card at capture time when it's worth pulling out of the bulk box even if it isn't near-mint.
+
+**The constraint:** LoreFetch doesn't know the printing, so it can't know *the* price. That's why v1 has no price column. The flag works around this with a **price floor**:
+
+- At index-build time, record the **lowest** Scryfall `prices.usd` across the printings that share the matched `ArtworkId`. The hash already resolves to the artwork, which narrows the candidates more than the oracle name alone.
+- Flag the card when even that floor clears the threshold. The flag then has **no false positives**: whatever printing is really on the table is worth at least the floor. It will miss some cards, such as an expensive printing that shares art with a cheap one. That's accepted.
+- Printings with a null `prices.usd` are left out of the floor. If every printing is null, there's no flag.
+- Prices are a snapshot from the day the index was built, so the UI says "worth checking", never a dollar figure.
+
+**Thresholds (a starting point, not researched):**
+
+| Tier | Price floor | Meaning |
+|---|---|---|
+| Sleeve it | **≥ $2** | Worth pulling out of the bulk box |
+| Protect it | **≥ $10** | Sleeve and toploader, and check the printing by hand |
+
+$2 is set so that a played copy should still be worth about $1 or more. Both tiers are configuration, not constants. Where that configuration lives is an open question: `thresholds.json` currently belongs to stream B.
+
+**Audience: card shops sorting bulk.** Shops buy bulk by the thousands of cards, and picking out what's valuable is slow work by hand. The flag's job is *"this one's a banger, whatever its condition, so set it aside"*. The no-false-positive design matters most here: a flagged card is always worth pulling. Full shop inventory is further off, because it needs the printing (see *Set and printing*) and a condition for each card.
+
+**It lowers the expertise needed, so design for someone who can't check its work.** The strongest user may be shop staff who know Pokémon or Yu-Gi-Oh but not Magic. What's valuable in Magic isn't obvious from rarity or age, so the flag supplies knowledge that person doesn't have. They also can't sanity-check the tool, so three rules apply:
+
+1. **No flag doesn't mean worthless.** The floor design misses some cards, such as an expensive printing that shares art with a cheap one. The UI says "flagged: pull it", never "unflagged: bulk".
+2. **A flag on a low-confidence match says "check this one".** An expert spots a wrong match. A newcomer won't, so the low-confidence highlight has to override the flag's certainty.
+3. **Show how old the prices are.** A price spike after the index was built is never flagged, and a newcomer can't know that. Rebuild the index regularly.
+
+The same approach could help other card games, but that's speculative. The hash doesn't depend on the game, but each game needs its own reference index and its own hash region: the top 61% is tuned to Magic's layout.
+
+**Condition is planned as recorded data, not a camera grade.** v1 leaves `Condition` blank, because the camera can't grade a card. The future plan is to capture condition as part of recording the card, entered by a person when the card is recorded. The flag doesn't depend on it, because the price floor is chosen so that a played copy still clears the bar.
+
+**Cost:** the index gains one price column per artwork, so its format changes and the index has to be rebuilt. The native CSV could take a `PriceFloorUsd` column too, since the reader already fails loudly on unknown columns. That's a format-version change, and it needs deciding, not just adding.
+
+---
+
 ## Cross-stream risks
 
 Stream-specific risks live in each stream doc. These span the whole build:
