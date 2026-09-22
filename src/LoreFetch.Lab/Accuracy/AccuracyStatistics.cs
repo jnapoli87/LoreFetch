@@ -1,12 +1,14 @@
 namespace LoreFetch.Lab.Accuracy;
 
 /// One row of the per-(height, rung) breakdown table -- correct@1/wrong@1/
-/// no-match, broken further into `Unresolved` vs `DroppedFrame` (see
-/// `SlotOutcome`'s own doc comment for why those stay distinguishable while
-/// both count as "no-match" for the required 100% sum).
-public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved, int DroppedFrame)
+/// no-match, broken further into `Unresolved` vs `NoDetection` vs
+/// `DroppedFrame` (see `SlotOutcome`'s own doc comment for why those stay
+/// distinguishable while all three count as "no-match" for the required
+/// 100% sum). `NoDetection` defaults to 0 so existing call sites built
+/// before grid inference (this package's Task 2) keep compiling unchanged.
+public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved, int DroppedFrame, int NoDetection = 0)
 {
-    public int NoMatch => Unresolved + DroppedFrame;
+    public int NoMatch => Unresolved + DroppedFrame + NoDetection;
 
     public int Total => Correct + Wrong + NoMatch;
 
@@ -23,13 +25,14 @@ public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved
     /// chaos-test note in `AccuracyStatisticsTests`.
     public void AssertBucketsSumToTotal(int expectedTotal)
     {
-        var sum = Correct + Wrong + Unresolved + DroppedFrame;
+        var sum = Correct + Wrong + Unresolved + DroppedFrame + NoDetection;
         if (sum != expectedTotal)
         {
             throw new InvalidOperationException(
                 $"AccuracyBucketCounts: buckets sum to {sum} slot(s) but {expectedTotal} were classified -- " +
-                $"correct={Correct}, wrong={Wrong}, unresolved={Unresolved}, droppedFrame={DroppedFrame}. " +
-                "The three reported buckets (correct/wrong/no-match) must account for every classified slot.");
+                $"correct={Correct}, wrong={Wrong}, unresolved={Unresolved}, noDetection={NoDetection}, " +
+                $"droppedFrame={DroppedFrame}. The three reported buckets (correct/wrong/no-match) must " +
+                "account for every classified slot.");
         }
     }
 
@@ -38,6 +41,7 @@ public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved
         var correct = 0;
         var wrong = 0;
         var unresolved = 0;
+        var noDetection = 0;
         var dropped = 0;
 
         foreach (var r in results)
@@ -47,12 +51,13 @@ public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved
                 case SlotOutcome.Correct: correct++; break;
                 case SlotOutcome.Wrong: wrong++; break;
                 case SlotOutcome.Unresolved: unresolved++; break;
+                case SlotOutcome.NoDetection: noDetection++; break;
                 case SlotOutcome.DroppedFrame: dropped++; break;
                 default: throw new ArgumentOutOfRangeException(nameof(results), r.Outcome, "Unknown SlotOutcome.");
             }
         }
 
-        return new AccuracyBucketCounts(correct, wrong, unresolved, dropped);
+        return new AccuracyBucketCounts(correct, wrong, unresolved, dropped, noDetection);
     }
 }
 

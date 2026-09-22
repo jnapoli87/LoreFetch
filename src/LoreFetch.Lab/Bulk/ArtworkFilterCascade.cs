@@ -27,11 +27,12 @@ public static class ArtworkFilterCascade
     public const string HasImageUrisStepName = "has image_uris.normal";
     public const string LayoutStepName = "drop excluded layouts";
     public const string SetTypeStepName = "drop excluded set_types";
+    public const string DigitalOnlyStepName = "drop digital-only (Alchemy/Arena/MTGO) cards";
 
     public static ArtworkCascadeResult Run(IEnumerable<RawArtwork> records)
     {
         var all = ToList(records);
-        var steps = new List<CascadeStepResult>(6) { Measure(RawStepName, all) };
+        var steps = new List<CascadeStepResult>(7) { Measure(RawStepName, all) };
 
         var afterImageStatus = all
             .Where(a => a.ImageStatus != "placeholder" && a.ImageStatus != "missing")
@@ -59,12 +60,22 @@ public static class ArtworkFilterCascade
             .ToList();
         steps.Add(Measure(SetTypeStepName, afterSetType));
 
+        // Digital-only objects (Alchemy rebalances, and any other
+        // Arena-/MTGO-only printing) share artwork with their paper twin
+        // (or, for an Arena-original card, simply can never appear on a
+        // physical table) -- either way the hash can never legitimately
+        // retrieve one for a scanned card, only produce a confident wrong
+        // answer (CLAUDE.md Risk 5). `Digital` is Scryfall's own flag for
+        // this, not a name-prefix heuristic -- see RawArtwork.Digital.
+        var afterDigital = afterSetType.Where(a => !a.Digital).ToList();
+        steps.Add(Measure(DigitalOnlyStepName, afterDigital));
+
         // Informational only -- NOT applied. Reported so a reader can see
         // what the stated "modern frame" scope would additionally cost,
         // without the cascade actually dropping those arts.
-        var frame2015Count = afterSetType.Count(a => a.Frame == "2015");
+        var frame2015Count = afterDigital.Count(a => a.Frame == "2015");
 
-        return new ArtworkCascadeResult(steps, skippedNoImageUris, afterSetType, frame2015Count);
+        return new ArtworkCascadeResult(steps, skippedNoImageUris, afterDigital, frame2015Count);
     }
 
     private static CascadeStepResult Measure(string name, IReadOnlyList<RawArtwork> items) => new(

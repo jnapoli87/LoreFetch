@@ -151,6 +151,75 @@ public class AccuracyHarnessSyntheticTests
         }
     }
 
+    /// Task 2 (orchestration-plan.md) end to end through the REAL detector:
+    /// a 3x3 frame with a card PHYSICALLY missing from one cell (not just a
+    /// ground-truth mismatch) -- the closest synthetic reproduction of the
+    /// real corpus's own dominant failure mode (most `a_corpus` frames find
+    /// 8 of 9 -- see docs/accuracy.md). Grid inference must classify the 8
+    /// present cards normally and mark the empty cell `NoDetection`, not
+    /// drop the whole frame the way pre-Task-2 `TryMapToSlots` would have.
+    [Fact]
+    public void Run_EightOfNinePhysicallyPresent_ClassifiesEightAndMarksTheEmptyCellNoDetection()
+    {
+        var cards = Enumerable.Range(0, 9)
+            .Select(i => MakeProceduralCard(seed: 20 + i, $"art-e2e-{i}", $"oracle-e2e-{i}", $"Grid Card {i}"))
+            .ToList();
+
+        try
+        {
+            var index = BuildIndex(cards.ToArray());
+            var identifier = new HashCardIdentifier(index);
+
+            var (allSources, allCenters) = GridOf(cards);
+            // Physically omit the CENTER card (index 4) from the composited
+            // frame -- everything else about the layout (positions,
+            // options) is identical to the full 9-card test above.
+            var sources = allSources.Where((_, i) => i != 4).ToArray();
+            var centers = allCenters.Where((_, i) => i != 4).ToArray();
+
+            var options = new MultiCardFrameOptions { FrameWidth = 1920, FrameHeight = 1400 };
+            using var frame = MultiCardFrameGenerator.Generate(sources, centers, heightInches: 15f, options);
+
+            var detector = new ContourCardDetector(NullLogger<ContourCardDetector>.Instance);
+            var detected = detector.Detect(frame, maxCards: 9);
+            Assert.Equal(8, detected.Count); // only 8 physically exist
+
+            var rows = BuildGroundTruthFrame(layout: 9, ("f.png", 15), cards.Select(c => c.OracleName).ToArray());
+            var resolved = GroundTruthOracleLookup.Resolve(index, rows);
+            var groundTruthFrame = GroundTruthFrame.GroupByFile(resolved).Single();
+
+            var rectifier = new PerspectiveRectifier();
+            var results = AccuracyFrameRunner.Run(groundTruthFrame, frame, detector, rectifier, identifier, AccuracyHarnessOptions.Default);
+
+            Assert.Equal(9, results.Count); // one per ground-truth slot -- the missing one is NOT dropped from the list
+            Assert.Equal(SlotOutcome.NoDetection, results[4].Outcome); // slot 5 = grid center = the omitted card
+            Assert.Null(results[4].Rank1OracleId);
+
+            for (var i = 0; i < 9; i++)
+            {
+                if (i == 4)
+                {
+                    continue;
+                }
+
+                Assert.Equal(SlotOutcome.Correct, results[i].Outcome);
+            }
+
+            var stats = AccuracyStatistics.From(results);
+            Assert.Equal(9, stats.Headline.Total); // every slot accounted for -- the required 100% sum
+            Assert.Equal(8, stats.Headline.Correct);
+            Assert.Equal(1, stats.Headline.NoDetection);
+            Assert.Equal(0, stats.Headline.DroppedFrame); // NOT dropped -- this is Task 2's whole point
+        }
+        finally
+        {
+            foreach (var card in cards)
+            {
+                card.Bgr.Dispose();
+            }
+        }
+    }
+
     /// **The single highest-value test in the package** (H3 note block),
     /// run end to end through the REAL detector: a frame that physically
     /// contains 3 cards, but whose ground-truth layout claims 4 slots (the

@@ -20,15 +20,26 @@ public static class AccuracyFrameRunner
     /// auto-capture's "expected count" (CLAUDE.md "Interaction"). One
     /// consequence, worth stating explicitly: `ICardDetector.Detect`'s own
     /// contract is "at most maxCards", so `detected.Count` can NEVER
-    /// exceed `frame.Layout` through this call -- a count mismatch
-    /// reachable from real usage is therefore always under-detection
-    /// (fewer found than expected), never over-detection above it, which
-    /// matches B5a's own real-capture evidence (a sleeved card went
-    /// undetected; nothing false-positived an extra card into an
-    /// already-full count). `SlotMapper.TryMapToSlots` still refuses an
-    /// over-count defensively as a property of its own general contract
-    /// (see its own tests), even though this call site can never produce
-    /// one.
+    /// exceed `frame.Layout` through this call -- an under-count reachable
+    /// from real usage is always under-detection (fewer found than
+    /// expected), never over-detection above it, matching B5a's own
+    /// real-capture evidence (a sleeved card went undetected; nothing
+    /// false-positived an extra card into an already-full count).
+    /// `SlotMapper.TryInferGrid` still refuses an over-count defensively as
+    /// a property of its own general contract (see its own tests), even
+    /// though this call site can never produce one.
+    ///
+    /// Slot assignment is GRID-INFERRED (`SlotMapper.TryInferGrid`), not a
+    /// strict "detected count == layout" requirement -- an under-detected
+    /// 3x3 frame (measured on the real corpus: most frames find 8 of 9,
+    /// only two find all 9 -- see docs/accuracy.md) still classifies its
+    /// other cells instead of the whole frame being dropped. A cell with
+    /// no detected quad becomes `SlotOutcome.NoDetection` for that slot
+    /// specifically -- `Identify` is never called for it, since there is
+    /// nothing to rectify. Only when the grid itself cannot be confidently
+    /// inferred at all (zero detections, an ambiguous/colliding layout --
+    /// see `TryInferGrid`'s own doc comment) does the ENTIRE frame fall
+    /// back to `DroppedFrame`, the pre-grid-inference behaviour.
     public static IReadOnlyList<SlotAccuracyResult> Run(
         GroundTruthFrame frame,
         CameraFrame cameraFrame,
@@ -45,13 +56,16 @@ public static class AccuracyFrameRunner
         ArgumentNullException.ThrowIfNull(options);
 
         var detected = detector.Detect(cameraFrame, frame.Layout);
+        var (rows, cols) = SlotMapper.GridDimensionsForLayout(frame.Layout);
 
-        if (!SlotMapper.TryMapToSlots(detected, frame.Layout, out var orderedBySlot))
+        if (!SlotMapper.TryInferGrid(detected, rows, cols, out var cellsBySlot))
         {
-            // Requirement B: a count mismatch is never paired by position.
-            // Every slot in this frame is accounted for as DroppedFrame --
-            // none are silently skipped, and none are misassigned to a
-            // detected quad that does not correspond to them.
+            // The grid itself could not be confidently inferred (0
+            // detections, more detections than cells, or an ambiguous/
+            // colliding row-or-column structure) -- every slot in this
+            // frame is accounted for as DroppedFrame -- none are silently
+            // skipped, and none are misassigned to a detected quad that
+            // does not correspond to them.
             return frame.Slots
                 .Select(slot => new SlotAccuracyResult(
                     slot, SlotOutcome.DroppedFrame, Rank1Distance: null, Rank1OracleId: null,
@@ -63,9 +77,20 @@ public static class AccuracyFrameRunner
         for (var i = 0; i < frame.Slots.Count; i++)
         {
             var slot = frame.Slots[i];
-            var quad = orderedBySlot![i];
+            var quad = cellsBySlot![i];
 
-            var card = rectifier.Rectify(cameraFrame, quad);
+            if (quad is null)
+            {
+                // The grid placed this slot at a specific cell, but no
+                // detected quad landed there -- a detection gap, not an
+                // identification one. `Identify` is never called.
+                results.Add(new SlotAccuracyResult(
+                    slot, SlotOutcome.NoDetection, Rank1Distance: null, Rank1OracleId: null,
+                    Rank1OracleName: null, Margin: null, DetectedCountInFrame: detected.Count));
+                continue;
+            }
+
+            var card = rectifier.Rectify(cameraFrame, quad.Value);
             var candidates = identifier.Identify(card, options.MaxCandidates);
 
             results.Add(Classify(slot, candidates, options.OkDistance, detected.Count));

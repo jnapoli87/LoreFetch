@@ -32,7 +32,8 @@ public class ManifestEntryTests
             Layout: "normal",
             SetType: "expansion",
             Frame: "2015",
-            ImageUriNormal: null);
+            ImageUriNormal: null,
+            Digital: false);
 
         Assert.Throws<ArgumentException>(() => ManifestEntry.FromArtwork(artwork));
     }

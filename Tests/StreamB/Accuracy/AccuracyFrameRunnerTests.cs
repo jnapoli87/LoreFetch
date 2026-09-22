@@ -84,6 +84,59 @@ public class AccuracyFrameRunnerTests
         Assert.All(results, r => Assert.Null(r.Rank1Distance));
     }
 
+    /// Task 2 (orchestration-plan.md): the headline case grid inference
+    /// exists for. A 3x3 (layout 9) frame where the detector finds only 8
+    /// of 9 -- exactly the real corpus's own most common outcome (see
+    /// docs/accuracy.md) -- must classify the other 8 slots normally
+    /// (`Identify` called exactly 8 times, never 9 -- the `ScriptedIdentifier`
+    /// is programmed with exactly 8 responses, so a 9th call would throw)
+    /// and mark the missing slot `NoDetection`, NOT `DroppedFrame`.
+    ///
+    /// Also the concrete form of the brief's "buckets sum to 100%" chaos
+    /// requirement: `results.Count` must stay 9 (one result per
+    /// ground-truth slot, including the missing one) -- a version of
+    /// `AccuracyFrameRunner` that silently `continue`d past a null cell
+    /// instead of emitting a `NoDetection` result would produce only 8
+    /// results here, which `AccuracyBucketCounts.AssertBucketsSumToTotal`
+    /// downstream would then catch as a mismatch against the frame's own
+    /// 9 ground-truth slots (asserted directly below, and chaos-tested by
+    /// reverting the fix -- see this package's own commit).
+    [Fact]
+    public void Run_NineExpectedButOnlyEightDetected_ClassifiesEightSlotsAndOneNoDetection()
+    {
+        var frame = BuildFrame(
+            layout: 9,
+            ("Card 1", "oracle-1", false), ("Card 2", "oracle-2", false), ("Card 3", "oracle-3", false),
+            ("Card 4", "oracle-4", false), ("Card 5", "oracle-5", false), ("Card 6", "oracle-6", false),
+            ("Card 7", "oracle-7", false), ("Card 8", "oracle-8", false), ("Card 9", "oracle-9", false));
+
+        // StubCardDetector(8)'s own row-major placement (GenericGrid(8) ==
+        // 3x3, filled sequentially) leaves exactly the LAST cell (slot 9)
+        // empty -- see StubCardDetector.BuildLayout/GenericGrid.
+        var responses = Enumerable.Range(1, 8)
+            .Select(i => (IReadOnlyList<CardCandidate>)[Candidate($"oracle-{i}", $"Card {i}", 40)])
+            .ToList();
+        var identifier = new ScriptedIdentifier(responses); // exactly 8 -- a 9th call throws
+
+        var results = Run(frame, detectedCount: 8, identifier);
+
+        Assert.Equal(9, results.Count); // one per ground-truth slot -- none silently dropped
+        Assert.Equal(SlotOutcome.NoDetection, results[8].Outcome); // slot 9
+        Assert.Null(results[8].Rank1Distance);
+        Assert.Null(results[8].Rank1OracleId);
+
+        for (var i = 0; i < 8; i++)
+        {
+            Assert.Equal(SlotOutcome.Correct, results[i].Outcome);
+            Assert.Equal($"oracle-{i + 1}", results[i].Rank1OracleId);
+        }
+
+        var buckets = AccuracyBucketCounts.From(results);
+        buckets.AssertBucketsSumToTotal(results.Count); // the 100% sum, asserted in code
+        Assert.Equal(1, buckets.NoDetection);
+        Assert.Equal(8, buckets.Correct);
+    }
+
     /// NOTE: there is deliberately no "detected count ABOVE layout" case
     /// here alongside the "below" case above -- see
     /// `AccuracyFrameRunner.Run`'s own doc comment on `maxCards`. Because

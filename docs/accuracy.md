@@ -790,13 +790,209 @@ under-detected frame become `DroppedFrame`, not `Wrong`, which is exactly
 why this harness reports the two separately rather than folding detection
 failures into the identification numbers.
 
-## Results — PLACEHOLDER, pending the real H3 corpus
+## Results — six-frame batch A corpus (15in, light mat, layout 9 only)
 
-**Not yet run against real fixtures.** `test-images/ground-truth.csv` and
-`test-images/fixtures/` do not exist in this worktree as of this writing
-(`AccuracyHarnessRealCaptureTests` skips with that exact reason). When H3
-delivers a batch, run `lab accuracy` (or let
-`AccuracyHarnessRealCaptureTests` run un-skipped) and replace this
-section with the real coverage line, the headline bucket counts, the full
-breakdown table, the margin distribution, and the gate result — labelled
-with the coverage they actually had, per the partial-corpus rule above.
+**Superseded the placeholder below.** `test-images/ground-truth.csv` +
+`test-images/fixtures/15in/9/` (`a_1.png`..`a_6.png`, batch A) are present
+in this worktree, so `lab accuracy` runs for real -- but this is still a
+**partial** corpus (6 of however many H3 eventually delivers, all one
+height/rung/mat combination), which the coverage line below states
+explicitly. Numbers here are NOT the final LoreFetch accuracy figure.
+
+---
+
+# Accuracy — B6 Tasks 1 & 2: digital-only exclusion and grid-inferred slots
+
+Measured on the Mac (arm64-darwin), 2026-09-22, against the same six real
+C920 frames as the retrieval-mode section above. Both tasks were needed
+before this run's correct@1 number meant anything: Task 1 removes a
+structurally-unwinnable collision from the index, Task 2 stops the harness
+from discarding almost every slot on this corpus to a detection-count
+mismatch it didn't need to.
+
+## Task 1 — exclude digital-only (Alchemy/Arena/MTGO) cards from the index
+
+**Field used: Scryfall's own top-level `digital` boolean**, not the `A-`
+name prefix (fragile, and the brief explicitly rules it out) and not
+`set_type` alone (Alchemy-original cards use `set_type: "expansion"`, not
+`"alchemy"` -- see the example below). Verified directly against the live
+2026-09-22 `unique_artwork` bulk file (54,773 objects) before choosing it:
+`digital == true` is **exactly** equivalent to `'paper' not in games`, 0
+mismatches over the whole file. Example record (the exact card that caused
+the collision below):
+
+```json
+{"id":"b9a6c085-80d5-4bdf-ba4f-b1bed9fa10c5","name":"A-Young Red Dragon // A-Bathe in Gold",
+ "games":["arena"],"set_type":"alchemy","digital":true,"layout":"adventure","lang":"en"}
+```
+
+Its paper twin, same bulk file: `{"name":"Young Red Dragon // Bathe in Gold","games":["paper","mtgo"],"digital":false,...}`.
+
+Added as `ArtworkFilterCascade.DigitalOnlyStepName`, one new cascade step
+after `SetTypeStepName`, filtering `RawArtwork.Digital` (new field, parsed
+from `digital`, degrading to `false` when absent -- same convention as
+every other `RawArtwork` field). Re-ran `lab bulk` against the live bulk
+file (`unique-artwork-20260922090227.jsonl.gz`, downloaded fresh into
+`scryfall-bulk/`, gitignored, NOT committed):
+
+```
+raw unique_artwork: 54773 arts / 37740 oracle ids
+image_status ok: 54761 arts / 37740 oracle ids
+lang == "en": 54360 arts / 37725 oracle ids
+has image_uris.normal: 50920 arts / 34952 oracle ids
+  (explicitly skipped 3440 multi-faced objects with no top-level image_uris)
+drop excluded layouts: 48936 arts / 33686 oracle ids
+drop excluded set_types: 48750 arts / 33612 oracle ids
+drop digital-only (Alchemy/Arena/MTGO) cards: 47417 arts / 32743 oracle ids
+```
+
+**47,417 arts / 32,743 oracle ids** survive, down from 48,750 / 33,612 --
+**1,333 arts removed, 869 oracle ids removed entirely** (cards that exist
+ONLY as a digital printing, e.g. Arena-original cards with no paper
+twin -- those oracle ids simply have no surviving artwork left once their
+one printing is excluded). Of the 132 arts whose oracle name starts with
+`A-` (Alchemy rebalances) that were in the old 48,750-art scope, **0**
+survive the new step.
+
+**Verification build:** rebuilt an index from the new manifest against the
+existing image cache (all 47,417 renders already present in
+`~/LoreFetchData/scryfall-cache`, no new downloads needed) to
+`~/LoreFetchData/index-alchemy/cards.lfidx` -- **outside the repo, for
+local verification only.** 42.1s, 1125.8 arts/s, SHA-256
+`cc83c614...c7981`. **Not committed** and `data/index/cards.lfidx` was not
+touched -- this is an arm64 build and CLAUDE.md's own gate requires the
+committed index be built on win-x64 (`INTER_AREA` is not bit-exact across
+architectures, measured 7 bytes / 11 bits different out of 10,460,648 on
+an unrelated arm64 rebuild during B5c). `Young Red Dragon // Bathe in
+Gold` no longer collides with its Alchemy twin on this filtered index --
+confirmed directly (see the Task 2 results below, where it now scores
+`Correct`).
+
+## Task 2 — grid-inferred slot assignment
+
+**Replaces whole-frame dropping with per-cell grid inference.**
+`SlotMapper.TryInferGrid(detectedQuads, rows, cols, ...)` infers a `rows`
+x `cols` grid from the detected quads' own geometry (row-banding by Y and,
+independently, column-banding by X, both using the same half-card-height/
+half-card-width tolerance `SortRowMajor` already used) and places each
+quad at the cell its position resolves to. A cell with no quad becomes
+`SlotOutcome.NoDetection` for that slot specifically -- `Identify` is never
+called for it -- rather than the whole frame becoming `DroppedFrame`.
+`SortRowMajor`'s own row-banding is unchanged and still covers the exact
+regression case it was built for (`(593,92)/(839,99)/(1109,96)`
+Y-jitter); `TryInferGrid` reuses the identical banding helper for both
+axes.
+
+`TryInferGrid` still refuses (falls back to `DroppedFrame` for the whole
+frame) when it cannot confidently place the grid at all: zero detections,
+more detections than the grid has cells (the documented `solring_black`
+desk-cable case), or a row/column band count that doesn't exactly match
+the expected `rows`/`cols` (an entire row or column with no detection at
+all -- ambiguous without an absolute frame-position anchor this method
+does not have). **On the real 6-frame corpus, this fallback never
+triggers** -- every frame's detected count (8 or 9 of 9) was high enough
+that no whole row or column was ever entirely empty.
+
+### Scored-slot count, before and after
+
+| | Scored (Correct/Wrong/Unresolved) | NoDetection | DroppedFrame | Total |
+|---|---|---|---|---|
+| Before (whole-frame drop on count mismatch) | 18 | -- | 36 | 54 |
+| After (grid inference) | 49 | 5 | 0 | 54 |
+
+36 of 54 slots that were previously discarded as `DroppedFrame` (4 of 6
+frames, because their detected count wasn't exactly 9) are now classified
+individually: 31 resolve to Correct/Wrong/Unresolved (a real
+identification attempt) and 5 come back `NoDetection` (the cell genuinely
+had no quad -- an honest detection gap, not silently folded into
+`Unresolved`).
+
+Concretely: `correct@1` rose from 14 (on the committed index) / 15 (on the
+filtered index) at 18 scored slots, to 37 / 38 at 49 scored slots -- more
+than double the absolute correct count, from little more than a third of
+the corpus being scored at all to all 54 slots accounted for (49 scored +
+5 honestly attributed to detection, 0 dropped).
+
+## Both tasks combined — full `lab accuracy` output
+
+**Against the committed (win-x64) index** -- `data/index/cards.lfidx`,
+unchanged by this package, still carries the Alchemy collision:
+
+```
+Ground truth: test-images/ground-truth.csv (6 frame(s), 54 slot(s))
+6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Full corpus -- 6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Options: OkDistance=270, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=37 (68.5%)  wrong@1=1 (1.9%)  no-match=16 (29.6%) [unresolved=11, no-detection=5, dropped-frame=0]  total=54
+
+Lands excluded from the headline: 0
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. NoDetect Dropped)  Total  Correct%
+    15in normal         37      1       16       11        5         0     54     68.5%
+
+Margin distribution (rank-1 vs. best different OracleId), n=49: min=0, mean=75.3, median=80, max=174.
+
+Gate: FAIL -- wrong@1 = 1 exceeds the bound of 0 at OkDistance=270 (headline: non-land, normal-rung slots). A confident wrong match is permanent bad inventory (CLAUDE.md) -- this run must not be treated as passing.
+```
+
+**Against the filtered (arm64, verification-only) index** --
+`~/LoreFetchData/index-alchemy/cards.lfidx`, NOT committed, NOT built on
+win-x64, evidence only that Task 1's fix works once a win-x64 index is
+rebuilt from the new manifest:
+
+```
+Ground truth: test-images/ground-truth.csv (6 frame(s), 54 slot(s))
+6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Full corpus -- 6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Options: OkDistance=270, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=38 (70.4%)  wrong@1=0 (0.0%)  no-match=16 (29.6%) [unresolved=11, no-detection=5, dropped-frame=0]  total=54
+
+Lands excluded from the headline: 0
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. NoDetect Dropped)  Total  Correct%
+    15in normal         38      0       16       11        5         0     54     70.4%
+
+Margin distribution (rank-1 vs. best different OracleId), n=49: min=0, mean=79.3, median=83, max=174.
+
+Gate: PASS -- wrong@1 = 0 (headline: non-land, normal-rung slots), within the bound of 0 at OkDistance=270.
+```
+
+**The Alchemy collision (`Young Red Dragon // Bathe in Gold` -> `A-Young
+Red Dragon // A-Bathe in Gold`) is gone on the filtered index** -- that
+slot moves from `Wrong` to `Correct`, which is exactly the +1
+correct/-1 wrong difference between the two runs above (37->38,
+1->0). Every other number besides that single slot is unchanged between
+the two runs, confirming Task 1's fix is isolated to the one collision it
+targets rather than shifting anything else.
+
+## Test suite status
+
+`Tests/StreamB`: 280 total, 1 failing
+(`AccuracyHarnessRealCaptureTests.Run_AgainstRealH3Corpus_ReportsAccuracyAndEvaluatesTheGate`),
+279 passed/skipped. That one test runs against the **committed**
+`data/index/cards.lfidx` (win-x64), which this package did not rebuild --
+per its own brief ("leave it failing and say so rather than weakening
+it"). It will pass once the committed index is rebuilt on win-x64 from
+the manifest Task 1 now produces (confirmed above: the same test's
+underlying gate check passes against a filtered index, just not one built
+on the required architecture). `Tests/Integration`: 143 passed / 8
+skipped, unchanged.
+
+## Results — PLACEHOLDER, pending the full H3 corpus
+
+**The section above is real, but still partial** -- only batch A (6
+frames, one height/rung/mat combination) exists on disk. When H3 delivers
+further batches, re-run `lab accuracy` against the committed index (once
+rebuilt on win-x64 with Task 1's filter applied) and replace both this
+section and the one above with the complete coverage line, bucket counts,
+breakdown table, margin distribution, and gate result.

@@ -35,12 +35,12 @@ public static class AccuracyReportFormatter
         sb.AppendLine();
 
         sb.AppendLine("Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):");
-        sb.AppendLine($"{"Height",8} {"Rung",-8} {"Correct",8} {"Wrong",6} {"NoMatch",8} {"(Unres.",8} {"Dropped)",8} {"Total",6} {"Correct%",9}");
+        sb.AppendLine($"{"Height",8} {"Rung",-8} {"Correct",8} {"Wrong",6} {"NoMatch",8} {"(Unres.",8} {"NoDetect",8} {"Dropped)",8} {"Total",6} {"Correct%",9}");
         foreach (var row in stats.Breakdown)
         {
             var b = row.Buckets;
             sb.AppendLine(
-                $"{row.HeightIn,6:0.##}in {row.Rung,-8} {b.Correct,8} {b.Wrong,6} {b.NoMatch,8} {b.Unresolved,8} {b.DroppedFrame,9} {b.Total,6} {b.CorrectRate,9:P1}");
+                $"{row.HeightIn,6:0.##}in {row.Rung,-8} {b.Correct,8} {b.Wrong,6} {b.NoMatch,8} {b.Unresolved,8} {b.NoDetection,8} {b.DroppedFrame,9} {b.Total,6} {b.CorrectRate,9:P1}");
         }
 
         sb.AppendLine();
@@ -53,7 +53,8 @@ public static class AccuracyReportFormatter
 
     private static string FormatBucketLine(AccuracyBucketCounts b) =>
         $"correct@1={b.Correct} ({b.CorrectRate:P1})  wrong@1={b.Wrong} ({b.WrongRate:P1})  " +
-        $"no-match={b.NoMatch} ({b.NoMatchRate:P1}) [unresolved={b.Unresolved}, dropped-frame={b.DroppedFrame}]  total={b.Total}";
+        $"no-match={b.NoMatch} ({b.NoMatchRate:P1}) [unresolved={b.Unresolved}, no-detection={b.NoDetection}, " +
+        $"dropped-frame={b.DroppedFrame}]  total={b.Total}";
 
     private static string FormatMarginSummary(IReadOnlyList<int> margins)
     {

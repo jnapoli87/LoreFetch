@@ -16,9 +16,16 @@ public sealed record RawArtwork(
     string Layout,
     string SetType,
     string Frame,
-    string? ImageUriNormal) // null when the object has no top-level `image_uris`
+    string? ImageUriNormal, // null when the object has no top-level `image_uris`
                             // at all -- the multi-faced case this project must
                             // skip explicitly rather than crash or drop silently.
+    bool Digital) // Scryfall's own top-level boolean for "this object is not
+                  // available on paper" -- exactly equivalent to `'paper' not
+                  // in games` (verified over the live 2026-09-22 bulk file:
+                  // 0 mismatches across 54,773 records), and the field this
+                  // project uses to exclude Alchemy/Arena-only/MTGO-only
+                  // objects. Missing/non-boolean -> false, matching every
+                  // other field's "degrade rather than throw" convention.
 {
     public static RawArtwork Parse(JsonElement e) => new(
         Id: GetString(e, "id"),
@@ -30,7 +37,8 @@ public sealed record RawArtwork(
         Layout: GetString(e, "layout"),
         SetType: GetString(e, "set_type"),
         Frame: GetString(e, "frame"),
-        ImageUriNormal: GetNestedStringOrNull(e, "image_uris", "normal"));
+        ImageUriNormal: GetNestedStringOrNull(e, "image_uris", "normal"),
+        Digital: GetBool(e, "digital"));
 
     /// Missing or non-string fields become "" rather than throwing --
     /// a maintainer tool over a live, evolving external feed should
@@ -51,4 +59,10 @@ public sealed record RawArtwork(
         && inner.ValueKind == JsonValueKind.String
             ? inner.GetString()
             : null;
+
+    internal static bool GetBool(JsonElement e, string property) =>
+        e.ValueKind == JsonValueKind.Object
+        && e.TryGetProperty(property, out var value)
+        && (value.ValueKind == JsonValueKind.True || value.ValueKind == JsonValueKind.False)
+        && value.GetBoolean();
 }

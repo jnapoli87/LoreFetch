@@ -20,6 +20,7 @@ namespace LoreFetch.Tests.StreamB.Bulk;
 ///   art-0008  set_type "memorabilia" (layout NOT excluded)    -> dropped at step 6
 ///   art-0009  basic land, survives everything, frame 2015
 ///   art-0010  same oracle_id as art-0001 (a reprint), frame 1997, survives everything
+///   art-0011  digital:true (Alchemy-shaped, own oracle_id)       -> dropped at step 7
 public class ArtworkFilterCascadeTests
 {
     [Fact]
@@ -27,14 +28,32 @@ public class ArtworkFilterCascadeTests
     {
         var result = RunOnFixture();
 
-        AssertStep(result.Steps[0], ArtworkFilterCascade.RawStepName, arts: 10, oracleIds: 9);
-        AssertStep(result.Steps[1], ArtworkFilterCascade.ImageStatusStepName, arts: 8, oracleIds: 7);
-        AssertStep(result.Steps[2], ArtworkFilterCascade.LangStepName, arts: 7, oracleIds: 6);
-        AssertStep(result.Steps[3], ArtworkFilterCascade.HasImageUrisStepName, arts: 6, oracleIds: 5);
-        AssertStep(result.Steps[4], ArtworkFilterCascade.LayoutStepName, arts: 5, oracleIds: 4);
-        AssertStep(result.Steps[5], ArtworkFilterCascade.SetTypeStepName, arts: 4, oracleIds: 3);
+        AssertStep(result.Steps[0], ArtworkFilterCascade.RawStepName, arts: 11, oracleIds: 10);
+        AssertStep(result.Steps[1], ArtworkFilterCascade.ImageStatusStepName, arts: 9, oracleIds: 8);
+        AssertStep(result.Steps[2], ArtworkFilterCascade.LangStepName, arts: 8, oracleIds: 7);
+        AssertStep(result.Steps[3], ArtworkFilterCascade.HasImageUrisStepName, arts: 7, oracleIds: 6);
+        AssertStep(result.Steps[4], ArtworkFilterCascade.LayoutStepName, arts: 6, oracleIds: 5);
+        AssertStep(result.Steps[5], ArtworkFilterCascade.SetTypeStepName, arts: 5, oracleIds: 4);
+        AssertStep(result.Steps[6], ArtworkFilterCascade.DigitalOnlyStepName, arts: 4, oracleIds: 3);
 
-        Assert.Equal(6, result.Steps.Count);
+        Assert.Equal(7, result.Steps.Count);
+    }
+
+    [Fact]
+    public void Run_OnSyntheticSample_DropsDigitalOnlyRecordsButKeepsNonDigitalReprint()
+    {
+        var result = RunOnFixture();
+
+        // art-0011 is digital:true and otherwise passes every earlier
+        // filter (en, highres_scan, has image_uris, normal layout,
+        // non-excluded set_type) -- it must be dropped by the digital
+        // step specifically, not by coincidence of an earlier one.
+        Assert.DoesNotContain(result.Survivors, a => a.Id == "art-0011");
+
+        // art-0010 shares oracle_id with art-0001 but is NOT digital, and
+        // must survive -- proving the new step filters on the `digital`
+        // field, not on oracle_id or on any name-prefix heuristic.
+        Assert.Contains(result.Survivors, a => a.Id == "art-0010");
     }
 
     [Fact]

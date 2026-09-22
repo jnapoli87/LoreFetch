@@ -329,3 +329,238 @@ public class SlotMapperTests
             BL: Rotate(-halfSize, halfSize));
     }
 }
+
+/// `TryInferGrid` -- package B6's Task 2 (orchestration-plan.md): replaces
+/// whole-frame dropping on a count mismatch with per-CELL grid inference,
+/// so a 3x3 frame missing one card still classifies its other 8 (measured
+/// on the real corpus: most frames find 8 of 9 -- see docs/accuracy.md).
+/// Pure geometry, same style as `SlotMapperTests` above -- no detector, no
+/// image.
+public class SlotMapperTryInferGridTests
+{
+    [Fact]
+    public void TryInferGrid_FullThreeByThreeGridShuffled_RecoversExactRowMajorPlacement()
+    {
+        var bySlot = BuildGrid(rows: 3, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var shuffled = new[] { 9, 1, 5, 3, 7, 2, 8, 4, 6 }.Select(slot => bySlot[slot]).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(shuffled, rows: 3, cols: 3, out var cells);
+
+        Assert.True(inferred);
+        for (var slot = 1; slot <= 9; slot++)
+        {
+            Assert.Equal(bySlot[slot], cells![slot - 1]);
+        }
+    }
+
+    /// The package's headline case: a 3x3 frame missing its CENTER card
+    /// (slot 5) still places the other 8 correctly, and slot 5's own cell
+    /// comes back null rather than the whole frame failing to infer.
+    [Fact]
+    public void TryInferGrid_MissingCenterCell_PlacesEightAndLeavesCenterCellNull()
+    {
+        var bySlot = BuildGrid(rows: 3, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var eightOfNine = bySlot.Where(kv => kv.Key != 5).Select(kv => kv.Value).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(eightOfNine, rows: 3, cols: 3, out var cells);
+
+        Assert.True(inferred);
+        Assert.Null(cells![4]); // slot 5 -> index 4
+        for (var slot = 1; slot <= 9; slot++)
+        {
+            if (slot == 5)
+            {
+                continue;
+            }
+
+            Assert.Equal(bySlot[slot], cells[slot - 1]);
+        }
+    }
+
+    /// My own case, not named by the brief: proves the missing cell is
+    /// found by POSITION regardless of where in the grid it falls, not
+    /// just the middle -- a corner (slot 1, top-left) missing instead.
+    /// A row/column-banding bug that only worked when the surviving
+    /// members happened to still span every row/column edge-to-edge could
+    /// pass the center case above and still fail here.
+    [Fact]
+    public void TryInferGrid_MissingCornerCell_PlacesEightAndLeavesThatCornerCellNull()
+    {
+        var bySlot = BuildGrid(rows: 3, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var eightOfNine = bySlot.Where(kv => kv.Key != 1).Select(kv => kv.Value).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(eightOfNine, rows: 3, cols: 3, out var cells);
+
+        Assert.True(inferred);
+        Assert.Null(cells![0]); // slot 1 -> index 0
+        for (var slot = 2; slot <= 9; slot++)
+        {
+            Assert.Equal(bySlot[slot], cells[slot - 1]);
+        }
+    }
+
+    [Fact]
+    public void TryInferGrid_ZeroDetections_ReturnsFalse()
+    {
+        var inferred = SlotMapper.TryInferGrid(Array.Empty<CardQuad>(), rows: 3, cols: 3, out var cells);
+
+        Assert.False(inferred);
+        Assert.Null(cells);
+    }
+
+    /// The brief's explicit degenerate case: more detections than the
+    /// layout's own cell count allows (the documented real desk-cable
+    /// evidence in docs/accuracy.md's `solring_black` note) -- refused
+    /// outright rather than guessing which detections are the real cards.
+    [Fact]
+    public void TryInferGrid_MoreDetectedThanCells_ReturnsFalse()
+    {
+        var bySlot = BuildGrid(rows: 1, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var plusOneExtra = bySlot.Values.Append(QuadAt(centerX: 2000, centerY: 2000, width: 40, height: 40)).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(plusOneExtra, rows: 1, cols: 3, out var cells);
+
+        Assert.False(inferred);
+        Assert.Null(cells);
+    }
+
+    /// The honest limitation documented on `TryInferGrid` itself: an
+    /// ENTIRE row missing (as opposed to one cell within an otherwise
+    /// intact row) cannot be told apart from "the grid only has 2 rows"
+    /// without an absolute frame-position anchor this method does not
+    /// have, so it refuses rather than guess which canonical row is gone.
+    [Fact]
+    public void TryInferGrid_EntireRowMissing_CannotConfidentlyInfer_ReturnsFalse()
+    {
+        var bySlot = BuildGrid(rows: 3, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var missingWholeMiddleRow = bySlot.Where(kv => kv.Key is not (4 or 5 or 6)).Select(kv => kv.Value).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(missingWholeMiddleRow, rows: 3, cols: 3, out var cells);
+
+        Assert.False(inferred);
+        Assert.Null(cells);
+    }
+
+    /// Distinguishes the row/column-band COLLISION path from the simpler
+    /// "more detections than cells" overflow check above: here the
+    /// detected count (9) does NOT exceed the grid's own cell count (9),
+    /// but a spurious near-duplicate of slot 1's quad takes the place of
+    /// the genuinely missing slot 9 -- band counts still come out exactly
+    /// 3x3 (every row and column band is still populated), yet TWO quads
+    /// resolve to the SAME cell (row 0, col 0). Must be refused rather
+    /// than arbitrarily keeping one.
+    [Fact]
+    public void TryInferGrid_DuplicateQuadCollidesInAnAlreadyOccupiedCell_ReturnsFalse()
+    {
+        var bySlot = BuildGrid(rows: 3, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var eightOfNine = bySlot.Where(kv => kv.Key != 9).Select(kv => kv.Value).ToList();
+        var duplicateOfSlotOne = QuadAt(centerX: 100 + 3, centerY: 100 + 2, width: 120, height: 170); // slot 1's own center is (100,100)
+
+        var withCollision = eightOfNine.Append(duplicateOfSlotOne).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(withCollision, rows: 3, cols: 3, out var cells);
+
+        Assert.False(inferred);
+        Assert.Null(cells);
+    }
+
+    [Fact]
+    public void TryInferGrid_SingleCardLayout_PlacesTheOneQuad()
+    {
+        var quad = QuadAt(centerX: 500, centerY: 400, width: 216, height: 303);
+
+        var inferred = SlotMapper.TryInferGrid([quad], rows: 1, cols: 1, out var cells);
+
+        Assert.True(inferred);
+        Assert.Equal(quad, cells![0]);
+    }
+
+    [Fact]
+    public void TryInferGrid_ThreeInARowFullCount_MatchesRowMajorOrder()
+    {
+        var bySlot = BuildGrid(rows: 1, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var shuffled = new[] { 3, 1, 2 }.Select(slot => bySlot[slot]).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(shuffled, rows: 1, cols: 3, out var cells);
+
+        Assert.True(inferred);
+        Assert.Equal(bySlot[1], cells![0]);
+        Assert.Equal(bySlot[2], cells[1]);
+        Assert.Equal(bySlot[3], cells[2]);
+    }
+
+    /// Layout 3's own version of the honest limitation: with only a
+    /// single row, losing ANY one of the three cards loses that column's
+    /// band entirely (no other row exists to keep it alive), so this
+    /// falls back exactly like the whole-row case above. Never exercised
+    /// by the real corpus (ground-truth.csv is all layout 9), but
+    /// documented and tested rather than left as an assumption.
+    [Fact]
+    public void TryInferGrid_ThreeInARowOneMissing_CannotConfidentlyInfer_ReturnsFalse()
+    {
+        var bySlot = BuildGrid(rows: 1, cols: 3, cellSize: 200, cardWidth: 120, cardHeight: 170);
+        var twoOfThree = bySlot.Where(kv => kv.Key != 2).Select(kv => kv.Value).ToList();
+
+        var inferred = SlotMapper.TryInferGrid(twoOfThree, rows: 1, cols: 3, out var cells);
+
+        Assert.False(inferred);
+        Assert.Null(cells);
+    }
+
+    [Theory]
+    [InlineData(1, 1, 1)]
+    [InlineData(3, 1, 3)]
+    [InlineData(9, 3, 3)]
+    public void GridDimensionsForLayout_KnownLayouts_ReturnsExpectedShape(int layout, int expectedRows, int expectedCols)
+    {
+        var (rows, cols) = SlotMapper.GridDimensionsForLayout(layout);
+
+        Assert.Equal(expectedRows, rows);
+        Assert.Equal(expectedCols, cols);
+    }
+
+    /// Any layout outside {1, 3, 9} (never produced by the real app, but
+    /// reachable from a hand-built or malformed ground-truth row) falls
+    /// back to the same ceil(sqrt) generic grid
+    /// `LoreFetch.Core.Fakes.StubCardDetector.GenericGrid` uses, rather
+    /// than throwing -- e.g. layout 4 is a 2x2, matching
+    /// `AccuracyHarnessSyntheticTests`'s own "layout claims one more card"
+    /// test, which relies on layout 4 not throwing.
+    [Fact]
+    public void GridDimensionsForLayout_UnknownLayout_FallsBackToGenericSquareGrid()
+    {
+        var (rows, cols) = SlotMapper.GridDimensionsForLayout(4);
+
+        Assert.Equal(2, rows);
+        Assert.Equal(2, cols);
+    }
+
+    private static CardQuad QuadAt(float centerX, float centerY, float width, float height)
+    {
+        var left = centerX - (width / 2f);
+        var top = centerY - (height / 2f);
+        return new CardQuad(
+            TL: new PointF2(left, top),
+            TR: new PointF2(left + width, top),
+            BR: new PointF2(left + width, top + height),
+            BL: new PointF2(left, top + height));
+    }
+
+    private static Dictionary<int, CardQuad> BuildGrid(int rows, int cols, float cellSize, float cardWidth, float cardHeight)
+    {
+        var bySlot = new Dictionary<int, CardQuad>();
+        var slot = 1;
+        for (var row = 0; row < rows; row++)
+        {
+            for (var col = 0; col < cols; col++)
+            {
+                var centerX = (col + 0.5f) * cellSize;
+                var centerY = (row + 0.5f) * cellSize;
+                bySlot[slot] = QuadAt(centerX, centerY, cardWidth, cardHeight);
+                slot++;
+            }
+        }
+
+        return bySlot;
+    }
+}

@@ -67,7 +67,6 @@ public static class SlotMapper
 
         var withMetrics = quads
             .Select(q => (Quad: q, CentroidX: CentroidX(q), CentroidY: CentroidY(q), Height: QuadHeight(q)))
-            .OrderBy(m => m.CentroidY)
             .ToList();
 
         // Half a card height, derived from THIS frame's own detected quads
@@ -76,14 +75,168 @@ public static class SlotMapper
         // cannot be right across both the 15in and 20in sweep heights.
         var tolerance = 0.5f * Median(withMetrics.Select(m => m.Height).ToList());
 
-        var bands = new List<List<(CardQuad Quad, float CentroidX, float CentroidY, float Height)>>();
-        foreach (var item in withMetrics)
+        var bands = BandByTolerance(withMetrics, m => m.CentroidY, tolerance);
+
+        var result = new List<CardQuad>(quads.Count);
+        foreach (var band in bands)
+        {
+            result.AddRange(band.OrderBy(m => m.CentroidX).Select(m => m.Quad));
+        }
+
+        return result;
+    }
+
+    /// The (rows, cols) grid shape `TryInferGrid` and the app's own
+    /// auto-capture "expected count" both use for a ground-truth `Layout`
+    /// value -- mirrors `LoreFetch.Core.Fakes.StubCardDetector.GridFor`'s
+    /// exact convention (1x1, 1x3, 3x3; anything else falls back to the
+    /// same ceil(sqrt) generic grid) rather than inventing a second one,
+    /// so a layout value means the same physical arrangement everywhere in
+    /// the codebase that has to guess at one from a bare card count.
+    public static (int Rows, int Cols) GridDimensionsForLayout(int layout) => layout switch
+    {
+        1 => (1, 1),
+        3 => (1, 3), // 3 in a line
+        9 => (3, 3),
+        _ => GenericGridDimensions(layout),
+    };
+
+    private static (int Rows, int Cols) GenericGridDimensions(int count)
+    {
+        var cols = (int)Math.Ceiling(Math.Sqrt(count));
+        var rows = (int)Math.Ceiling((double)count / cols);
+        return (rows, cols);
+    }
+
+    /// Infers a `rows` x `cols` grid over `detectedQuads` and places each
+    /// one into the cell its centroid falls nearest, WITHOUT assuming the
+    /// detected count equals `rows * cols` -- this is what lets a 3x3 frame
+    /// missing one card (measured on the real corpus: 8 of 9 detected on
+    /// most frames -- see docs/accuracy.md) still classify its other 8
+    /// cells instead of the whole frame being dropped.
+    ///
+    /// Returns `true` and a row-major `cellsBySlot` of length `rows * cols`
+    /// (index 0 = row 0/col 0, etc.) where a cell with no quad assigned is
+    /// `null`, ONLY when the grid can be inferred with confidence. Returns
+    /// `false` (and a null list) when it cannot -- there is no partial or
+    /// best-effort GRID-STRUCTURE guess, mirroring `TryMapToSlots`'s own
+    /// "refuse rather than guess" contract one level up:
+    ///
+    /// - Zero detections: no geometry to infer a pitch from at all.
+    /// - More detections than the grid has cells: cannot be a well-formed
+    ///   single-card-per-cell layout (a documented real case: a desk cable
+    ///   passing the detector's aspect/area filters alongside real cards --
+    ///   see docs/accuracy.md's `solring_black` note).
+    /// - The number of distinct row-bands (by Y, same half-card-height
+    ///   tolerance `SortRowMajor` uses) is not exactly `rows`, or the
+    ///   number of distinct column-bands (by X) is not exactly `cols` --
+    ///   this happens when an ENTIRE row or column has no detection at
+    ///   all, which is NOT the same as one missing cell (a lone missing
+    ///   cell leaves its row and column each with other members, so their
+    ///   bands still exist) -- see this method's own tests. Disambiguating
+    ///   "this row is entirely absent" from "the grid is only 2 rows"
+    ///   needs an absolute frame-position anchor this method does not
+    ///   have, so it refuses rather than guess which canonical row/column
+    ///   is missing.
+    /// - Two quads land in the same inferred cell (a row/column-band
+    ///   collision) -- again the desk-cable case, when the spurious quad
+    ///   happens to fall within an otherwise fully-populated row and
+    ///   column band rather than forming its own.
+    public static bool TryInferGrid(
+        IReadOnlyList<CardQuad> detectedQuads, int rows, int cols, out IReadOnlyList<CardQuad?>? cellsBySlot)
+    {
+        ArgumentNullException.ThrowIfNull(detectedQuads);
+        if (rows <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rows), rows, "rows must be positive.");
+        }
+
+        if (cols <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(cols), cols, "cols must be positive.");
+        }
+
+        cellsBySlot = null;
+        var totalCells = rows * cols;
+
+        if (detectedQuads.Count == 0 || detectedQuads.Count > totalCells)
+        {
+            return false;
+        }
+
+        var indexed = detectedQuads
+            .Select((q, i) => (
+                Index: i, Quad: q, CentroidX: CentroidX(q), CentroidY: CentroidY(q),
+                Width: QuadWidth(q), Height: QuadHeight(q)))
+            .ToList();
+
+        var rowBands = BandByTolerance(indexed, m => m.CentroidY, 0.5f * Median(indexed.Select(m => m.Height).ToList()));
+        if (rowBands.Count != rows)
+        {
+            return false;
+        }
+
+        var colBands = BandByTolerance(indexed, m => m.CentroidX, 0.5f * Median(indexed.Select(m => m.Width).ToList()));
+        if (colBands.Count != cols)
+        {
+            return false;
+        }
+
+        var rowIndexByItem = new int[detectedQuads.Count];
+        for (var r = 0; r < rowBands.Count; r++)
+        {
+            foreach (var item in rowBands[r])
+            {
+                rowIndexByItem[item.Index] = r;
+            }
+        }
+
+        var colIndexByItem = new int[detectedQuads.Count];
+        for (var c = 0; c < colBands.Count; c++)
+        {
+            foreach (var item in colBands[c])
+            {
+                colIndexByItem[item.Index] = c;
+            }
+        }
+
+        var cells = new CardQuad?[totalCells];
+        foreach (var item in indexed)
+        {
+            var cellIndex = (rowIndexByItem[item.Index] * cols) + colIndexByItem[item.Index];
+            if (cells[cellIndex].HasValue)
+            {
+                // Row/column-band collision: two quads resolved to the same
+                // cell. Cannot confidently tell which (if either) is the
+                // real card -- refuse rather than pick one arbitrarily.
+                return false;
+            }
+
+            cells[cellIndex] = item.Quad;
+        }
+
+        cellsBySlot = cells;
+        return true;
+    }
+
+    /// Partitions `items` into contiguous bands along `axis`: sorts
+    /// ascending, then walks the sorted list greedily, adding an item to
+    /// the current band when it falls within `tolerance` of that band's
+    /// running average, starting a new band otherwise. Shared by
+    /// `SortRowMajor` (bands by Y only) and `TryInferGrid` (bands by Y AND,
+    /// independently, by X) so both use exactly one banding algorithm.
+    private static List<List<T>> BandByTolerance<T>(List<T> items, Func<T, float> axis, float tolerance)
+    {
+        var sorted = items.OrderBy(axis).ToList();
+        var bands = new List<List<T>>();
+
+        foreach (var item in sorted)
         {
             var currentBand = bands.Count > 0 ? bands[^1] : null;
             if (currentBand is not null)
             {
-                var bandAverageY = currentBand.Average(m => m.CentroidY);
-                if (MathF.Abs(item.CentroidY - bandAverageY) <= tolerance)
+                var bandAverage = currentBand.Average(axis);
+                if (MathF.Abs(axis(item) - bandAverage) <= tolerance)
                 {
                     currentBand.Add(item);
                     continue;
@@ -93,13 +246,7 @@ public static class SlotMapper
             bands.Add([item]);
         }
 
-        var result = new List<CardQuad>(quads.Count);
-        foreach (var band in bands)
-        {
-            result.AddRange(band.OrderBy(m => m.CentroidX).Select(m => m.Quad));
-        }
-
-        return result;
+        return bands;
     }
 
     /// Returns `true` and an `orderedBySlot` list of exactly
@@ -137,6 +284,11 @@ public static class SlotMapper
     /// measure is sufficient for sizing a same-row tolerance from the
     /// quads actually present in this frame.
     private static float QuadHeight(CardQuad q) => (Distance(q.TL, q.BL) + Distance(q.TR, q.BR)) / 2f;
+
+    /// The horizontal extent of `q` -- average of its two "top"/"bottom"
+    /// edges (TL-TR, BL-BR). Same reasoning as `QuadHeight`, used only to
+    /// derive `TryInferGrid`'s column-banding tolerance.
+    private static float QuadWidth(CardQuad q) => (Distance(q.TL, q.TR) + Distance(q.BL, q.BR)) / 2f;
 
     private static float Distance(PointF2 a, PointF2 b)
     {
