@@ -753,7 +753,7 @@ Global overrides for every C brief:
 - [x] **C1a** Internal stage, channel and pooling: newest-frame-only, disposal on drop, and `InvalidOperationException` on a second enumerator. Accept: under a slow consumer, memory stays bounded and every buffer is returned (counting pool). — *done 2026-09-21, `stream/c` `f4a459f` + fixups `84979d7`. Review sent back 4 `xUnit1051` warnings and an enumerator test that *hung* rather than failed when its guard was removed; both fixed, and the test is now bounded by `WaitAsync`. Also replaces StreamC's placeholder with real internal-touching tests, closing the `InternalsVisibleTo` thread.*
 - [x] **C1b** Decode and rotate: `Cv2.ImDecode` into a pooled BGR24 `CameraFrame`, then `Cv2.Rotate` using the rotation read once at open. `Geometry` is post-rotation. Decode time is logged. Accept: tests on synthetic JPEGs (encoded in memory) at 0, 90, 180 and 270 degrees. — *done 2026-09-21, `stream/c` `1f8380b`. Independent chaos: swapping the 90°/270° mappings fails the marker-corner test at both angles.*
 - [x] **C1c** Watchdogs: `FirstFrameTimeoutMs` and `FrameWatchdogMs` raise `FrameSourceException` naming the three causes. Accept: tests with a fake clock or short timeouts. — *done 2026-09-21, `stream/c` `72503b5` + `8382f25` + `56b1b9b`. Generic over `IAsyncEnumerable<T>` so C2 can wrap either stage; injectable `TimeProvider`. The finishing implementer found a real bug: disposing an async iterator while its `MoveNextAsync` is pending throws `NotSupportedException`, so disposal is deferred until the pending call settles. Review strengthened two tests. The healthy stream now spans six frame-timeout periods, because at one period the only-reset-once regression was caught in just 3 of 5 runs; it is now 5 of 5. And using the first-frame timeout for mid-stream gaps passed all 18 tests, so the stall test now pins both the detection time (< 2 s) and the timeout value in the message.*
-- [ ] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
+- [x] **C2** FlashCap shim and `WebcamFrameSourceFactory : IFrameSourceFactory`:
   - enumerate and log every descriptor with its backend
   - zero descriptors gets its own diagnosis
   - select 1920×1080, `PixelFormats.JPEG`, `(double)fps >= 30`, or throw with the full list
@@ -762,8 +762,28 @@ Global overrides for every C brief:
   - `Description` reports what was negotiated
 
   Accept: unit tests of the selection logic over plain descriptor data objects.
+
+  *Done 2026-09-22, Windows PC, `stream/c` `1f60ec0` + fix `cd53e54`.* 37 StreamC tests; the implementer's five chaos cases (`==` for `>=`, VfW in the preference list, swapped preference, first-characteristic fallback, hardcoded `Description`) each failed the right test.
+  🔴 **Review caught a defect every unit test passed: the device was opened but never `StartAsync`-ed.** FlashCap delivers nothing to an un-started device, so every real open would have ended in the 10 s first-frame timeout, misdiagnosed as unplugged / in use / permission denied. It is not unit-testable (FlashCap devices cannot be faked from outside its assembly), so the C4 hardware harness is its guard. The fix also releases the device if anything throws after `OpenAsync`, and logs time-to-first-frame.
 - [x] **C3** ∥ README §C (including the macOS compile-only note). *(stream/c `7bf2632`; README-only. §C covers the FlashCap→`IFrameSource` pipeline (`WebcamFrameSourceFactory` entry point, DropOldest single-frame, `ArrayPool` no-garbage, first-frame/mid-stream watchdogs), the C920 USB-2 MJPG-30fps negotiation asserted from `EnumerateDescriptors()`, MJPEG decode as this stream's job (`Cv2.ImDecode`→BGR24, in-source `Cv2.Rotate`), and a `> [!IMPORTANT]` win-x64-only callout (FlashCap #182 native crash → macOS compile-only in CI). Verified: scope README-only; API refs fact-checked against ScanSettings (`FirstFrameTimeoutMs`=10s, `FrameWatchdogMs`=2s, `CameraRotationDegrees` default 90°) and the contract-pinned factory name.)*
-- [ ] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+- [x] **C4** 👤🧭 Hardware run on the Windows PC, gated on H6 (satisfied). The log shows 1080p MJPG at 30 fps. Memory stays flat over several minutes. A slow consumer causes latency, not growth. An unplug gives a clean error and a replug restarts. Decode time is recorded here. **Merge gate, then P4.**
+
+  *Done 2026-09-22 with the user at the C920. Harness `e7cf54a` + fix `039d768`, docs `d313a51`, C3 merged from origin `e2b1305`: `Category=Hardware` tests in `Tests/StreamC/Hardware/`, the unplug test additionally `Interactive=Unplug`. Output goes to `%TEMP%\lorefetch-hw`, never the repo.*
+
+  | Check | Measured |
+  |---|---|
+  | Negotiated | `HD Pro Webcam C920 1920x1080 MJPG @30fps (DirectShow)`, from the device's own characteristics. DShow 35 characteristics, MF 335; VfW "Default" enumerated and skipped |
+  | Delivered | **28.6 fps** over 10 s; first frame ~720–790 ms after `StartAsync` |
+  | **JPEG decode** | **11–15 ms mean** per 150-frame window, max 42 ms (one outlier). ~40% of one core at a full 30 fps; drop-before-decode means only consumed frames pay it |
+  | Sustained, 3 min | 5,035 frames; private bytes oscillated 180–190 MB, post-warm-up growth **9.5 MB** (bound 100 MB) |
+  | Slow consumer | 500 ms/frame for 60 s: **+5.7 MB**; capture→consume latency mean 33 ms, max 77 ms, not trending |
+  | Unplug | `FrameSourceException` **2,002 ms** after the last frame (`FrameWatchdogMs` 2000); `DisposeAsync` 23 ms |
+  | Replug | Reopen OK, first frame 719 ms |
+
+  **Orchestrator chaos, the case the brief did not name:** deleting `StartAsync` first failed the live test for the **wrong reason**. The harness's 5 s per-`MoveNext` bound was shorter than `FirstFrameTimeoutMs` (10 s), and its `finally` disposed the async iterator mid-`MoveNext` → `NotSupportedException`, masking the product's diagnosis. Fixed in `039d768`: bounds are derived from the settings, and the harness cancels, then settles, then disposes. A non-hardware unit test pins both halves, and each was chaos-tested. Re-run on hardware, the chaos now fails with the product's own `FrameSourceException: No frame arrived within 10000 ms of opening the capture device…`. The four unattended tests pass on the fixed harness (4/4). The unplug test ran on the pre-fix harness; its fix touched only the bound, which was already 130 s.
+
+  **Open, physical, not a C blocker:** rotation *direction*. The captured frame was shot before the mount (table depth ran across the frame), so whether 90° or 270° is upright is decided at H1 mount time. It is a `ScanSettings.CameraRotationDegrees` value, not code.
+  **Found in passing, outside C:** `AvaloniaUI.DiagnosticsSupport` 2.2.3 declares no licence, yet `App.csproj` references it unconditionally, so it would ship in the single-file exe. That contradicts RECONCILIATION's "nothing is redistributed". Spun off as a main-only task: make it Debug-only.
 
 ### Stream D — Collection & export · worktree `stream-d` · scope `src/LoreFetch.Core/Collection/**`, `src/LoreFetch.Core/Export/**`, `Tests/StreamD/**`, README §D
 Global overrides for every D brief:
