@@ -66,6 +66,16 @@ Details and reasoning are in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
 
+## Cameras
+
+Any webcam that delivers 1080p should work. These are the ones actually run, rather than the ones expected to work — if you use another, open an issue with the camera, resolution and OS and it gets added.
+
+| Camera | Tested at | Notes |
+|---|---|---|
+| Logitech C920 | 1920×1080, 30 fps, Windows 11 (2026-09) | USB 2.0, so 1080p only reaches 30 fps in MJPG; uncompressed caps at 5. LoreFetch requests MJPG and then reads the setting back to confirm it took, because OpenCV reports success either way. |
+
+The lamp matters more than the camera: put it low and off to one side, never beside the lens. Glare is the main way identification fails.
+
 ## Working on it
 
 ```sh
