@@ -19,6 +19,10 @@ public class FrameWatchdogTests
     private static readonly TimeSpan LongTimeout = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan FastFramePace = TimeSpan.FromMilliseconds(10);
 
+    // 60 frames * FastFramePace = 600 ms — six full periods of the healthy
+    // test's 100 ms frameTimeout, not just one. See that test's comment.
+    private const int HealthyStreamFrameCount = 60;
+
     // Every awaited operation below is also bounded by this, independent of
     // whatever timeout FrameWatchdog itself is configured with. Relying
     // solely on the watchdog's own timeout to end a test means a regression
@@ -91,11 +95,21 @@ public class FrameWatchdogTests
     [Fact]
     public async Task HealthyStream_PacedWellInsideTheWatchdog_NeverTrips()
     {
-        // frameTimeout is a large multiple of the pace, so this is not a
-        // race — a correct implementation resets its deadline on every
-        // frame, and 30 frames at 10 ms apart (300 ms total) never comes
-        // close to a 300 ms-per-gap budget.
-        var watchdog = new FrameWatchdog(firstFrameTimeout: LongTimeout, frameTimeout: TimeSpan.FromMilliseconds(300));
+        // frameTimeout is a 10x multiple of the pace (100 ms budget per
+        // 10 ms gap) — comfortable per-frame margin, but the run as a whole
+        // spans HealthyStreamFrameCount * FastFramePace = 600 ms, i.e. six
+        // full frameTimeout periods. That length matters as much as the
+        // per-frame margin: a correct implementation resets its deadline on
+        // every frame and sails through all six periods, but an
+        // implementation that resets the deadline only once — say, after
+        // the first frame, and never again — accumulates real elapsed time
+        // against a single stale deadline, so it necessarily trips partway
+        // through this run. A shorter run (previously 30 frames against a
+        // 300 ms budget — one period, not several) left that regression a
+        // near-miss: only 3 of 5 chaos runs failed. Several periods make it
+        // fail every time.
+        var frameTimeout = TimeSpan.FromMilliseconds(100);
+        var watchdog = new FrameWatchdog(firstFrameTimeout: LongTimeout, frameTimeout: frameTimeout);
 
         var seen = 0;
         var ct = TestContext.Current.CancellationToken;
@@ -107,11 +121,11 @@ public class FrameWatchdogTests
         // hang this test forever.
         await RunAsync().WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
-        Assert.Equal(30, seen);
+        Assert.Equal(HealthyStreamFrameCount, seen);
 
         async Task RunAsync()
         {
-            await foreach (var _ in watchdog.Watch(FramesThenStall(count: 30, pace: FastFramePace, stallAfter: false, ct: ct), ct))
+            await foreach (var _ in watchdog.Watch(FramesThenStall(count: HealthyStreamFrameCount, pace: FastFramePace, stallAfter: false, ct: ct), ct))
             {
                 seen++;
             }
