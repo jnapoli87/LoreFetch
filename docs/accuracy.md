@@ -480,6 +480,113 @@ Two residual items for whoever does that follow-up:
    they may be the same crop-scale phenomenon Part 2 of this document's
    B5c section already measured, at these specific grid positions.
 
+## Decision: switched (2026-09-22)
+
+**The user approved the switch.** `ContourDetectorOptions.RetrievalMode`'s
+default is now `RetrievalModes.List`; `External` stays selectable on the
+same option for anyone reproducing the old behaviour. The evidence is the
+table above, restated here since it is now load-bearing rather than
+advisory:
+
+| Corpus | `RETR_EXTERNAL` | `RETR_LIST` |
+|---|---|---|
+| light mat, 15″ (a_corpus), full frame | 7/54 (13%) | 49/54 (91%) |
+| light mat, 15″, cropped | 14/54 | 49/54 |
+| light mat, 20″, full frame | 1/54 | 18/54 |
+| dark mat, 15″ (2 frames) | 11/18 | 11/18 (identical) |
+
+`List` was never worse in any of the 16 measured cells. Mechanism:
+`External` returns only outermost contours, so on a light mat the bright
+board forms a strong enclosing contour and adjacent cards merge into one
+blob through the morphological close — the cards are discarded before any
+filter runs, not rejected by one. On a dark mat the board forms no such
+enclosure, which is exactly why `List` changes nothing there (11/18 both
+ways) — mechanistic confirmation, not a lucky average. Measured cost: mean
+5.0ms → 6.9ms per frame over 90 detections on the six real frames, ~2ms
+against a 33ms/frame budget at 30fps.
+
+### Re-running the existing real-capture checks under the new default
+
+`Tests/StreamB/ContourCardDetectorRealCaptureTests.cs` asserts exactly one
+accepted quad per `test-images/ad-hoc/` frame, with individually-named
+exceptions. Re-run under `List`, two of the twelve frames changed, in
+opposite directions — neither silently absorbed:
+
+- **`verix_sleeved_black.png`** was a documented miss under `External`
+  (Risk 1, sleeve glare fragmenting the contour). Under `List` it now
+  detects correctly (263×370px, matching the card's known dimensions on
+  the other two mats; confirmed against the annotated overlay, not just
+  the count). Removed from the known-miss list; kept only as a historical
+  note in the test file.
+- **`solring_black.png`** now accepts a SECOND quad under `List`: the real
+  card (265×371px) plus a 149×189px quad that the annotated overlay
+  (`lab detect test-images/ad-hoc/solring_black.png`) places over a loop
+  of desk cable in the frame's bottom-right corner — nowhere near the
+  card. **This is not a `DedupeAndTakeTopN` bug**: `NestedDuplicate=3`
+  fires correctly against the card's own inner frame/art-box contours;
+  the cable-loop quad's centroid is not inside any accepted quad's
+  polygon, so dedupe correctly leaves it alone. It happens to satisfy the
+  aspect-ratio band (~1.27, inside ±15%) and the minimum-area floor by
+  coincidence — a Risk-3 (false card detection) consequence of `List`
+  surfacing far more raw candidate contours from a cluttered desk, not a
+  dedupe defect and not fixable without tuning a filter against this one
+  frame's clutter. Recorded as a documented known excess (expected count
+  2, not 1) rather than chased.
+
+`atarka_foil_black.png` (the other documented miss, foil glare) is
+unaffected either way: still 0 accepted, identical rejection histogram.
+
+### New finding: the real-corpus accuracy gate now fails
+
+`Tests/StreamB/Accuracy/AccuracyHarnessRealCaptureTests.cs` runs the B6
+accuracy harness against the same six `a_corpus` frames (via
+`test-images/ground-truth.csv` + `test-images/fixtures/15in/9/`, which
+*are* `a_1.png`…`a_6.png`) and gates on `wrong@1 == 0` at
+`OkDistance=270` — zero tolerance, by design (`AccuracyHarnessOptions`:
+"do not raise it to make a run pass").
+
+Before the switch, this gate passed, because `External` only detected
+1–2 of 9 cards per frame on this corpus — most slots never reached
+identification at all (`DroppedFrame`: the detected count didn't match
+the 9-card layout, so `SlotMapper` refused to guess an assignment).
+
+After the switch, `List` detects 8–9 of 9 cards on most frames, so far
+more slots actually reach identification — and one of them is a
+confident wrong match: on `a_2.png`, slot 3 (ground truth "Young Red
+Dragon // Bathe in Gold") rank-1 matches **"A-Young Red Dragon // A-Bathe
+in Gold"** — the Alchemy-rebalanced printing of the same card, which
+shares the same artwork — at distance 93 (well inside `OkDistance=270`)
+with a margin of only 12 over the correct card. Full per-slot dump (via a
+temporary diagnostic test, not committed):
+
+```
+a_2.png slot=3 truth=Young Red Dragon // Bathe in Gold outcome=Wrong
+  rank1=A-Young Red Dragon // A-Bathe in Gold dist=93 margin=12 detectedCount=9
+```
+
+This is CLAUDE.md's already-accepted Risk 5 ("same-art printings are
+permanently indistinguishable by hash") — not a detection defect, not a
+`DedupeAndTakeTopN` defect, and not something in this package's write
+scope (`src/LoreFetch.Core/Imaging/**`) to fix, since the hash/identifier
+lives elsewhere. It was invisible before the switch purely because `a_2`
+was one of the frames `External` mostly failed to detect (1/9), so this
+slot never reached identification at all. The switch's higher detection
+rate is what exposes it, on the only real 3×3 corpus currently available.
+
+**Per this package's brief ("never delete or weaken a test to make the
+switch pass... STOP and report"), this gate is left failing, and
+`AccuracyHarnessOptions.MaxWrongAt1AtOkDistance` / `OkDistance` are left
+unchanged.** `Tests/StreamB` therefore does not fully pass after this
+switch: 1 failing test
+(`AccuracyHarnessRealCaptureTests.Run_AgainstRealH3Corpus_ReportsAccuracyAndEvaluatesTheGate`),
+253 passed, 1 skipped, 255 total under the CI filter
+(`Category!=Hardware&Category!=WindowsOnly`), or 261/1/263 unfiltered.
+This needs an explicit decision from whoever owns the accuracy gate: e.g.
+accept the Alchemy-variant collision as a documented Risk-5 exception the
+same way the detector test documents its known miss/excess, revisit once
+the full H3 corpus (not just the six `a_corpus` frames) is available, or
+address it in the identifier rather than the detector.
+
 ---
 
 # Accuracy — B6 harness (correct@1 / wrong@1 / no-match)

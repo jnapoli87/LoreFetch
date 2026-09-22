@@ -7,27 +7,34 @@ namespace LoreFetch.Tests.StreamB;
 
 /// Package B5-something (real-frame H1/H2/H3 investigation): a
 /// `ContourDetectorOptions.RetrievalMode` knob was added so
-/// `RetrievalModes.List` -- the alternative to CLAUDE.md's pinned, still-
-/// default `RetrievalModes.External` -- can be measured against the real
-/// `a_corpus` frames via `LoreFetch.Lab RetrievalExperimentCommand`. These
-/// tests cover the flag itself: the default is unchanged, and `List`
-/// actually does what it is supposed to on a synthetic nested frame --
-/// surface MORE raw contours than `External` -- while
-/// `DedupeAndTakeTopN`'s nested/duplicate suppression (B5a's own dead-code
-/// finding under `External`) actually activates and collapses the extra
-/// contours back down, rather than double-counting them.
+/// `RetrievalModes.List` -- measured against the real `a_corpus` frames via
+/// `LoreFetch.Lab RetrievalExperimentCommand` -- could be compared against
+/// `RetrievalModes.External`, CLAUDE.md's original pin. That investigation
+/// (docs/accuracy.md) found `List` recovers 91% of cards on a light mat
+/// versus 13% for `External`, never worse in any measured cell, so the
+/// shipped default was switched to `List`; `External` remains selectable
+/// for anyone reproducing the old behaviour. These tests cover the flag
+/// itself: the new default is `List`, and `List` actually does what it is
+/// supposed to on a synthetic nested frame -- surface MORE raw contours
+/// than `External` -- while `DedupeAndTakeTopN`'s nested/duplicate
+/// suppression (B5a's own dead-code finding under the OLD `External`
+/// default) actually activates and collapses the extra contours back
+/// down, rather than double-counting them.
 public class ContourCardDetectorRetrievalModeTests
 {
     private const int FrameWidth = 640;
     private const int FrameHeight = 480;
 
     [Fact]
-    public void ContourDetectorOptions_Default_RetrievalModeIsExternal()
+    public void ContourDetectorOptions_Default_RetrievalModeIsList()
     {
-        // CLAUDE.md "Card detection" pins RETR_EXTERNAL -- a settled
-        // decision this package does not renegotiate. The new knob must
-        // not change the shipped default.
-        Assert.Equal(RetrievalModes.External, ContourDetectorOptions.Default.RetrievalMode);
+        // Switched from RetrievalModes.External to RetrievalModes.List --
+        // a user-approved change to the decision CLAUDE.md originally
+        // pinned in "Card detection" -- on the strength of the H1/H2
+        // real-3x3-frame measurement in docs/accuracy.md (91% vs. 13%
+        // accepted-card rate on a light mat, never worse anywhere
+        // measured). `External` stays selectable via this same option.
+        Assert.Equal(RetrievalModes.List, ContourDetectorOptions.Default.RetrievalMode);
     }
 
     [Fact]
@@ -38,12 +45,15 @@ public class ContourCardDetectorRetrievalModeTests
         // shape B5a's own comment describes: RETR_EXTERNAL structurally
         // never returns the inner contours, so DedupeAndTakeTopN's nested-
         // duplicate branch is dead code under it. RETR_LIST must surface
-        // them.
+        // them. `ContourDetectorOptions.Default` is now `List` (the
+        // shipped default), so `External` here must be requested
+        // explicitly rather than relied on as the default.
         var (frame, _) = DetectorTestFrames.CardOnMat(
             FrameWidth, FrameHeight, FrameWidth / 2f, FrameHeight / 2f, shortSidePx: 200, angleDegrees: 0);
         using var f = frame;
 
-        var externalDetector = new ContourCardDetector(ContourDetectorOptions.Default, NullLogger<ContourCardDetector>.Instance);
+        var externalOptions = ContourDetectorOptions.Default with { RetrievalMode = RetrievalModes.External };
+        var externalDetector = new ContourCardDetector(externalOptions, NullLogger<ContourCardDetector>.Instance);
         var listOptions = ContourDetectorOptions.Default with { RetrievalMode = RetrievalModes.List };
         var listDetector = new ContourCardDetector(listOptions, NullLogger<ContourCardDetector>.Instance);
 
@@ -71,7 +81,10 @@ public class ContourCardDetectorRetrievalModeTests
             FrameWidth, FrameHeight, FrameWidth / 2f, FrameHeight / 2f, shortSidePx: 200, angleDegrees: 0);
         using var f = frame;
 
-        var externalDetector = new ContourCardDetector(ContourDetectorOptions.Default, NullLogger<ContourCardDetector>.Instance);
+        // `ContourDetectorOptions.Default` is now `List`, so `External`
+        // (the control, below) must be requested explicitly.
+        var externalOptions = ContourDetectorOptions.Default with { RetrievalMode = RetrievalModes.External };
+        var externalDetector = new ContourCardDetector(externalOptions, NullLogger<ContourCardDetector>.Instance);
         var listOptions = ContourDetectorOptions.Default with { RetrievalMode = RetrievalModes.List };
         var listDetector = new ContourCardDetector(listOptions, NullLogger<ContourCardDetector>.Instance);
 

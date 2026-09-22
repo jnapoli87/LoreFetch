@@ -181,7 +181,14 @@ public class ContourCardDetectorTests
         // inner frame band and art box. If nested/duplicate dedupe were
         // broken, the inner frame band -- which shares the card's own
         // aspect family -- could itself pass every filter and be counted
-        // as a second card.
+        // as a second card. `NewDetector()` uses `ContourDetectorOptions
+        // .Default`, which is now `RetrievalModes.List` -- under the OLD
+        // `External` default this scenario never reached the dedupe
+        // branch at all (the inner contour never reached `findContours`'s
+        // output), so this test now exercises `DedupeAndTakeTopN`'s
+        // nested-duplicate suppression for real, end-to-end, for the
+        // first time; see `ContourCardDetectorRetrievalModeTests` for the
+        // same scenario asserted more explicitly under both modes.
         var (frame, _) = DetectorTestFrames.CardOnMat(FrameWidth, FrameHeight, FrameWidth / 2f, FrameHeight / 2f, shortSidePx: 200, angleDegrees: 0);
         using var f = frame;
         var detector = NewDetector();
@@ -193,18 +200,27 @@ public class ContourCardDetectorTests
 
     /// Direct test of `ContourCardDetector.DedupeAndTakeTopN` (internal,
     /// exposed via `InternalsVisibleTo`), fed two hand-built overlapping
-    /// quads rather than routed through Canny/`findContours`. This is
-    /// deliberate, not a shortcut: empirically, `RETR_EXTERNAL` (CLAUDE.md's
-    /// own pinned retrieval mode) excludes a genuinely nested contour from
-    /// `findContours`'s OWN output before this code ever sees it -- three
-    /// separate synthetic concentric-quad constructions and all 12 real
-    /// `test-images/ad-hoc/` captures produced zero `NestedDuplicate`
-    /// rejections, so no Canny-based image can exercise this method's own
-    /// dedupe branch. Calling the real method directly with a realistic
-    /// input (a small quad whose centroid sits inside a larger one, exactly
-    /// what a mis-detected inner frame/art-box border would look like) is
-    /// what actually exercises the mutation this package's chaos case (e)
-    /// targets, where the end-to-end test above cannot.
+    /// quads rather than routed through Canny/`findContours`. This isolates
+    /// the dedupe method's own logic from detection geometry, independent
+    /// of which retrieval mode is active -- valuable in its own right, not
+    /// just as a workaround.
+    ///
+    /// Historical note: this test predates the switch to `RetrievalModes
+    /// .List` as the shipped default. At the time it was written, it was
+    /// also the ONLY way to exercise this branch at all: under the OLD
+    /// `External` default, `findContours` structurally excludes a
+    /// genuinely nested contour from its own output before this code ever
+    /// sees it -- three synthetic concentric-quad constructions and all 12
+    /// real `test-images/ad-hoc/` captures produced zero `NestedDuplicate`
+    /// rejections under `External`. Under the current `List` default that
+    /// is no longer true (see `Detect_NestedInnerFrameBand_DoesNotDoubleCount`
+    /// above, and `ContourCardDetectorRetrievalModeTests`, both of which now
+    /// exercise this branch end-to-end through Canny), but this direct unit
+    /// test is kept: calling the real method with a realistic input (a
+    /// small quad whose centroid sits inside a larger one, exactly what a
+    /// mis-detected inner frame/art-box border would look like) still
+    /// targets this package's chaos case (e) more directly than an
+    /// end-to-end image does.
     [Fact]
     public void DedupeAndTakeTopN_SmallQuadCentroidInsideLargerQuad_DropsTheSmallerOne()
     {

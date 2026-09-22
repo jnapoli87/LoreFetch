@@ -115,21 +115,41 @@ public sealed record ContourDetectorOptions
     /// bridges small gaps in the Canny edge map before contour-finding.
     public int MorphCloseKernelSize { get; init; } = 5;
 
-    /// `findContours`'s retrieval mode. CLAUDE.md "Card detection" pins
-    /// `RETR_EXTERNAL` -- a settled decision, not renegotiated here -- so
-    /// the default MUST stay `RetrievalModes.External`. This knob exists
-    /// only to make the alternative (`RetrievalModes.List`, which also
-    /// returns nested/inner contours) measurable for the H1 "board outline
-    /// nests the nine cards" investigation; see
-    /// `LoreFetch.Lab RetrievalExperimentCommand` and docs/accuracy.md.
-    /// `List` is expected to raise false positives from a card's own inner
-    /// frame/art-box border re-detected as a second contour -- that is
+    /// `findContours`'s retrieval mode. Default is `RetrievalModes.List`
+    /// -- CLAUDE.md's original pin of `RETR_EXTERNAL` was superseded after
+    /// the H1/H2 real-frame investigation (docs/accuracy.md, "Accuracy —
+    /// real 3x3-grid detection: retrieval mode vs. mat contrast") measured
+    /// `RETR_LIST` on six real 3x3-grid capture frames, 54 cards total:
+    ///
+    ///   | Corpus                                  | External  | List      |
+    ///   |------------------------------------------|-----------|-----------|
+    ///   | light mat, 15" (a_corpus), full frame     | 7/54 (13%)| 49/54 (91%)|
+    ///   | light mat, 15", cropped                   | 14/54     | 49/54     |
+    ///   | light mat, 20", full frame                 | 1/54      | 18/54     |
+    ///   | dark mat, 15" (2 frames)                   | 11/18     | 11/18 (identical) |
+    ///
+    /// `List` was never worse in any of the 16 measured cells. Mechanism:
+    /// `External` returns only outermost contours, so on a light mat the
+    /// bright board forms a strong enclosing contour and adjacent cards
+    /// merge into one blob through the morphological close -- the cards
+    /// are discarded before any filter runs, not rejected by one. On a
+    /// dark mat the board forms no such enclosure, which is exactly why
+    /// `List` changes nothing there (11/18 both ways) -- mechanistic
+    /// confirmation, not a lucky average. Cost: mean 5.0ms -> 6.9ms per
+    /// frame (measured over 90 detections on the six real frames), ~2ms
+    /// against a 33ms/frame budget at 30fps.
+    ///
+    /// `List` also returns nested/inner contours (a card's own inner
+    /// frame/art-box border re-detected as a second contour), which is
     /// exactly what `DedupeAndTakeTopN`'s nested-duplicate check exists to
-    /// suppress, and B5a recorded that check as dead code under
-    /// `External` because `External` structurally never returns a nested
-    /// contour in the first place. Switching to `List` is the one thing
-    /// that can actually exercise it end-to-end.
-    public RetrievalModes RetrievalMode { get; init; } = RetrievalModes.External;
+    /// suppress -- see that method's own comment; under this default the
+    /// check is live production behaviour, not the dead code it was under
+    /// `External`.
+    ///
+    /// `RetrievalModes.External` remains selectable via this option for
+    /// anyone who wants to reproduce the old behaviour or re-run the
+    /// comparison; it is not deleted, just no longer the default.
+    public RetrievalModes RetrievalMode { get; init; } = RetrievalModes.List;
 
     /// `approxPolyDP`'s epsilon, as a fraction of the contour's own
     /// perimeter -- the standard scale-independent way to pick it.
@@ -143,9 +163,11 @@ public sealed record ContourDetectorOptions
 }
 
 /// `ICardDetector`: `Canny` -> morphological close -> `findContours`
-/// (`RETR_EXTERNAL`) -> `approxPolyDP` to 4 points -> corner ordering ->
-/// aspect + minimum-area + border filters -> nested/duplicate dedupe -> top
-/// N by area. See CLAUDE.md "Card detection" and "Geometry", and
+/// (`RETR_LIST` by default -- see `ContourDetectorOptions.RetrievalMode`'s
+/// own comment for the measured justification; `RETR_EXTERNAL` remains
+/// selectable) -> `approxPolyDP` to 4 points -> corner ordering -> aspect +
+/// minimum-area + border filters -> nested/duplicate dedupe -> top N by
+/// area. See CLAUDE.md "Card detection" and "Geometry", and
 /// docs/stream-b-identification.md §B5, for the algorithm and the
 /// per-step rationale. Every discard reason is logged at Debug AND
 /// returned structurally from `DetectWithDiagnostics` -- see
@@ -389,19 +411,26 @@ public sealed class ContourCardDetector : ICardDetector
     /// sorted largest-first -- the caller (`RunPipeline`) guarantees this,
     /// so the dedupe pass always compares a smaller candidate against
     /// larger quads that already survived, and top-N is a plain prefix
-    /// take. Pulled out of `RunPipeline` as its own `internal` method
-    /// specifically so it can be unit-tested directly against hand-built
-    /// overlapping quads: `RETR_EXTERNAL` (CLAUDE.md's own pinned
-    /// retrieval mode) structurally excludes a genuinely nested contour
-    /// from ever reaching `findContours`'s own output in the first place
-    /// -- confirmed empirically here (three separate synthetic concentric-
-    /// quad constructions, plus all 12 real `test-images/ad-hoc/` captures,
-    /// produced zero `NestedDuplicate` rejections) -- so an end-to-end
-    /// image that exercises this specific method through Canny alone is
-    /// not constructible without fighting that guarantee. This method is
-    /// still real, load-bearing production code: defence-in-depth against
-    /// a future retrieval-mode change, or two genuinely separate detected
-    /// quads that happen to overlap on an imperfect real capture.
+    /// take. Pulled out of `RunPipeline` as its own `internal` method so
+    /// it can ALSO be unit-tested directly against hand-built overlapping
+    /// quads, independent of Canny/`findContours`.
+    ///
+    /// Historical note, now stale in one respect: under the OLD default
+    /// `RETR_EXTERNAL`, this branch was dead code end-to-end -- `External`
+    /// structurally excludes a genuinely nested contour from ever reaching
+    /// `findContours`'s own output, confirmed empirically at the time
+    /// (three synthetic concentric-quad constructions plus all 12 real
+    /// `test-images/ad-hoc/` captures produced zero `NestedDuplicate`
+    /// rejections under `External`), which is why the direct unit test
+    /// below existed in the first place: no Canny-based image could
+    /// exercise it. Under the current default `RETR_LIST`
+    /// (`ContourDetectorOptions.RetrievalMode`), that is no longer true --
+    /// `List` surfaces a card's own inner frame/art-box border as a
+    /// separate contour, this dedupe is what suppresses it end-to-end in
+    /// production, and it measurably fires 3-9 times per real 3x3 frame
+    /// (docs/accuracy.md). The hand-built unit test stays regardless: it
+    /// isolates this method's own logic from detection geometry, which is
+    /// valuable independent of which retrieval mode is active.
     internal static IReadOnlyList<CardQuad> DedupeAndTakeTopN(
         List<CardQuad> candidatesDescendingByArea, int maxCards, List<RejectedContour> rejectedSink)
     {
