@@ -151,8 +151,13 @@ public static class NativeCsvCodec
     /// CR as content, not a record terminator, so a naive reader downstream
     /// would not — the two behaviours must agree, or a value with an
     /// embedded CR corrupts the row after it.
+    /// <para>
+    /// Exposed <c>internal</c> so third-party adapters (e.g.
+    /// <c>MoxfieldCsvExporter</c>) can reuse the same quoting rather than
+    /// reimplementing RFC 4180.
+    /// </para>
     /// </summary>
-    private static string QuoteField(string field)
+    internal static string QuoteField(string field)
     {
         if (field.IndexOfAny(['\r', '\n', '"', ',']) < 0)
         {
