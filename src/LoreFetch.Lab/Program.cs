@@ -22,6 +22,7 @@ return await (command switch
     "build-index" => BuildIndexCommand.RunAsync(rest),
     "detect" => DetectCommand.RunAsync(rest),
     "identify" => IdentifyCommand.RunAsync(rest),
+    "synth" => SynthCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -77,5 +78,14 @@ static void PrintUsage()
                                    data/index/cards.lfidx) and print the top
                                    N candidates per detected card, plus a
                                    180-degree-flip sanity check.
+          synth card <image> [--height N] [--out <png>] [--seed N]
+                      [--keystone F] [--blur F] [--noise F] [--quality N]
+                                   Build a camera-like frame from a source
+                                   card render: downscale, keystone, blur,
+                                   sensor noise, JPEG artefacts.
+          synth mat --contrast light|mid|dark [--out <png>] [--seed N]
+                     [--noise F] [--seam]
+                                   Build a card-free mat frame at the given
+                                   contrast (Risk 3).
         """);
 }
