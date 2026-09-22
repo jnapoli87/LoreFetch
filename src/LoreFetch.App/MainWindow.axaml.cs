@@ -10,6 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using LoreFetch.App.Diagnostics;
 using LoreFetch.App.ViewModels;
 using LoreFetch.Core.Abstractions;
@@ -641,11 +642,24 @@ public partial class MainWindow : Window
     /// "Set card manually…" context-menu item click → open the type-ahead
     /// overlay by setting <see cref="TileViewModel.IsTypeAheadOpen"/> = true.
     /// </summary>
+    /// <remarks>
+    /// A10-fix bug 1 ("Set card manually…" did nothing in the live exe):
+    /// this used to read <c>((MenuItem)sender).Parent as ContextMenu</c> then
+    /// <c>ContextMenu.PlacementTarget?.DataContext</c>. That only works when
+    /// something calls <c>ContextMenu.Open(control)</c> explicitly —
+    /// Avalonia's own native path for opening a <c>Control.ContextMenu</c> on
+    /// a real right-click never sets <c>PlacementTarget</c>, so the
+    /// null-conditional silently no-opped on every live right-click, even
+    /// though the menu opened and the item's Click fired correctly. The
+    /// MenuItem's own <see cref="StyledElement.DataContext"/> is inherited
+    /// through the logical tree from the tile Grid regardless of how the
+    /// menu was opened, so reading it directly off <paramref name="sender"/>
+    /// works both for a native right-click and for a menu opened
+    /// programmatically (as the headless tests do).
+    /// </remarks>
     private void OnTileSetManuallyClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem mi &&
-            mi.Parent is ContextMenu cm &&
-            cm.PlacementTarget?.DataContext is TileViewModel vm)
+        if (sender is MenuItem { DataContext: TileViewModel vm })
         {
             vm.IsTypeAheadOpen = true;
         }
@@ -655,11 +669,15 @@ public partial class MainWindow : Window
     /// "Clear" context-menu item click → revert a manual pick to the hash's
     /// own proposal via <see cref="TileViewModel.ClearFromUi"/>.
     /// </summary>
+    /// <remarks>
+    /// Same fix as <see cref="OnTileSetManuallyClick"/> — reads the
+    /// MenuItem's own inherited <c>DataContext</c> rather than
+    /// <c>ContextMenu.PlacementTarget</c>, which Avalonia's native
+    /// right-click path never sets.
+    /// </remarks>
     private void OnTileClearClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is MenuItem mi &&
-            mi.Parent is ContextMenu cm &&
-            cm.PlacementTarget?.DataContext is TileViewModel vm)
+        if (sender is MenuItem { DataContext: TileViewModel vm })
         {
             vm.ClearFromUi();
         }
@@ -672,6 +690,15 @@ public partial class MainWindow : Window
     /// because each tile in the <c>ItemsControl</c> gets its own
     /// <c>AutoCompleteBox</c> instance from the <c>DataTemplate</c>.
     /// </summary>
+    /// <remarks>
+    /// A10-fix bug 1: also subscribes to <see cref="AvaloniaObject.PropertyChanged"/>
+    /// so that whenever THIS box's own <see cref="Visual.IsVisibleProperty"/>
+    /// flips true — i.e. every time "Set card manually…" opens it, not just
+    /// the first time — the box is focused automatically. Without this, the
+    /// overlay appeared (once the sender/DataContext fix above landed) but
+    /// nothing moved keyboard focus into it, so a user's first keystroke
+    /// after right-clicking went nowhere.
+    /// </remarks>
     private void OnTypeAheadLoaded(object? sender, RoutedEventArgs e)
     {
         if (sender is AutoCompleteBox acb && acb.DataContext is TileViewModel vm)
@@ -679,7 +706,30 @@ public partial class MainWindow : Window
             acb.AsyncPopulator = vm.TypeAheadPopulator;
             acb.MinimumPrefixLength = 2;
             acb.MinimumPopulateDelay = TimeSpan.FromMilliseconds(150);
+            acb.PropertyChanged += OnTypeAheadPropertyChanged;
         }
+    }
+
+    /// <summary>
+    /// Focuses the type-ahead box's own inner <c>TextBox</c> part the moment
+    /// it becomes visible. <see cref="AutoCompleteBox"/> is not itself a
+    /// text-input focus target — its template hosts the actual editable
+    /// <c>TextBox</c> — so focusing the box directly would leave keystrokes
+    /// with nowhere to land; this walks the (already-realized, template
+    /// already applied by the time <c>Loaded</c> fired) visual tree to find it.
+    /// </summary>
+    private void OnTypeAheadPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property != Visual.IsVisibleProperty || sender is not AutoCompleteBox { IsVisible: true } acb)
+        {
+            return;
+        }
+
+        var innerTextBox = acb.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+        if (innerTextBox is not null)
+            innerTextBox.Focus();
+        else
+            acb.Focus();
     }
 
     /// <summary>
