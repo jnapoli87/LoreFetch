@@ -1504,3 +1504,42 @@ separation in `QueryHashWitnessDiff`), `Tests/StreamB/RoundTrip/QueryHashWitness
 (regenerate-by-id instead of resample, new `QueryHashWitnessCompareTests`),
 `Tests/StreamB/RoundTrip/round-trip-witness.json` (regenerated on
 win-x64), `docs/accuracy.md` (this section).
+
+## B5c-cleanup, part B: `RoundTripThresholdsDocument.Provisional` derived from architecture, not hardcoded, 2026-09-22
+
+`RoundTripThresholdsDocument.FromStatistics` hardcoded `Provisional = true`
+and notes text that always said "measured on the Mac (ARM64/arm64-darwin)",
+regardless of which machine actually ran `lab round-trip-gate --out`. That
+was correct throughout this package's own development (every prior run
+really was on the Mac), but it is wrong on the ship architecture: a
+win-x64 run producing the FINAL, shipping `referenceFloor`/margin
+measurement would still write `"provisional": true` and a note claiming
+it needs re-measurement on win-x64 -- which it already is.
+
+Fixed by deriving both from the architecture that actually produced the
+measurement (`ArchitectureProvenance.CurrentToken()`): `x64-windows` (the
+ship architecture, CLAUDE.md "Platform: Ship win-x64 binary only") ->
+`Provisional = false` and notes stating the numbers are final; any other
+architecture -> `Provisional = true` and the original re-measurement
+warning, now naming the actual architecture rather than assuming the Mac.
+A new internal overload threads the architecture token/detail through
+explicitly so both branches are testable deterministically regardless of
+which machine runs the test suite (`RoundTripThresholdsDocumentTests`, 4
+tests: ship-architecture -> not provisional, foreign (arm64-darwin) ->
+provisional, a THIRD hypothetical foreign architecture -> notes name it
+rather than assuming "the Mac", and the public overload agrees with
+whatever `ArchitectureProvenance.CurrentToken()` actually is on the
+machine running the test). Chaos-tested: hardcoding `Provisional = true`
+again failed 2 of the 4 tests (the ship-architecture assertion and the
+public-overload cross-check), confirmed, then reverted.
+
+This does **not** touch `data/index/thresholds.json` (out of this
+package's write scope) -- the committed file's own `provisional: false`
+was hand-set during the earlier B6-thresholds package (see that section
+above, "hand-writing B6's calibration on top"), independent of this fix;
+this fix only changes what a FUTURE `round-trip-gate --out` run writes.
+
+Files changed: `src/LoreFetch.Lab/RoundTrip/RoundTripThresholdsDocument.cs`
+(`Provisional`/notes derived from architecture, testable internal
+overload), `Tests/StreamB/RoundTrip/RoundTripThresholdsDocumentTests.cs`
+(new), `docs/accuracy.md` (this section).

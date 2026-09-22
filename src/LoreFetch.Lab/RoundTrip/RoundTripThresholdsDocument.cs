@@ -77,52 +77,101 @@ public sealed record RoundTripThresholdsDocument
 
     public required int MarginMax { get; init; }
 
-    public static RoundTripThresholdsDocument FromStatistics(
-        RoundTripGateStatistics stats, string indexSha256, int indexArtworkCount, DateTimeOffset measuredAt) => new()
-    {
-        // Matches `Core/Scanning/ThresholdsFile.SupportedFormatVersion`.
-        // `LoreFetch.Lab` DOES reference `LoreFetch.Core` (see its
-        // .csproj), but not that type's own constant directly here --
-        // `Core/Scanning` is frozen contract surface this package must
-        // not add a new compile-time dependency edge onto for a single
-        // literal; both types document "schema v1" in prose instead.
-        FormatVersion = 1,
-        ReferenceFloor = stats.OwnDistanceMax,
-        IndexArtworkCount = indexArtworkCount,
-        IndexSha256 = indexSha256,
-        MeasuredAt = measuredAt,
-        Notes = BuildNotes(stats),
-        Provisional = true,
-        MeasuredOn = ArchitectureProvenance.CurrentToken(),
-        MeasuredOnDetail = ArchitectureProvenance.CurrentDetail(),
-        SampleSize = stats.SampleSize,
-        Seed = 0, // overwritten by the caller, which knows the actual seed used
-        LandSampleSize = stats.LandSampleSize,
-        NonLandSampleSize = stats.NonLandSampleSize,
-        Rank1ArtworkMatchRate = stats.Rank1Rate,
-        Rank1ArtworkMatchRateLands = stats.LandRank1Rate,
-        Rank1ArtworkMatchRateNonLands = stats.NonLandRank1Rate,
-        OwnDistanceMin = stats.OwnDistanceMin,
-        OwnDistanceMean = stats.OwnDistanceMean,
-        OwnDistanceMedian = stats.OwnDistanceMedian,
-        OwnDistanceMax = stats.OwnDistanceMax,
-        MarginMin = stats.MarginMin,
-        MarginMean = stats.MarginMean,
-        MarginMedian = stats.MarginMedian,
-        MarginMax = stats.MarginMax,
-    };
+    /// The ship architecture's own `ArchitectureProvenance.CurrentToken()`
+    /// form -- CLAUDE.md "Platform": "Ship `win-x64` binary only." Any
+    /// measurement taken on this token is the shipping measurement, not a
+    /// placeholder; any measurement taken on a different token (e.g. this
+    /// package's own development history on `arm64-darwin`) is provisional
+    /// until re-measured here, per CLAUDE.md "The one gate that matters
+    /// most" / Real risk #2 (`INTER_AREA` is not bit-exact across
+    /// x86-64/ARM64).
+    internal const string ShipArchitectureToken = "x64-windows";
 
-    private static string BuildNotes(RoundTripGateStatistics stats) =>
-        "PROVISIONAL -- measured on the Mac (ARM64/arm64-darwin), NOT the win-x64 ship architecture. " +
-        "INTER_AREA is not bit-exact across x86-64/ARM64 (OpenCV #24163 confirmed, #22477 closed won't-fix; " +
-        "CLAUDE.md \"The one gate that matters most\", Real risk #2), and that includes the QUERY side's own " +
-        "32x32 resize -- so referenceFloor and the margin statistics below must be RE-MEASURED on win-x64 " +
-        "(orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds. " +
-        "goodDistance/okDistance are NOT YET SET -- that is B6's job, calibrated from the real fixture corpus " +
-        "(gated on H3); ThresholdsFile.Load will throw \"missing required field\" until B6 adds them, by design. " +
-        $"Rank-1 ArtworkId match rate: {stats.Rank1Rate:P1} overall ({stats.CorrectCount}/{stats.AvailableCount}), " +
-        $"{stats.LandRank1Rate:P1} on basic lands ({stats.LandCorrectCount}/{stats.LandSampleSize}), " +
-        $"{stats.NonLandRank1Rate:P1} on non-lands ({stats.NonLandCorrectCount}/{stats.NonLandSampleSize}).";
+    public static RoundTripThresholdsDocument FromStatistics(
+        RoundTripGateStatistics stats, string indexSha256, int indexArtworkCount, DateTimeOffset measuredAt) =>
+        FromStatistics(
+            stats, indexSha256, indexArtworkCount, measuredAt,
+            ArchitectureProvenance.CurrentToken(), ArchitectureProvenance.CurrentDetail());
+
+    /// Testable overload: `architectureToken`/`architectureDetail` are
+    /// threaded through explicitly (rather than read from
+    /// `ArchitectureProvenance` inside this method) so a test can exercise
+    /// BOTH the ship-architecture and foreign-architecture branches
+    /// deterministically, regardless of which machine actually runs the
+    /// test suite -- `RoundTripThresholdsDocumentTests` covers both this
+    /// way. `internal` via `LoreFetch.Lab`'s own `InternalsVisibleTo`
+    /// grant to `LoreFetch.Tests.StreamB` (`RepoPaths.cs`).
+    internal static RoundTripThresholdsDocument FromStatistics(
+        RoundTripGateStatistics stats, string indexSha256, int indexArtworkCount, DateTimeOffset measuredAt,
+        string architectureToken, string architectureDetail)
+    {
+        var isShipArchitecture = string.Equals(architectureToken, ShipArchitectureToken, StringComparison.Ordinal);
+
+        return new()
+        {
+            // Matches `Core/Scanning/ThresholdsFile.SupportedFormatVersion`.
+            // `LoreFetch.Lab` DOES reference `LoreFetch.Core` (see its
+            // .csproj), but not that type's own constant directly here --
+            // `Core/Scanning` is frozen contract surface this package must
+            // not add a new compile-time dependency edge onto for a single
+            // literal; both types document "schema v1" in prose instead.
+            FormatVersion = 1,
+            ReferenceFloor = stats.OwnDistanceMax,
+            IndexArtworkCount = indexArtworkCount,
+            IndexSha256 = indexSha256,
+            MeasuredAt = measuredAt,
+            Notes = BuildNotes(stats, isShipArchitecture, architectureDetail),
+            // Derived from the architecture that actually took this
+            // measurement, not hardcoded -- a `round-trip-gate --out` run
+            // on win-x64 (the ship architecture) is the FINAL, shipping
+            // measurement, not a placeholder pending a later re-measurement
+            // on itself. Any other architecture stays provisional, exactly
+            // as before.
+            Provisional = !isShipArchitecture,
+            MeasuredOn = architectureToken,
+            MeasuredOnDetail = architectureDetail,
+            SampleSize = stats.SampleSize,
+            Seed = 0, // overwritten by the caller, which knows the actual seed used
+            LandSampleSize = stats.LandSampleSize,
+            NonLandSampleSize = stats.NonLandSampleSize,
+            Rank1ArtworkMatchRate = stats.Rank1Rate,
+            Rank1ArtworkMatchRateLands = stats.LandRank1Rate,
+            Rank1ArtworkMatchRateNonLands = stats.NonLandRank1Rate,
+            OwnDistanceMin = stats.OwnDistanceMin,
+            OwnDistanceMean = stats.OwnDistanceMean,
+            OwnDistanceMedian = stats.OwnDistanceMedian,
+            OwnDistanceMax = stats.OwnDistanceMax,
+            MarginMin = stats.MarginMin,
+            MarginMean = stats.MarginMean,
+            MarginMedian = stats.MarginMedian,
+            MarginMax = stats.MarginMax,
+        };
+    }
+
+    /// Notes text is factual for WHICHEVER architecture actually produced
+    /// this measurement -- no hardcoded "measured on the Mac". A win-x64
+    /// (ship architecture) run states plainly that the numbers are final,
+    /// not provisional; any other architecture keeps the original
+    /// re-measurement warning, now naming the ACTUAL architecture
+    /// (`architectureDetail`) rather than assuming it was the Mac.
+    private static string BuildNotes(RoundTripGateStatistics stats, bool isShipArchitecture, string architectureDetail)
+    {
+        var provenance = isShipArchitecture
+            ? $"Measured on {architectureDetail}, the win-x64 ship architecture (CLAUDE.md \"Platform\") -- " +
+              "referenceFloor and the margin statistics below are the shipping measurement, not provisional."
+            : $"PROVISIONAL -- measured on {architectureDetail}, NOT the win-x64 ship architecture. " +
+              "INTER_AREA is not bit-exact across x86-64/ARM64 (OpenCV #24163 confirmed, #22477 closed won't-fix; " +
+              "CLAUDE.md \"The one gate that matters most\", Real risk #2), and that includes the QUERY side's own " +
+              "32x32 resize -- so referenceFloor and the margin statistics below must be RE-MEASURED on win-x64 " +
+              "(orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds.";
+
+        return provenance + " " +
+            "goodDistance/okDistance are NOT YET SET -- that is B6's job, calibrated from the real fixture corpus " +
+            "(gated on H3); ThresholdsFile.Load will throw \"missing required field\" until B6 adds them, by design. " +
+            $"Rank-1 ArtworkId match rate: {stats.Rank1Rate:P1} overall ({stats.CorrectCount}/{stats.AvailableCount}), " +
+            $"{stats.LandRank1Rate:P1} on basic lands ({stats.LandCorrectCount}/{stats.LandSampleSize}), " +
+            $"{stats.NonLandRank1Rate:P1} on non-lands ({stats.NonLandCorrectCount}/{stats.NonLandSampleSize}).";
+    }
 }
 
 public static class RoundTripThresholdsWriter
