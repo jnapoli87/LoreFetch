@@ -635,7 +635,8 @@ Global overrides for every B brief:
   - never applies a threshold
 
   Accept: ranking and distinctness tests, plus a timing test for 9 queries against a synthetic 50k index (log the time; soft-fail above 50 ms).
-- [ ] **B4a** ∥ Lab `bulk` command:
+- [x] **B4a** ∥ Lab `bulk` command: — *done 2026-09-22, `stream/b` `2ea5e47`…`9d5cb82`. Live cascade (2026-09-22 file): 54,773 / 37,740 raw → 54,761 image_status → 54,360 en → 50,920 with `image_uris.normal` (3,440 multi-faced skipped explicitly) → 48,936 layouts → **48,750 arts / 33,612 oracle ids**; `frame == "2015"` would leave 31,720 (information only, not applied). Manifest `scryfall-bulk/filtered-artworks.jsonl` (gitignored) with a public reader for B4b/B4c. StreamB 63 → 81 tests; 3 briefed chaos cases fail correctly. **Independent chaos:** counting arts instead of distinct oracle ids fails 2 tests. Lab production code is 717 lines, reported against the tripwire: it covers an HTTP client, two parsers, the cascade, manifest I/O and two commands.*
+  - **Open question answered — single-printing fraction: 60.07%.** 21,032 of 35,013 in-scope illustration ids have exactly one in-scope printing (63,373 printings in `default_cards`). Filter: `lang == "en"` && `finishes` contains `nonfoil` && has top-level `image_uris` && `frame == "2015"` && the same layout/set_type exclusions as the cascade. Where the art is unambiguous, the art match is the printing, so printing resolution for ~60% of arts is a plausible v1.5 feature.
   - `GET /bulk-data/unique_artwork` with the required `User-Agent` and `Accept` headers
   - download `jsonl_download_uri` to `scryfall-bulk/` (gitignored)
   - apply the filter cascade from stream-b §B4 and print the count at each step
