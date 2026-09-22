@@ -206,6 +206,14 @@ $2 is set so that a played copy should still be worth about $1 or more. Both tie
 
 **Audience: card shops sorting bulk.** Shops buy bulk by the thousands of cards, and picking out what's valuable is slow work by hand. The flag's job is *"this one's a banger, whatever its condition, so set it aside"*. The no-false-positive design matters most here: a flagged card is always worth pulling. Full shop inventory is further off, because it needs the printing (see *Set and printing*) and a condition for each card.
 
+**It lowers the expertise needed, so design for someone who can't check its work.** The strongest user may be shop staff who know Pokémon or Yu-Gi-Oh but not Magic. What's valuable in Magic isn't obvious from rarity or age, so the flag supplies knowledge that person doesn't have. They also can't sanity-check the tool, so three rules apply:
+
+1. **No flag doesn't mean worthless.** The floor design misses some cards, such as an expensive printing that shares art with a cheap one. The UI says "flagged: pull it", never "unflagged: bulk".
+2. **A flag on a low-confidence match says "check this one".** An expert spots a wrong match. A newcomer won't, so the low-confidence highlight has to override the flag's certainty.
+3. **Show how old the prices are.** A price spike after the index was built is never flagged, and a newcomer can't know that. Rebuild the index regularly.
+
+The same approach could help other card games, but that's speculative. The hash doesn't depend on the game, but each game needs its own reference index and its own hash region: the top 61% is tuned to Magic's layout.
+
 **Condition is planned as recorded data, not a camera grade.** v1 leaves `Condition` blank, because the camera can't grade a card. The future plan is to capture condition as part of recording the card, entered by a person when the card is recorded. The flag doesn't depend on it, because the price floor is chosen so that a played copy still clears the bar.
 
 **Cost:** the index gains one price column per artwork, so its format changes and the index has to be rebuilt. The native CSV could take a `PriceFloorUsd` column too, since the reader already fails loudly on unknown columns. That's a format-version change, and it needs deciding, not just adding.
