@@ -580,6 +580,18 @@ public partial class MainWindow : Window
     /// leaves the grid intact so the user can retry; A9 adds the visible
     /// retry banner (StoreLockMessage).
     /// </summary>
+    /// <remarks>
+    /// A10-fix bug 2: a successful commit used to leave <c>CollectionGrid</c>
+    /// showing whatever it last held — the row WAS written (the manual
+    /// Refresh button always proved that), but nothing told
+    /// <see cref="CollectionViewModel"/> to re-read the store. Reload only
+    /// runs here, in the success path: never on capture (Space writes
+    /// nothing — see <see cref="MainViewModel.CaptureFromPipelineAsync"/>,
+    /// which never touches the store) and never in the
+    /// <see cref="CollectionStoreException"/> branch below (nothing
+    /// committed there either — the retry banner + retained cohort are the
+    /// correct response, not a reload of an unchanged file).
+    /// </remarks>
     private async Task OnEnterAsync()
     {
         if (DataContext is not ViewModels.MainViewModel vm) return;
@@ -590,12 +602,17 @@ public partial class MainWindow : Window
             // temp-rename). ConfigureAwait(false) keeps that off the UI thread.
             await vm.CommitCohortAsync(_cts.Token).ConfigureAwait(false);
 
-            // Success: clear the pending cohort and any retry banner on the
-            // UI thread.
+            // Success: clear the pending cohort and any retry banner, then
+            // reload the collection view — all on the UI thread.
             Dispatcher.UIThread.Post(() =>
             {
                 vm.ClearPendingCohort();
                 vm.StoreLockMessage = null; // A9: clear the retry banner
+
+                // A10-fix bug 2: fire-and-forget is fine here — RefreshCollectionAsync
+                // already catches CollectionStoreException (shows the retry banner)
+                // and OperationCanceledException (window closing) itself.
+                _ = RefreshCollectionAsync();
             });
         }
         catch (CollectionStoreException)
