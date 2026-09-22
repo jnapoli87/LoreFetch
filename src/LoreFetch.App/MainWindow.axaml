@@ -18,16 +18,14 @@
     </Border>
 
     <!--
-      Placeholder for the preview (A2), quad overlay (A3), expected-count
-      selector (A4) and cohort grid (A5) — all later packages in this
-      stream. Deliberately just a message, not a control, so there is
-      nothing here that could be mistaken for a finished surface.
+      A2: the live preview. ONE WriteableBitmap, allocated and mutated by
+      MainWindow.axaml.cs from IScanPipeline.FrameProcessed frames.
+      Stretch="Uniform" letterboxes a 16:9 (or rotated) frame rather than
+      distorting it to fill the control. The quad overlay (A3), expected-
+      count selector (A4) and cohort grid (A5) land in later packages.
     -->
     <Grid>
-      <TextBlock Text="Preview, overlay and cohort grid land in later packages (A2-A5)."
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center"
-                 Opacity="0.6" />
+      <Image x:Name="PreviewImage" Stretch="Uniform" />
     </Grid>
   </DockPanel>
 </Window>
