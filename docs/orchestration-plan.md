@@ -725,7 +725,9 @@ Approved by the user 2026-09-22. `stream/b` is pushed at `8e4e7aa`; `main` is pu
 | `test-images/ground-truth.csv` | **54 hand-validated rows**, every `oracle_name` checked against the 33,596-name oracle catalog | **Mac only.** Never committed, cannot be |
 | `test-images/fixtures/15in/9/a_1.png` … `a_6.png` | the six 3×3 frames the whole accuracy number rests on | **Mac only** at that path (the PC has the raw captures elsewhere, unstructured) |
 
-**Copy both to the PC by hand**, into the `stream-b` worktree, exactly as the Scryfall manifest was hand-copied to the Mac. `test-images/*` is gitignored tree-wide and the pre-commit hook rejects staged rasters, so **neither can travel through git** — that is deliberate, because the frames are WotC IP regardless of who shot them.
+**In practice only ONE file has to move.** The six fixture frames were verified **byte-identical** (SHA-256) to the PC's own `a_corpus/a_1.png`…`a_6.png`, and the filenames already match — so the PC places its own copies at `test-images/fixtures/15in/9/` and needs nothing transferred for them. **`ground-truth.csv` (3,494 bytes) is the only genuinely Mac-only artifact**, and it was handed to the user directly to move.
+
+`test-images/*` is gitignored tree-wide and the pre-commit hook rejects staged rasters, so **neither can travel through git** — deliberate, because the frames are WotC IP regardless of who shot them.
 
 **Do not regenerate the ground truth by hand on the PC.** It took an image-by-image read of all six frames plus a catalog validation pass that caught four Omen/Adventure cards whose oracle names carry both halves (`Young Red Dragon // Bathe in Gold`, `Whirlwing Stormbrood // Dynamic Soar`, `Dirgur Island Dragon // Skimming Strike`, `Sagu Wildling // Roost Seek`). Retyping it invites exactly the typo-becomes-fake-`wrong@1` failure the labels were validated to prevent — and a typo lands as a *low-distance* wrong answer, which would drag the calibrated `okDistance` tighter for no reason.
 
