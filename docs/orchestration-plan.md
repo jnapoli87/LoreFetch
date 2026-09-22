@@ -454,9 +454,45 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the B-closing session, 2026-09-22 late, Windows PC — **the path forward**
+
+**Newest handoff; read this first.** The user's direction: **integration (I) is next, then real testing.** The checkboxes and their notes are authoritative. This section is the route.
+
+**State at session end.**
+- **All four streams are merged into `main`.** B merged at `dc3636a`, with B6 and B8 ticked.
+- **P3 was pushed with the user's approval:** `main` `a6a0b85` plus this handoff, and `stream/b` `9f6b4b4`.
+- Suites on `main`: build 0 warnings / 0 errors; StreamA 132; StreamB 296 passed / 2 skipped; StreamC 39; StreamD 71; Integration **158 / 8**.
+- Worktrees are kept until the end, per the ruling below.
+- `ui-validation` can be removed once I2 lands.
+
+**1. Integration I1–I6: in the main checkout, never in a worktree.** `guard-write.sh` refuses `Tests/Integration`, `AppComposition`'s frozen neighbours and project files inside any linked worktree. Implementers are Sonnet, one package at a time, briefed with §0's template.
+
+| Step | What | Watch for |
+|---|---|---|
+| **I1** | `Real` gets `CsvCollectionStore` and the Moxfield exporter; `AppComposition` switches to them. | Test the locked-file path (`CollectionStoreException`) against the real store **on Windows**, because D's lock test is `WindowsOnly`. A7/A9 already retain the cohort on that exception. |
+| **I2** | `Real` gets `ContourCardDetector`, `PerspectiveRectifier` and `HashCardIdentifier` (as both `ICardIdentifier` and `IOracleCatalog`), loaded through `DataFiles` from `data/index/cards.lfidx` and `thresholds.json`. B7's synthetic frames fill the `FolderFrameSource` slot. | **Re-do the wiring properly; do not port `validate/ui-real-frames`.** `ThresholdsFile.Load` requires `goodDistance`/`okDistance`, which are now present (208/240). Nothing may hardcode a distance (I4). The detector defaults to `RetrievalMode.List`. |
+| **I3** | `WebcamFrameSourceFactory` goes into `AppComposition`, with a demo-folder/camera switch. | **Set `CameraRotationDegrees = 0` at composition** (geometry re-ruling). The `ScanSettings` default stays 90° and is frozen. |
+| **I4** | Grep for hardcoded distances. | `DemoThresholds.cs` is exempt. The Lab's accuracy harness no longer hardcodes 270; it reads `thresholds.json`. |
+| **I5** | `THIRD-PARTY-NOTICES` covers every package, so the hook's advisory list is empty. | FFmpeg notices inside the OpenCvSharp runtimes. |
+| **I6** 🧭👤 | `LOREFETCH_REQUIRE_REAL=1 dotnet test` on this PC, **0 skipped**, then **P6**. | **Three things must be present first, or it cannot reach 0.** (a) `LOREFETCH_SCRYFALL_CACHE=C:\LoreFetchData\scryfall-cache`: the tests default to `~/LoreFetchData` and **silently skip** without it, which hid B2 on this PC until this session. (b) `test-images/fixtures/15in/9/a_1..a_6.png` in **the main checkout's** `test-images/`: copy `a_corpus/a_*.png`, which are byte-identical. (c) `test-images/ground-truth.csv` in the main checkout: copy it from `.claude/worktrees/stream-b/test-images/`. Never commit it. B's perf test soft-skips under CPU load, so read it from an isolated run. |
+
+**2. Before real testing: A's two open bugs** (A10 "Known bugs, deferred", in A's lane, on `stream/a` after merging `main` into it): bug 1, the type-ahead doesn't take focus in the live window; bug 3, the overlay sits ~35 px high when the preview is letterboxed. Both degrade exactly the hands-on run that E1 is, so fix them before E1. For focus, the live exe is the acceptance, not the headless test.
+
+**3. Real testing: E1**, then E2, P7, E3.
+- **The accuracy numbers so far were measured at 15″ on one light mat.** The operating height is **12″**, and the sweep is **12″ and 20″** (geometry re-ruling). E1 measures the three layouts at 12″, the 3×3 with cards **rotated**, and records "predicted X, measured Y" in `docs/accuracy.md`.
+- **Recalibrate `goodDistance`/`okDistance`** if the 12″ corpus moves the correct/wrong split. They were set from 38 correct distances (82–208) and 6 mismatches (≥272). A new wrong match inside 240 is a stop-and-ask, not a threshold nudge.
+- **Derive each fixture's height from its frame:** `height = 1360 × 2.5 / card_px_width`. Never trust the tape.
+- Measure the **minimum reliable gap** for a tight 3×3. Record the known detection weak spots: white paper under the cards (`b_corpus` 2–5/9) and black-bordered cards on a dark mat (`d_6` 3/9).
+- **If E1 overruns, cut E2, never E3.**
+
+**Learned this session.**
+1. **An artifact-gated test that skips on a path default looks exactly like a passing suite.** B2's round-trip gate had never run on the ship machine. Its first real run failed, because it pinned the old index SHA. After any index rebuild, run the gated tests with their env vars set, and count the skips.
+2. **A witness keyed to "a seeded sample of the current index" is silently invalidated by every rebuild.** Key committed witnesses to their own ids.
+3. **The pasted handoff that started this session was stale on three points:** Priority 0 was already done, `stream/a` was already reconciled, and the Integration baseline was 155, not 143. `git log` and this file beat a pasted prompt. Check them before acting on it.
+
 ### Handoff — end of the A-merge session, 2026-09-22 evening, Windows PC
 
-**Newest handoff; read this first.** A new orchestrator takes over from here and "puts it all together": B's merge, D's merge, integration I1–I6. The checkboxes and their per-item notes are authoritative; this section adds only where things stand.
+**Superseded for state and next steps by the B-closing handoff above; its notes and findings still apply.** A new orchestrator takes over from here and "puts it all together": B's merge, D's merge, integration I1–I6. The checkboxes and their per-item notes are authoritative; this section adds only where things stand.
 
 **State.**
 
@@ -1328,7 +1364,7 @@ Every checkpoint means: show the summary, get explicit approval, push, and see b
 |---|---|
 | P1 | End of Stream 0 |
 | P2 | Merge of stream A — **done 2026-09-22** (`1b24dfa`, CI #24 green) |
-| P3 | Merge of stream B |
+| P3 | Merge of stream B — **pushed 2026-09-22** (`dc3636a` merge; CI to be confirmed on the next session start) |
 | P4 | Merge of stream C |
 | P5 | Merge of stream D — **done 2026-09-22** (`0998420`) |
 | P6 | Integration done |
