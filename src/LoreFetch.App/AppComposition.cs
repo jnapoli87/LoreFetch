@@ -40,6 +40,11 @@ public sealed class AppSession : IAsyncDisposable
     /// (<c>new AppSession(pipeline, source, Task.CompletedTask, settings)</c>)
     /// continue to compile without change.
     /// </param>
+    /// <param name="store">
+    /// Collection store for the commit path. Optional so that existing test
+    /// constructors continue to compile without change. When null,
+    /// <c>MainViewModel.CommitCohortAsync</c> is a no-op.
+    /// </param>
     /// <param name="onDisposed">Optional cleanup action run after the frame source is closed.</param>
     public AppSession(
         IScanPipeline pipeline,
@@ -47,6 +52,7 @@ public sealed class AppSession : IAsyncDisposable
         Task runTask,
         ScanSettings settings,
         IOracleCatalog? catalog = null,
+        ICollectionStore? store = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -59,6 +65,7 @@ public sealed class AppSession : IAsyncDisposable
         RunTask = runTask;
         Settings = settings;
         Catalog = catalog;
+        Store = store;
         _onDisposed = onDisposed;
     }
 
@@ -92,6 +99,14 @@ public sealed class AppSession : IAsyncDisposable
     /// populator can search it.
     /// </summary>
     public IOracleCatalog? Catalog { get; }
+
+    /// <summary>
+    /// The collection store for the Space → Enter commit path. May be null
+    /// when composition does not supply one. <c>MainWindow</c> passes this to
+    /// <see cref="LoreFetch.App.ViewModels.MainViewModel"/>; when null,
+    /// <c>CommitCohortAsync</c> is a no-op.
+    /// </summary>
+    public ICollectionStore? Store { get; }
 
     /// Disposes the pipeline (which cancels and drains its loop), awaits the
     /// run task, then disposes the frame source itself — only at that point
@@ -180,6 +195,12 @@ public static class AppComposition
         // plan-finding V16 and stream-a-ui.md §A5.
         IOracleCatalog catalog = new StubOracleCatalog();
 
+        // A7: in-memory collection store — the StubCollectionStore has the
+        // real dedup and commit semantics so the full Space → Enter loop
+        // is exercisable against fakes before stream D's CsvCollectionStore
+        // exists. Stream D replaces this with the real implementation.
+        ICollectionStore store = new StubCollectionStore();
+
         // Best-effort cleanup of the temp folder DemoFrames created, run
         // from AppSession.DisposeAsync only after the frame source itself
         // (and therefore its decode loop) has stopped. Orchestrator review
@@ -200,6 +221,7 @@ public static class AppComposition
             loggers,
             ct,
             catalog: catalog,
+            store: store,
             onDisposed: onDisposed);
     }
 
@@ -284,6 +306,7 @@ public static class AppComposition
         ILoggerFactory loggers,
         CancellationToken ct,
         IOracleCatalog? catalog = null,
+        ICollectionStore? store = null,
         Action? onDisposed = null)
     {
         ArgumentNullException.ThrowIfNull(frameSourceFactory);
@@ -298,7 +321,8 @@ public static class AppComposition
         var pipeline = ScanPipelineFactory.Create(source, detector, rectifier, identifier, trigger, settings, loggers);
         var runTask = pipeline.RunAsync(ct);
 
-        return new AppSession(pipeline, source, runTask, settings, catalog, onDisposed);
+        return new AppSession(pipeline, source, runTask, settings,
+            catalog: catalog, store: store, onDisposed: onDisposed);
     }
 
     // A4: image extensions that FolderFrameSource can decode. Must stay in

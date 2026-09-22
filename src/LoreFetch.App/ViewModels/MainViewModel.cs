@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Scanning;
 
 namespace LoreFetch.App.ViewModels;
 
@@ -28,6 +29,13 @@ public sealed partial class MainViewModel : ObservableObject
 {
     private readonly ScanSettings _settings;
     private readonly IOracleCatalog? _catalog;
+    private readonly ICollectionStore? _store;
+
+    // The cohort currently displayed in the grid — set by LoadCohort, cleared
+    // by ClearPendingCohort. UI thread only (LoadCohort / ClearPendingCohort
+    // are both called on the UI thread via Dispatcher.UIThread.Post or
+    // directly from an Escape handler on the UI thread).
+    private Cohort? _currentCohort;
 
     /// <param name="settings">Shared scan settings. Must not be null.</param>
     /// <param name="catalog">
@@ -36,11 +44,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// Optional so that existing test constructors
     /// (<c>new MainViewModel(settings)</c>) continue to compile without change.
     /// </param>
-    public MainViewModel(ScanSettings settings, IOracleCatalog? catalog = null)
+    /// <param name="store">
+    /// Collection store for the Enter commit path. When null,
+    /// <see cref="CommitCohortAsync"/> is a no-op. Optional so that existing
+    /// test constructors continue to compile without change.
+    /// </param>
+    public MainViewModel(ScanSettings settings, IOracleCatalog? catalog = null, ICollectionStore? store = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         _catalog = catalog;
+        _store = store;
 
         // Mirror whatever defaults ScanSettings came with so the initial
         // display is consistent with the pipeline's own state.
@@ -142,14 +156,78 @@ public sealed partial class MainViewModel : ObservableObject
     /// its tests can bind without wiring capture logic.
     /// Each <see cref="TileViewModel"/> receives the catalog so its
     /// <c>TypeAheadPopulator</c> can scan <see cref="IOracleCatalog.All"/>.
+    /// Must be called on the UI thread.
     /// </summary>
     public void LoadCohort(Cohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
+        _currentCohort = cohort;
         _tiles.Clear();
         foreach (var tile in cohort.Tiles)
         {
             _tiles.Add(new TileViewModel(tile, _catalog));
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // A7: commit / discard
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Commits the pending cohort to the store. The store filters by tile
+    /// state internally (Included/ManuallySet commit; Excluded/Unresolved
+    /// are skipped). Returns the number of cards committed (sum of quantity
+    /// increments), or 0 when there is no pending cohort or no store.
+    /// Throws <see cref="CollectionStoreException"/> when the file cannot
+    /// be replaced — the caller keeps the pending cohort and can retry
+    /// (A9 adds retry UI; A7's contract is "do not crash").
+    /// </summary>
+    public Task<int> CommitCohortAsync(CancellationToken ct)
+    {
+        if (_currentCohort is null || _store is null)
+            return Task.FromResult(0);
+
+        return _store.CommitCohortAsync(_currentCohort, ct);
+    }
+
+    /// <summary>
+    /// Discards the pending cohort and empties the tile grid. Called on
+    /// Escape (discard without writing) and after a successful commit (the
+    /// caller clears the grid once <see cref="CommitCohortAsync"/> succeeds).
+    /// Never calls the store.
+    /// Must be called on the UI thread.
+    /// </summary>
+    public void ClearPendingCohort()
+    {
+        _currentCohort = null;
+        _tiles.Clear();
+    }
+
+    /// <summary>
+    /// True when a cohort is loaded and waiting for Enter or Escape.
+    /// </summary>
+    public bool HasPendingCohort => _currentCohort is not null;
+
+    /// <summary>
+    /// Capture path used by the Space key handler and by auto-capture:
+    /// calls <see cref="IScanPipeline.CaptureAsync"/> off the UI thread, then
+    /// calls <see cref="LoadCohort"/> back on the UI thread when a non-null
+    /// cohort is returned. Returns immediately (before the load) when the
+    /// pipeline returns null (0 detections). Safe to call from any thread.
+    /// </summary>
+    internal async Task CaptureFromPipelineAsync(IScanPipeline pipeline, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(pipeline);
+
+        // ConfigureAwait(false) keeps the rectify-and-identify work off the
+        // UI thread — up to nine warpPerspective + index-lookup passes can
+        // take several ms per frame, and the UI must stay responsive.
+        var cohort = await pipeline.CaptureAsync(ct).ConfigureAwait(false);
+
+        if (cohort is not null)
+        {
+            // Marshal back to the UI thread before touching _tiles or _currentCohort.
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => LoadCohort(cohort));
         }
     }
 }

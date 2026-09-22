@@ -73,6 +73,10 @@ public partial class MainWindow : Window
 
     private IScanPipeline? _pipeline;
 
+    // A7: cancelled in OnClosed to signal any in-flight CaptureAsync or
+    // CommitCohortAsync that the window is shutting down.
+    private readonly CancellationTokenSource _cts = new();
+
     // Parameterless constructor required by the Avalonia XAML previewer and
     // the compiled-XAML loader.
     public MainWindow()
@@ -101,6 +105,11 @@ public partial class MainWindow : Window
 
         _pipeline = session.Pipeline;
         _pipeline.FrameProcessed += OnFrameProcessed;
+
+        // A7: AutoCaptured fires on the pipeline's background thread;
+        // marshal to the UI thread before touching the cohort grid.
+        _pipeline.AutoCaptured += OnAutoCaptured;
+
         Closed += OnClosed;
 
         // A4: wire the expected-count selector and auto-capture toggle
@@ -109,7 +118,18 @@ public partial class MainWindow : Window
         // the standard Avalonia binding path. The VM holds a reference to
         // ScanSettings and writes through on each property change.
         // A6: pass the oracle catalog so each tile's type-ahead can search it.
-        DataContext = new MainViewModel(session.Settings, session.Catalog);
+        // A7: pass the store so the commit path has something to write to.
+        DataContext = new MainViewModel(session.Settings, session.Catalog, session.Store);
+
+        // A7: window-level tunnel handler for Space/Enter/Escape. Must use
+        // RoutingStrategies.Tunnel explicitly — AddHandler's default is
+        // Direct|Bubble, which would miss the tunnel pass (stream-a-ui.md
+        // §A6, keyboard-handling warning). The tunnel handler runs
+        // root→target before the bubble pass, so it sees the key first.
+        // Do NOT add KeyBindings for these keys — KeyboardDevice walks
+        // ancestors' KeyBindings before the routed event even fires, so
+        // mixing KeyBindings with the tunnel handler would double-fire.
+        AddHandler(InputElement.KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -117,10 +137,18 @@ public partial class MainWindow : Window
         if (_pipeline is not null)
         {
             _pipeline.FrameProcessed -= OnFrameProcessed;
+            _pipeline.AutoCaptured -= OnAutoCaptured;  // A7
             _pipeline = null;
         }
 
         _deferredRenderTimer.Dispose();
+
+        // A7: cancel any in-flight CaptureAsync / CommitCohortAsync then
+        // dispose the source of the token. Order matters: Cancel before Dispose
+        // so that tasks holding the token observe cancellation rather than an
+        // ObjectDisposedException on token access.
+        _cts.Cancel();
+        _cts.Dispose();
     }
 
     /// Raised on the pipeline's background thread for every processed frame
@@ -300,6 +328,101 @@ public partial class MainWindow : Window
 
         _convertedBuffer = new byte[needed];
         _convertedBufferRowBytes = rowBytes;
+    }
+
+    // -----------------------------------------------------------------------
+    // A7: Keyboard map and auto-capture wiring
+    //
+    // All three keys are handled at the window level via a tunnel handler —
+    // see stream-a-ui.md §A6 for the reasoning (tunnel beats bubble, tunnel
+    // handler beats KeyBindings). The focus bail is the critical correctness
+    // check: without it, Space in the type-ahead TextBox is consumed by the
+    // global handler, and "Black Lotus" becomes untypeable (WM_CHAR / AvnView
+    // trap described in stream-a-ui.md §A6).
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Fired on the pipeline's background thread when auto-capture fires.
+    /// Marshals to the UI thread before touching the tile grid.
+    /// </summary>
+    private void OnAutoCaptured(Cohort cohort)
+    {
+        // Same pattern as FrameProcessed: this arrives on a background thread,
+        // so everything that touches a control must be posted to the UI thread.
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+                vm.LoadCohort(cohort);
+        });
+    }
+
+    /// <summary>
+    /// Window-level tunnel key handler for Space / Enter / Escape.
+    /// Registered in the session ctor with <c>RoutingStrategies.Tunnel</c>
+    /// so it runs before any focused control's bubble-phase handler.
+    /// </summary>
+    private void OnKeyDownTunnel(object? sender, KeyEventArgs e)
+    {
+        // ⚠ Focus bail — MUST come first and MUST NOT set e.Handled.
+        // When a TextBox (e.g. the type-ahead AutoCompleteBox inner box) has
+        // focus, return WITHOUT marking Handled. On Win32, a tunnel handler
+        // that marks Space Handled suppresses the following WM_CHAR, so the
+        // focused TextBox never receives the character — "Black Lotus" becomes
+        // untypeable. The same path exists on macOS (AvnView.mm -keyDown:
+        // returns early when user code handled the event). Reproducible in
+        // headless tests on both platforms.
+        if (FocusManager?.GetFocusedElement() is TextBox)
+            return;
+
+        switch (e.Key)
+        {
+            case Key.Space:
+                e.Handled = true;
+                if (DataContext is ViewModels.MainViewModel captureVm && _pipeline is not null)
+                    _ = captureVm.CaptureFromPipelineAsync(_pipeline, _cts.Token);
+                break;
+
+            case Key.Enter:
+                e.Handled = true;
+                _ = OnEnterAsync();
+                break;
+
+            case Key.Escape:
+                e.Handled = true;
+                if (DataContext is ViewModels.MainViewModel escapeVm)
+                    escapeVm.ClearPendingCohort();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Commits the pending cohort off the UI thread, then clears the grid
+    /// on the UI thread on success. On <see cref="CollectionStoreException"/>:
+    /// leaves the grid intact so the user can retry (A9 adds the retry banner).
+    /// </summary>
+    private async Task OnEnterAsync()
+    {
+        if (DataContext is not ViewModels.MainViewModel vm) return;
+
+        try
+        {
+            // CommitCohortAsync may do real I/O in the live store (CSV write +
+            // temp-rename). ConfigureAwait(false) keeps that off the UI thread.
+            await vm.CommitCohortAsync(_cts.Token).ConfigureAwait(false);
+
+            // Success: clear the pending cohort on the UI thread.
+            Dispatcher.UIThread.Post(vm.ClearPendingCohort);
+        }
+        catch (CollectionStoreException)
+        {
+            // A7 contract: do not crash; keep the pending cohort intact so
+            // the user can retry after closing the blocking process (e.g.
+            // Excel holding the CSV). A9 adds the retry dialog/banner.
+        }
+        catch (OperationCanceledException)
+        {
+            // Window closing while commit was in flight — ignore.
+        }
     }
 
     // -----------------------------------------------------------------------
