@@ -827,7 +827,35 @@ Global overrides for every B brief:
   🔴 **The gate has a structural limit, found by the implementer's briefed chaos case and worth understanding before anyone trusts it further than it goes.** Swapping the query transform for the reference transform on the query side **did not fail** the rank-1 or bound assertions — the reported distance *improved to 0*. Cause: the queried render's own index entry was built by that same reference pipeline from the same bytes, so forcing the two sides into symmetry only makes a self-match better. **A render-self-match gate is therefore biased toward passing when the two sides converge, even wrongly, and cannot by itself guard reference/query divergence.** Closed as far as it can be by cross-checking `Identify`'s reported distance against an independent raw-scan distance (catches the mutation: expected 17, actual 0). The real guards on divergence remain B1b's goldens and B2's new witness — which is what CLAUDE.md's "golden hashes **plus** a round-trip test" already implies; the risk was reading the round-trip gate as doing more than it does.
 
   **Query-hash witness (orchestrator addition to the brief).** 50 query-side 1024-bit hashes for a fixed seed, committed as text. **Its trait choice is better than the brief asked for:** rather than copying B1b's `WindowsOnly`, it reads the runtime architecture and compares against the witness's recorded `measuredOn` — same architecture asserts bit-exact, foreign architecture skips with the measured bit-difference count in the message. That matters concretely: `scripts/lorefetch.sh` filters `WindowsOnly` out on macOS, so the goldens are *not* run in a script-driven Mac run, while the witness is. **Orchestrator chaos confirms it:** mutating `QueryTransform`'s `BGR2GRAY` to `RGB2GRAY` is caught by exactly two tests — a golden and the witness — and the witness is the one that survives the macOS filter.
-- [ ] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+- [x] **B5c** Lab crop-scale experiment: measure the floor against crop scale. If the curve is sharp, add a 3-scale sweep inside the identifier. Record the decision here.
+
+  *Done 2026-09-22, Mac, `stream/b` `65b9e54`. StreamB 197 → **213**; Integration unchanged 143/8; 0 warnings. `lab crop-scale`, `CropScaleTransform`, and the curve + findings in `docs/accuracy.md`. **`HashCardIdentifier`, `ContourCardDetector` and `PerspectiveRectifier` are provably untouched** (verified by an empty diff against those paths).*
+
+  **The curve — 150 non-land renders, isotropic crop error, full 48,750-artwork index:**
+
+  | Crop error | Rank-1 rate |
+  |---|---|
+  | ±0–4% | **98–100%** |
+  | +6% | 75.3% |
+  | +8% | 31.3% |
+
+  **Rank-1 starts breaking at ~5–6% crop error**, and the outset direction degrades roughly symmetrically. That is the number the package existed to produce.
+
+  **`plains_black`'s real inset is 10.1% width / 6.9% height** — measured from actual detector geometry against the `plains_white`/`plains_brown` ground truth, and **worse than B5b's by-eye "5% / 3–4%" estimate**. So the observed failure sits well past the tolerance, which explains the confident wrong match. A compensating correction at −8% to −10% **recovers Plains to rank 1** (distance 221); −3% and −5% are insufficient, so the fraction has to be in the right neighbourhood rather than merely nonzero. Note the doc's own caveat: crop error alone was **not** sufficient to produce a wrong match in the synthetic population, so `plains_black` is crop error *compounding* with black-on-black contrast loss, not crop error by itself.
+
+  **DECISION: DEFERRED to after B6, deliberately — not "no".** The 3-scale sweep works and is safe (0/150 false positives on well-framed queries, negligible margin cost) but costs **~6×: 53 ms → 295 ms for a 9-card cohort**, against B3b's 50 ms soft budget — which the *baseline* already exceeds on this Mac (the PC measured 28–35 ms, so the budget comparison belongs on win-x64). The implementer correctly hit the brief's stop condition and changed no production code.
+
+  **Why deferring is right rather than lazy:** B5c measured 150 *synthetic* crops plus exactly **one** real failing frame. What decides the fix is how often real captures actually exceed 5% inset, and H3's corpus supplies that — 30 real frames across three mats. If insets only appear on dark mats with black-bordered cards, then "use a light mat", documented with numbers, is a **zero-cost** fix and the honest one. If light mats inset too, the sweep earns its cost.
+
+  **Sequencing that keeps B6's number honest:** run B6 **without** the sweep first and record that figure; only then decide. If the sweep is adopted, re-measure and report **both** numbers. Choosing an architecture from corpus failure rates is mild fitting to the test set, and reporting both is what keeps the headline accuracy meaningful.
+
+  **The four options on the table, for the record:**
+  1. **Light mat + documented limitation** — zero cost, matches the user's own stated fallback, and B5c's data supports it precisely.
+  2. **Unconditional 3-scale sweep** — 6× query cost. Worth noting 295 ms is *inside* the interaction budget: the 50 ms figure was a soft budget proving brute force beats the rejected early-rejection optimisation, not a UI requirement, and auto mode already waits a **500 ms** count-gated settle. Identification runs once per cohort on Space, not per frame.
+  3. **Conditional sweep**, escalating only when confidence is low — ~1× typical cost. ⚠ Needs a contract ruling first: CLAUDE.md rejected upstream's early rejection as "threshold-keyed and inadmissible", and although a conditional *escalation* never prunes or reorders (so it is not the same defect), it does make identifier behaviour threshold-dependent when `ICardIdentifier` says thresholds belong to the pipeline.
+  4. **Detector fix** — find the true outer edge on a dark mat. Addresses the cause rather than the symptom, but is a materially harder vision problem and was not attempted.
+
+  **Contingent cleanup:** `CropScaleTransform` (93 lines) sits in `Core/Imaging`, so it ships in the product assembly although it is diagnostic-only. That placement is correct *if* option 2 or 3 is adopted, since the sweep would live in `HashCardIdentifier` and use it. **If the sweep is rejected, move it to `Lab`.**
 - [ ] **B6** Accuracy harness, gated on H3 and B4d:
   - correct@1, wrong@1 and no-match for each height and rung
   - the margin distribution
