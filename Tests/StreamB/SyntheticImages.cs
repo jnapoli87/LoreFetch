@@ -85,6 +85,43 @@ internal static class SyntheticImages
         return BgrFromBuffer(buffer, width, height, stride);
     }
 
+    /// A "card-like" BGR image that is exactly point-symmetric about its own
+    /// center: pixel (x, y) and its mirror (width-1-x, height-1-y) always
+    /// carry the identical BGR triplet. `Cv2.Flip(..., FlipMode.XY)` maps
+    /// (x, y) to that same mirror position, so flipping this image (or any
+    /// deterministic per-pixel function of it, such as a grayscale
+    /// conversion) reproduces the identical Mat, byte for byte. B3b's
+    /// non-orientation tests (ranking, distinctness, no-threshold, empty,
+    /// catalog, Load) use this to make a query's upright and 180-degree
+    /// hashes come out identical and known, without hand-deriving what
+    /// pixel values would survive `CardHasher`'s crop/resize/median chain --
+    /// see `HashCardIdentifierTests`'s own notes on why.
+    public static Mat MakePointSymmetricBgr(int width, int height, int seed)
+    {
+        var stride = width * 3;
+        var buffer = new byte[stride * height];
+        var random = new Random(seed);
+        var totalPixels = width * height;
+
+        for (var index = 0; index < totalPixels; index++)
+        {
+            var mirrorIndex = totalPixels - 1 - index;
+            if (mirrorIndex < index)
+            {
+                continue; // this pair (or the self-paired center pixel) was already written via its mirror
+            }
+
+            var b = (byte)random.Next(256);
+            var g = (byte)random.Next(256);
+            var r = (byte)random.Next(256);
+
+            WritePixel(buffer, stride, width, index, b, g, r);
+            WritePixel(buffer, stride, width, mirrorIndex, b, g, r);
+        }
+
+        return BgrFromBuffer(buffer, width, height, stride);
+    }
+
     /// A global brightness offset, saturating at 0/255 like a real sensor's
     /// exposure shift would -- `Mat.ConvertTo`'s `beta` applies
     /// `saturate_cast<byte>(value + beta)` per channel.
@@ -162,6 +199,16 @@ internal static class SyntheticImages
         using var diff = new Mat();
         Cv2.Absdiff(a, b, diff);
         return Cv2.CountNonZero(diff) == 0;
+    }
+
+    private static void WritePixel(byte[] buffer, int stride, int width, int linearIndex, byte b, byte g, byte r)
+    {
+        var y = linearIndex / width;
+        var x = linearIndex % width;
+        var offset = (y * stride) + (x * 3);
+        buffer[offset] = b;
+        buffer[offset + 1] = g;
+        buffer[offset + 2] = r;
     }
 
     private static Mat BgrFromBuffer(byte[] buffer, int width, int height, int stride)
