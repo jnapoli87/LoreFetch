@@ -422,10 +422,10 @@ Rules that follow from the split:
 
 **Newest handoff.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
 
-**State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**; the only open item is the user confirming the Excluded and ManuallySet states by hand (see A10's note). Everything else under A10 is measured and recorded.
+**State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**. **The user's hands-on run failed on two points: *Set card manually…* does nothing, and Enter does not commit** (see A10's note). Memory and fps pass.
 
 **Next, in order:**
-1. **Ask the user about the two A10 states, then tick A10.**
+1. **A10-fix package** (Sonnet, `stream/a`): reproduce both bugs through the real `MainWindow` in failing headless tests, then fix them. Then the user re-runs the live exe: `LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/ad-hoc` plus `.claude/worktrees/stream-a/src/LoreFetch.App/bin/Release/net10.0/LoreFetch.App.exe`. Tick A10 only on the user's confirmation.
 2. **Merge gate:** `git merge --no-ff stream/a` into `main`, then the full suite on `main`. The expected baseline is StreamA 119/119 and Integration 143 passed / 8 skipped. Merging stream/a after main was merged into it should be conflict-free.
 3. **P2:** show the summary, and push only on approval. **Watch the macOS CI leg.** The two screenshot tests lost their `WindowsOnly` trait at A10-prep; if they fail on macOS, re-trait them with the real reason.
 4. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
@@ -695,7 +695,10 @@ Global overrides for every A brief:
     2. **`DOTNET_GCgen0size=0x200000`:** gen0 GCs ran and the small-object heap stayed flat. The **LOH grew 45 → 95 MB in 8 MiB steps**, which is `ArrayPool<byte>.Shared` rounding a 1920×1080×3 frame up to 2²³ bytes. The fake folder source's pooled buffer occasionally misses the pool, and a gen2 GC had yet to run.
     3. **`DOTNET_GCHeapHardLimit` = 80 MB:** gen2 GCs reclaimed memory (73 → 60 MB), so the buffers are garbage, not retained. An 8 MiB decode then OOM'd because the cap was too tight against a 53 MB idle floor. It surfaced cleanly as `FrameSourceException` through `SourceFailed`, with no crash, which incidentally confirms A9.
     4. **112 MB cap, 5.7 minutes, PASS:** no OOM and exit 0. Managed memory is a sawtooth from 69 to 78 MB that returns to 69 after every GC, and working set plateaus at about 233 MB from minute 2.5. **Memory is flat.**
-  - **Still open before ticking A10:** explicit user confirmation that Excluded (left-click) and ManuallySet (right-click → *Set card manually…*) were reached by hand. Both are covered by A6's headless tests.
+  - **A10 FAILED on two points in the user's hands-on run** (live exe, Fakes mode, ad-hoc frames). Space captures ✅ and left-click toggles Excluded ✅.
+    1. **Right-click → *Set card manually…* does nothing.** No type-ahead appears, so ManuallySet cannot be reached by hand.
+    2. **Enter does not commit:** no rows appeared in the collection table. It is not yet known whether the grid cleared, so the fault could be the commit itself or the view not refreshing (A8 has a manual Refresh button, a suspect). Other suspects: focus sitting on a radio button or checkbox that swallows Enter, and the tunnel handler's focus bail.
+    A6 and A7's headless tests pass, so they drive the view models or keys in a way the real window does not. **The fix package must first reproduce each bug in a headless test that fails through the real `MainWindow`** (actual right-click → menu item; Enter after focusing a selector control), then fix it, then have the user re-run the live exe. Do not tick A10 until the user confirms both by hand.
   - **README §A** and the stream A internals are done on `stream/a`: `0b445ec` + `e9f4a59` (low-confidence wording fixed on review).
   - `main` was merged into `stream/a` at `700347e` with no conflicts.
   Adjacent finds for E2 polish, not blocking: **the idle heap holds about 45 MB of LOH at startup** (suspects: the 33k `StubOracleCatalog`, demo setup), plus the two below. the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
