@@ -402,6 +402,18 @@ The user called a push at the end of S0.1 rather than waiting for P1, so the Win
 
   ⛩ **G1 is open.** Everything under §0's *Worktrees* may now proceed: four worktrees, and from that moment `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are frozen — mechanically, from any cwd, for any target path inside a linked worktree (G0.6).
 
+### Handoff — end of the B3b session, 2026-09-22, Windows PC
+
+**Read this first; the two older handoffs below still apply.** State: B3b ticked. `stream/b` is at `1b4f8d3`, **not pushed**, with a clean worktree. `main` holds this tick. Every other stream is untouched since the first session. **Next: B4a**, then B4b → B4c, and start B4d's full image pull as early as possible so it runs unattended.
+
+B4a brief notes, already worked out, so the brief can be written straight from them:
+- **Lab has only a stub `Program.cs`.** B4a adds the command dispatch (hand-rolled argument parsing; no new package, since `.csproj`s are frozen) and uses `System.Text.Json` for the JSONL.
+- **The cascade applied is stream-b §B4's table through the set-type step:** 48,713 arts over 33,578 oracle ids, which matches CLAUDE.md's index count. The `frame == "2015"` row (31,684) is **printed as information only, not applied**: CLAUDE.md's index figure excludes it, and older-frame cards identify just as well. Print the count after every step, and skip entries without top-level `image_uris` explicitly, with that count shown too.
+- **Output:** a filtered manifest (id, oracle_id, name, type_line, `image_uris.normal`, `IsBasicLand` = `type_line` starts with `Basic Land`) for B4b and B4c to consume. The downloads go in gitignored `scryfall-bulk/`. The cache path is a parameter.
+- **The unit test's JSONL sample is synthetic:** records shaped like Scryfall's schema, with made-up names and no real oracle text. It covers one record per cascade branch, including a multi-faced object with no top-level `image_uris`.
+- **Open question (single-printing fraction):** a separate `printings` subcommand over `default_cards`. It keys in-scope printings (English, has a `nonfoil` finish, single-faced, 2015 frame) by `illustration_id` and reports the fraction of in-scope arts with exactly one. Report the exact filter used alongside the number.
+- The standard brief additions apply: quote the test summary lines verbatim; name the chaos cases (e.g. drop the `image_uris` skip, which should crash or miscount; invert the `lang` filter); and rebuild rather than `--no-build` when chaos-testing.
+
 ### Per-project READMEs — ruled 2026-09-22
 
 Each of the nine projects has a `README.md` on `main` (`b0a295b`) that holds **orientation only**: purpose, owner, dependency rules, freeze, how to run its tests, and links into `docs/`. **Streams do not edit these files mid-stream.** `Core`'s README is shared by A, B and D, so concurrent edits would be exactly the multi-way conflict the freeze exists to prevent. Each stream fills in the "Internals" line of its own projects' READMEs **at its done-when step** (A10, B8, C4, D6), next to the root README section it already owes. The same step flips its "(not yet on `main`)" markers in `Core`'s folder map.
@@ -616,7 +628,7 @@ Global overrides for every B brief:
   - a reader and a writer
 
   Accept: round-trip tests on a synthetic index.
-- [ ] **B3b** `HashCardIdentifier`, which implements `ICardIdentifier` and `IOracleCatalog`:
+- [x] **B3b** `HashCardIdentifier`, which implements `ICardIdentifier` and `IOracleCatalog`: — *done 2026-09-22, `stream/b` `ed4d4f0`…`1b4f8d3`. Flat `ulong[]` scan, full 1024-bit distance, a 180° flip of the full grayscale card before the crop, best per oracle, and a bounded top-K with a `(Distance, oracle-table index)` tie-break. **Timing: 3.1–3.9 ms/query, ~28–35 ms for 9 queries** against a realistic 48,700-entry / 33,600-oracle fixture. **Review found the first version at 11.7 ms/query:** a full `Sort` of every oracle on each query took 8–12 ms of it, while the scan took ~2. StreamB now has 63 tests; all 6 briefed chaos cases fail correctly. **Two independent chaos cases:** a mirror flip (`FlipMode.Y`) fails 3 tests. Having the top-K displace against the *best* kept candidate instead of the worst **left all 61 tests green**, and is now caught by a targeted test plus a fixed-seed property test against a naive full-sort reference. **Harness pitfall the implementer hit:** `dotnet test --no-build` reuses a stale `Core.dll`, so a mutation looks caught-by-nothing. Always rebuild when chaos-testing.*
   - brute-force search
   - best distance per `OracleId`
   - hashes both 180° orientations and keeps the better one
