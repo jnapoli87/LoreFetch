@@ -975,7 +975,7 @@ correct/-1 wrong difference between the two runs above (37->38,
 the two runs, confirming Task 1's fix is isolated to the one collision it
 targets rather than shifting anything else.
 
-## Test suite status
+## Test suite status (superseded below)
 
 `Tests/StreamB`: 280 total, 1 failing
 (`AccuracyHarnessRealCaptureTests.Run_AgainstRealH3Corpus_ReportsAccuracyAndEvaluatesTheGate`),
@@ -988,11 +988,142 @@ underlying gate check passes against a filtered index, just not one built
 on the required architecture). `Tests/Integration`: 143 passed / 8
 skipped, unchanged.
 
+**Now stale — see "Results — win-x64 committed index rebuild" below,
+which is the rebuild this section was waiting on.**
+
+## Results — win-x64 committed index rebuild (Task 1's filter applied), 2026-09-22
+
+**This supersedes every number above measured against the unfiltered
+48,750-art index**, and is the first run of the filtered index actually
+built on the ship architecture (`win-x64`, the Windows PC) rather than
+the arm64 verification build. Reproduces the arm64 verification numbers
+essentially exactly (70.4% correct@1, wrong@1=0 both times) -- consistent
+with the earlier measured finding elsewhere in this repo that `INTER_AREA`'s
+arm64/x86-64 divergence is real but tiny (11 bits of 49.9M index bits) and
+does not move the accuracy figures at this corpus size.
+
+**Bulk snapshot:** `unique-artwork-20260922210231.jsonl.gz`, downloaded
+fresh (re-run deliberately, per the handoff, since the cascade gained the
+digital-only step and the manifest had to be regenerated from a new
+snapshot rather than reused).
+
+**Cascade counts, verbatim from `lab bulk`:**
+
+```
+raw unique_artwork: 54774 arts / 37740 oracle ids
+image_status ok: 54762 arts / 37740 oracle ids
+lang == "en": 54361 arts / 37725 oracle ids
+has image_uris.normal: 50921 arts / 34952 oracle ids
+  (explicitly skipped 3440 multi-faced objects with no top-level image_uris)
+drop excluded layouts: 48937 arts / 33686 oracle ids
+drop excluded set_types: 48751 arts / 33612 oracle ids
+drop digital-only (Alchemy/Arena/MTGO) cards: 47418 arts / 32743 oracle ids
+Informational only, NOT applied -- frame == "2015": 30448 of 47418
+```
+
+**47,418 arts / 32,743 oracle ids** in the manifest -- within one art of
+this session's own earlier arm64 measurement (47,417 / 32,743, a
+different, slightly earlier bulk snapshot) and within ~2% of
+orchestration-plan.md's predicted ~47,417/~32,743. Confirmed zero
+`A-`-prefixed (Alchemy) names remain in the manifest.
+
+**Images:** `lab images` against `C:\LoreFetchData\scryfall-cache` (5.1
+GB, already populated from earlier sessions): **1 downloaded, 47,417
+skipped, 0 failed, 47,418 total** -- the cache already held everything
+this newer snapshot's manifest needed.
+
+**Index build:** `lab build-index` --
+
+| | |
+|---|---|
+| Artworks | 47,418 |
+| Oracle cards | 32,743 |
+| Basic lands | 1,852 |
+| File | `C:\LoreFetchData\index-out\cards.lfidx` |
+| Size | 10,175,665 bytes |
+| **SHA-256** | `b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402` |
+| Build time | 36.6s (1295.2 arts/s) |
+
+0 decoded images were not 488x680. Copied to `data/index/cards.lfidx`
+(same SHA-256, confirmed independently with `sha256sum` after the copy).
+The previous committed (unfiltered, 48,750-art) index is preserved
+locally, outside git, as `C:\LoreFetchData\index-out\cards.48750.lfidx`.
+
+**`lab accuracy` against the new committed index, full output:**
+
+```
+Ground truth: test-images/ground-truth.csv (6 frame(s), 54 slot(s))
+6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Full corpus -- 6 of 6 ground-truth frame(s) found on disk -- heights: 15in; rungs: normal; mats: light.
+
+Options: OkDistance=270, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=38 (70.4%)  wrong@1=0 (0.0%)  no-match=16 (29.6%) [unresolved=11, no-detection=5, dropped-frame=0]  total=54
+
+Lands excluded from the headline: 0
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. NoDetect Dropped)  Total  Correct%
+    15in normal         38      0       16       11        5         0     54     70.4%
+
+Margin distribution (rank-1 vs. best different OracleId), n=49: min=0, mean=79.3, median=83, max=174.
+
+Gate: PASS -- wrong@1 = 0 (headline: non-land, normal-rung slots), within the bound of 0 at OkDistance=270.
+```
+
+**70.4% correct@1 (38/54) is the measured figure -- stated exactly, not
+rounded up.** This is the number the user's 2026-09-22 ruling ("the
+≥90% correct@1 gate is waived for v1; 70.4% is accepted") refers to, now
+confirmed reproducible on the ship architecture, not only on the arm64
+verification build.
+
+**Distance data for the orchestrator's threshold decision** (a throwaway
+diagnostic run against the same committed index and corpus, dumping every
+headline slot's rank-1 distance -- not committed code, per this package's
+write scope):
+
+- Sorted **correct** rank-1 distances (n=38): 82, 91, 95, 104, 105, 112,
+  117, 120, 124, 125, 126, 126, 132, 133, 135, 135, 136, 142, 143, 144,
+  149, 150, 153, 153, 154, 166, 172, 174, 176, 177, 178, 179, 183, 183,
+  193, 197, 198, 208. **Max = 208.**
+- No slot fell into the `Wrong` bucket at all (`OkDistance`=270), so there
+  is no `Wrong`-bucket distance to report.
+- Every headline slot outside `Correct`/`Wrong` is `Unresolved`,
+  `NoDetection` or `DroppedFrame`. Six `Unresolved` slots have a rank-1
+  `OracleId` that does not match ground truth (a raw mismatch, just at a
+  distance beyond `OkDistance` rather than within it) -- their distances,
+  sorted: **272**, 288, 296, 299, 314, 314. **Min = 272.**
+
+**The previous session's claim -- "every correct match lands at ≤208 and
+every wrong one at ≥272" -- still holds exactly**, both numbers unchanged
+by the rebuild: correct max is still 208, and the lowest distance at
+which rank-1 ever disagrees with ground truth (whether or not that
+disagreement is "confident" enough to land in the `Wrong` bucket) is
+still 272. The 63-point window between them (209–271) is intact for
+whoever sets `okDistance`. This package does not write
+`data/index/thresholds.json` -- see `ThresholdsCalibration`'s own doc
+comment and this run's brief (the orchestrator decides the threshold from
+this report).
+
+**Test suite, after the rebuild:**
+
+- `Tests/StreamB`: **0 failed, 275 passed, 5 skipped, 280 total.**
+  `AccuracyHarnessRealCaptureTests` now passes against the committed
+  index (it is absent from the skip list; the skip count is the usual
+  soft-skips -- `RoundTripGateTests`, both `QueryHashWitnessTests`,
+  `MultiScaleSweepRiskTests`, and this run's `HashCardIdentifierPerformanceTests`
+  timing soft-skip -- none of them are the accuracy gate).
+- `Tests/Integration`: **0 failed, 155 passed, 8 skipped, 163 total** --
+  unchanged from the recorded baseline, confirming the frozen contracts
+  are untouched.
+
 ## Results — PLACEHOLDER, pending the full H3 corpus
 
-**The section above is real, but still partial** -- only batch A (6
-frames, one height/rung/mat combination) exists on disk. When H3 delivers
-further batches, re-run `lab accuracy` against the committed index (once
-rebuilt on win-x64 with Task 1's filter applied) and replace both this
-section and the one above with the complete coverage line, bucket counts,
+**The section above is real, and now measured on the ship architecture,
+but still partial** -- only batch A (6 frames, one height/rung/mat
+combination) exists on disk. When H3 delivers further batches, re-run
+`lab accuracy` against the committed index and replace both this section
+and the ones above with the complete coverage line, bucket counts,
 breakdown table, margin distribution, and gate result.
