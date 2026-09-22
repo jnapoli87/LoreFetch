@@ -571,19 +571,52 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
 
 **Moving the orchestrator between machines.** Worktrees are local; their branches are what travels. Hand off only at a package boundary: no implementer running, and every worktree clean (`git -C <wt> status --short` empty), because uncommitted work does not travel. Then move `main` and every `stream/*` branch to the other machine, and there run `git worktree add .claude/worktrees/stream-<x> stream/<x>` (no `-b`: the branch already exists). Tick-commits land on `main` from **one** machine at a time; the other stays read-only until the handoff.
 
+### Geometry — re-ruled 2026-09-22 (user), superseding the ~9.75″ locked height and the camera-rotation requirement
+
+**The camera stays landscape and unrotated. The operating height is 12″, and the accuracy sweep is 12″ and 20″. The 3×3 layout is laid out with its cards rotated**, long edge across the frame.
+
+Why the old numbers changed — both were arithmetic, re-derived rather than assumed. Frame coverage at height *h* is `1920/(1360/h)` × `1080/(1360/h)` inches; the 3×3 footprint is 7.7″ × 10.7″.
+
+1. **`CLAUDE.md` locks the mount at "about 9.75″" because that is where a 3×3 *first* fits. It fits with 0.04″ of margin — one millimetre.** That is a geometric floor, not an operating height: a card leaves the frame if the mat shifts. 10″ is only 0.24″. **12″ gives 1.83″.**
+2. **The "1920 axis along the table's depth" requirement, and the 38%-resolution-loss warning behind it, silently assumed the 3×3 is laid out with its cards portrait** — footprint 7.7″ across × 10.7″ deep. Rotating the cards makes it 10.7″ × 7.7″, which fits a landscape frame at 12″ with 1.83″ to spare **at identical pixel resolution**: the card is 283×397 px either way, because px/inch is the same on both axes. So rotating the *layout* substitutes for rotating the *camera*, and the 38% loss never occurs. This is a third option the doc did not consider, and it is strictly simpler than twisting the camera.
+
+Fit matrix, landscape, computed:
+
+| Layout at 12″ | needs (across × deep) | result |
+|---|---|---|
+| 1 card | 2.5 × 3.5 | fits, +6.03″ |
+| 3 in a line, running across | 10.7 × 2.5 | fits, +6.24″ |
+| 3×3, cards portrait | 7.7 × 10.7 | **does not fit, −1.17″** |
+| 3×3, cards **rotated** | 10.7 × 7.7 | fits, +1.83″ |
+
+At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×238 px — still inside SpellTable's proven 130–215 px range, which is the point of shooting it as the stress bound).
+
+**Consequence — `ScanSettings.CameraRotationDegrees` = 0**, which closes the rotation-direction question C4 left open ("whether 90° or 270° is upright is decided at H1 mount time"). The property already accepts 0, so this is a composition-time value at I3 and **not** a frozen-surface edit. The `ScanSettings` default remains 90° and is not changed.
+
+**Derive each fixture's height from its frame, not from a tape measure:** `height_inches = 1360 × 2.5 / card_pixel_width`. It runs through the real optics and hands E1 its "predicted X, measured Y" calibration for free. **Evidence this matters:** the 12 ad-hoc frames are recorded as shot at "~12″", but their ~260 × 370 px card implies **13.1″** from the width and 12.9″ from the height — both axes agree, and 13″ predicts 262×366 against the measured 260×370. The tape was an inch out; the `1360` constant is vindicated, not suspect. A mislabelled height does not fail loudly — it reads as mysteriously poor accuracy in B6's per-height table, which is why `capture-fixtures.sh` makes the label a validated argument.
+
+**Fixtures are `.png`, not `.jpg`** (ruled 2026-09-22). The Stream C hardware harness saves a lossless PNG of the decoded BGR frame, and the camera's own MJPG artifacts are already baked into those pixels — re-encoding to JPEG to satisfy `test-images/README.md`'s stated extension would stack a second lossy generation on top for nothing.
+
+**Follow-ups owed on `main`, not yet done:** `CLAUDE.md` §Geometry still states the ~9.75″ lock, the "1920 axis along the table's depth" requirement and the 38% warning; `docs/PLAN.md` may repeat them; and `test-images/README.md` still says `.jpg`. All three need correcting to match this ruling.
+
 ### Human track H (parallel, may start at G0)
-- [ ] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth.
+- [x] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth. — *done 2026-09-22. Mount printed and adjustable to any height in range. **Superseded in part by the geometry re-ruling below:** the height is not locked at 9.75″ and the camera is not rotated. Operating height **12″**, sweep **12″ and 20″**, camera **landscape, unrotated**.*
 - [ ] **H2** 👤 Lighting and mat:
   - put the SAD lamp off-axis at a shallow angle
   - check a blank frame for PWM banding
   - try light, mid and dark mats, and record which one detects best
 - [ ] **H3** 👤 Capture the fixture corpus:
-  - heights 8, 10, 12, 14 and 20″
-  - 1, 3 and 9 layouts, some rotated
+  - heights **12″ and 20″** (re-ruled 2026-09-22, was 8/10/12/14/20 — see the geometry ruling below)
+  - 1, 3 and 9 layouts. **The 9 layout is laid out with its cards rotated**, long edge across the frame — portrait does not fit at 12″
   - lands, normal cards and stretch cards
   - store them in the gitignored `test-images/fixtures/<height>in/<layout>/…jpg` (same relative path on the Mac and the PC; see `test-images/README.md`)
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
+
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
+  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
+  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
+  ruling below.
 
   Gates B6.
 - [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
