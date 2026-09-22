@@ -204,6 +204,10 @@ v0.1.0 ships with modern-frame English cards (single-faced, non-foil), captures 
 
 $2 is set so that a played copy should still be worth about $1 or more. Both tiers are configuration, not constants. Where that configuration lives is an open question: `thresholds.json` currently belongs to stream B.
 
+**Audience: card shops sorting bulk.** Shops buy bulk by the thousands of cards, and picking out what's valuable is slow work by hand. The flag's job is *"this one's a banger, whatever its condition, so set it aside"*. The no-false-positive design matters most here: a flagged card is always worth pulling. Full shop inventory is further off, because it needs the printing (see *Set and printing*) and a condition for each card.
+
+**Condition is planned as recorded data, not a camera grade.** v1 leaves `Condition` blank, because the camera can't grade a card. The future plan is to capture condition as part of recording the card, entered by a person when the card is recorded. The flag doesn't depend on it, because the price floor is chosen so that a played copy still clears the bar.
+
 **Cost:** the index gains one price column per artwork, so its format changes and the index has to be rebuilt. The native CSV could take a `PriceFloorUsd` column too, since the reader already fails loudly on unknown columns. That's a format-version change, and it needs deciding, not just adding.
 
 ---
