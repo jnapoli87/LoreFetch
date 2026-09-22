@@ -13,7 +13,7 @@ LoreFetch turns a webcam on a desk mount into a Magic: The Gathering collection 
 |---|---|
 | **Scanning one card at a time.** Phone apps want each card held under the camera, one by one. | Lay down one, three or nine cards. It finds them, and in auto mode it captures on its own once they stop moving. |
 | **Subscriptions and the cloud.** The capable scanners are paid, and most need a connection. | Free, GPLv3, and fully offline. It ships its own card fingerprint index, so it never needs the network after install. |
-| **Special hardware.** | A webcam looking straight down at the table: the same kind of overhead setup people already use for SpellTable. The reference rig is a hand-built PVC gantry, cut with pipe cutters from the [Buffalo Tool Library](https://thetoollibrary.org/), with the webcam duct-taped to the crossbar. |
+| **Special hardware.** | A webcam looking straight down at the table: the same kind of overhead setup people already use for SpellTable. The reference rig is a hand-built PVC gantry, with the webcam duct-taped to the crossbar. |
 | **Wrong matches slipping in.** | Low-confidence matches are highlighted. Click a card to exclude it, or right-click to set it by hand, before anything is saved. |
 | **Getting the collection somewhere useful.** | The collection is a plain CSV you own, and it exports straight to [Moxfield](https://moxfield.com). |
 
