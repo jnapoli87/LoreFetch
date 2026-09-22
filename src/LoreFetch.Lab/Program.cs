@@ -20,6 +20,7 @@ return await (command switch
     "printings" => PrintingsCommand.RunAsync(rest),
     "images" => ImagesCommand.RunAsync(rest),
     "build-index" => BuildIndexCommand.RunAsync(rest),
+    "detect" => DetectCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -56,5 +57,17 @@ static void PrintUsage()
                                    (one ArtworkId per line, optionally padded
                                    with --fill N more) build a smaller,
                                    labelled index instead of the full one.
+          detect <image> [--out <png>] [--max N]
+          detect --all <dir> [--max N]
+                                   Run ContourCardDetector against a still
+                                   image (or every image in a folder) and
+                                   write an annotated PNG: accepted quads in
+                                   green with corner labels, rejected
+                                   contours in orange labelled with their
+                                   discard reason. Output defaults to
+                                   C:\LoreFetchData\detect-out\ and is
+                                   refused inside the repository -- an input
+                                   or output image may show real card
+                                   artwork.
         """);
 }
