@@ -19,6 +19,7 @@ return await (command switch
 {
     "bulk" => BulkCommand.RunAsync(rest),
     "printings" => PrintingsCommand.RunAsync(rest),
+    "images" => ImagesCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -40,5 +41,11 @@ static void PrintUsage()
                                    Default out dir: <repo>/scryfall-bulk/ (gitignored).
           printings [--out <dir>] Report the fraction of in-scope artworks that have
                                    exactly one in-scope printing.
+          images [--manifest <path>] --cache <dir> [--concurrency N] [--limit N]
+                                   Download the bulk manifest's image_uris.normal
+                                   renders into an external, gitignored cache,
+                                   keyed by ArtworkId. Resumable; skips files
+                                   already present; --cache must resolve outside
+                                   the repository.
         """);
 }

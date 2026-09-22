@@ -14,7 +14,10 @@ namespace LoreFetch.Lab.Bulk;
 /// from `jsonl_download_uri` every time.
 public sealed class ScryfallBulkClient
 {
-    private const string UserAgent = "LoreFetch/0.1 (github.com/jnapoli87/LoreFetch)";
+    // Shared with LoreFetch.Lab.Images.ImageDownloader (B4b) -- one mandatory
+    // User-Agent string for every Scryfall request this tool makes, never a
+    // second copy that could drift from this one.
+    internal const string UserAgent = "LoreFetch/0.1 (github.com/jnapoli87/LoreFetch)";
     private static readonly TimeSpan MinimumRetryAfter = TimeSpan.FromSeconds(30);
 
     private readonly HttpClient _http;
