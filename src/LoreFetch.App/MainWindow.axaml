@@ -1,0 +1,514 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:LoreFetch.App.ViewModels"
+        x:Class="LoreFetch.App.MainWindow"
+        Title="LoreFetch"
+        Width="1024" Height="768"
+        MinWidth="640" MinHeight="480">
+  <DockPanel>
+    <!--
+      Status line (A1): text comes ONLY from IScanPipeline.SourceDescription
+      via code-behind — CONTRACTS.md "the status line comes from
+      IScanPipeline.SourceDescription", never composed by hand here.
+    -->
+    <Border DockPanel.Dock="Bottom" Padding="8" Background="#1E1E1E">
+      <TextBlock x:Name="StatusText"
+                 Foreground="#DDDDDD"
+                 FontFamily="Consolas,Menlo,monospace"
+                 Text="(starting…)" />
+    </Border>
+
+    <!--
+      A4: expected-count selector (1 / 3 / 9) and auto-capture toggle.
+      DataContext is set in code-behind to a MainViewModel — never
+      bound here by name, because the root window is the DataContext
+      owner. RadioButton.GroupName keeps the three options mutually
+      exclusive inside Avalonia's own group handling. IsDefault is
+      deliberately absent on every button — Enter is the commit key in
+      a later package (A7) and a default-button registration on the
+      input root would intercept every Enter, even when the cohort
+      grid is active (CONTRACTS.md / stream-a-ui.md A6 warning).
+
+      A10-fix bug 4: relabelled "Count:" / "1" / "3" / "9" to "Layout:" /
+      "1 card" / "3 × 1" / "3 × 3" — the values written to
+      ScanSettings.ExpectedCount (via IsCount1/IsCount3/IsCount9) are
+      unchanged (still 1, 3, 9); only the display text changed, to say what
+      each option actually looks like on the table rather than a bare count.
+    -->
+    <Border DockPanel.Dock="Top" Padding="8,4" Background="#2D2D2D"
+            x:DataType="vm:MainViewModel">
+
+      <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <TextBlock Text="Layout:" VerticalAlignment="Center" Foreground="#CCCCCC" />
+        <RadioButton GroupName="ExpectedCount"
+                     Content="1 card"
+                     IsChecked="{Binding IsCount1, Mode=TwoWay}"
+                     VerticalAlignment="Center" />
+        <RadioButton GroupName="ExpectedCount"
+                     Content="3 × 1"
+                     IsChecked="{Binding IsCount3, Mode=TwoWay}"
+                     VerticalAlignment="Center" />
+        <RadioButton GroupName="ExpectedCount"
+                     Content="3 × 3"
+                     IsChecked="{Binding IsCount9, Mode=TwoWay}"
+                     VerticalAlignment="Center" />
+        <Separator Width="1" Height="20" Margin="4,0" Background="#555555" />
+        <CheckBox IsChecked="{Binding AutoCaptureEnabled, Mode=TwoWay}"
+                  Content="Auto"
+                  VerticalAlignment="Center"
+                  Foreground="#CCCCCC" />
+      </StackPanel>
+    </Border>
+
+    <!--
+      A9: Startup-error banner. Shown when composition signals that a
+      required resource (e.g. hash index, thresholds file) is missing
+      or unreadable. Driven by MainViewModel.StartupErrorMessage — set
+      by code-behind or tests; never shows a stack trace. DockPanel.Dock
+      Top so it appears immediately below the toolbar.
+    -->
+    <Border x:Name="StartupErrorBanner"
+            DockPanel.Dock="Top"
+            Background="#7A1111"
+            Padding="8,5"
+            IsVisible="{Binding HasStartupError}"
+            x:DataType="vm:MainViewModel">
+      <TextBlock x:Name="StartupErrorText"
+                 Text="{Binding StartupErrorMessage}"
+                 Foreground="White"
+                 FontSize="12"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <!--
+      A9: SourceFailed banner. Shown when IScanPipeline.SourceFailed fires
+      (device unplugged, taken by another app, watchdog timeout). The
+      message comes ONLY from FrameSourceException.Message — never a stack
+      trace. Subscription/unsubscription lives in the session ctor and
+      OnClosed; the handler marshals to the UI thread before setting the
+      property.
+    -->
+    <Border x:Name="SourceErrorBanner"
+            DockPanel.Dock="Top"
+            Background="#7A1111"
+            Padding="8,5"
+            IsVisible="{Binding HasSourceError}"
+            x:DataType="vm:MainViewModel">
+      <TextBlock x:Name="SourceErrorText"
+                 Text="{Binding SourceErrorMessage}"
+                 Foreground="White"
+                 FontSize="12"
+                 TextWrapping="Wrap" />
+    </Border>
+
+    <!--
+      A9: Store-lock banner. Shown when Enter-commit or export throws
+      CollectionStoreException (most often Excel holding the CSV open on
+      Windows). The pending cohort is RETAINED (A7 contract) so the user
+      can close the blocking program and click Retry. The Retry button
+      re-invokes OnEnterAsync; on success the banner clears automatically.
+    -->
+    <Border x:Name="StoreLockBanner"
+            DockPanel.Dock="Top"
+            Background="#7A5511"
+            Padding="8,5"
+            IsVisible="{Binding HasStoreLock}"
+            x:DataType="vm:MainViewModel">
+      <DockPanel>
+        <Button x:Name="StoreLockRetryButton"
+                DockPanel.Dock="Right"
+                Content="Retry"
+                Click="OnStoreLockRetryClick"
+                Margin="8,0,0,0" />
+        <TextBlock x:Name="StoreLockText"
+                   Text="{Binding StoreLockMessage}"
+                   Foreground="White"
+                   FontSize="12"
+                   VerticalAlignment="Center"
+                   TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+
+    <!--
+      A8: Collection DataGrid and export picker.
+      DataContext is set in code-behind to a CollectionViewModel.
+      Docked Bottom BEFORE the scan Grid so the scan area fills remaining space.
+
+      Layout:
+        Row 0 — header bar: "Collection" label, Refresh button
+        Row 1 — split: DataGrid (left) | export sidebar (right)
+
+      The export sidebar shows a ListBox (not a ComboBox) so all items are
+      always instantiated in the visual tree — which lets the visual-tree test
+      confirm the "unverified" badge without opening a dropdown.
+
+      CollectionGrid is named so visual-tree tests can find it directly.
+      ExporterList is named so code-behind reads SelectedItem on export.
+    -->
+    <Grid DockPanel.Dock="Bottom"
+          RowDefinitions="Auto, 165"
+          x:Name="CollectionPanel"
+          x:DataType="vm:CollectionViewModel">
+
+      <!-- Row 0: collection header -->
+      <Border Grid.Row="0"
+              Background="#252525"
+              Padding="8,4"
+              BorderBrush="#3A3A3A"
+              BorderThickness="0,1,0,0">
+        <DockPanel>
+          <Button DockPanel.Dock="Right"
+                  Content="Refresh"
+                  Click="OnRefreshCollectionClick"
+                  Margin="0,0,4,0" />
+          <TextBlock Text="Collection"
+                     Foreground="#AAAAAA"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center" />
+        </DockPanel>
+      </Border>
+
+      <!-- Row 1: DataGrid + export sidebar -->
+      <Grid Grid.Row="1" ColumnDefinitions="*, 210">
+
+        <!--
+          Column 0: DataGrid over ICollectionStore rows.
+          CanUserSortColumns="True" — DataGrid sorts natively when the column
+          header is clicked; no custom sort comparer needed for simple fields.
+          IsReadOnly="True" — v1 never edits rows through the UI.
+
+          A9: EmptyCollectionHint overlays the DataGrid and is only visible
+          when Rows is empty (IsEmpty=true). Grid stacking (all children
+          in cell 0,0) means the DataGrid and the placeholder coexist in
+          the same column; ZIndex is not needed because the DataGrid is
+          transparent when empty.
+        -->
+        <DataGrid x:Name="CollectionGrid"
+                  Grid.Column="0"
+                  ItemsSource="{Binding Rows}"
+                  Background="#181818"
+                  RowBackground="#181818"
+                  CanUserSortColumns="True"
+                  CanUserReorderColumns="False"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Name"
+                                Binding="{Binding OracleName}"
+                                Width="*"
+                                SortMemberPath="OracleName" />
+            <DataGridTextColumn Header="Qty"
+                                Binding="{Binding Quantity}"
+                                Width="70"
+                                SortMemberPath="Quantity" />
+            <DataGridTextColumn Header="Condition"
+                                Binding="{Binding Condition}"
+                                Width="105"
+                                SortMemberPath="Condition" />
+            <DataGridTextColumn Header="Source"
+                                Binding="{Binding Source}"
+                                Width="90"
+                                SortMemberPath="Source" />
+            <DataGridTextColumn Header="Dist"
+                                Binding="{Binding BestMatchDistance}"
+                                Width="75"
+                                SortMemberPath="BestMatchDistance" />
+            <!--
+              A10-fix bug 3: bind the LOCAL-time display projection
+              (CollectionRowItem.LastScannedLocalText, "yyyy-MM-dd HH:mm:ss")
+              rather than the raw CollectionRow.LastScannedAt DateTimeOffset —
+              the latter renders in whatever offset it was stored with (UTC)
+              formatted with the culture's default pattern, which is neither
+              local nor unambiguous. The stored value itself stays UTC; only
+              this column's display text changes. Width fits the fixed-width
+              19-character format at this font without clipping.
+            -->
+            <DataGridTextColumn Header="Last Scanned"
+                                Binding="{Binding LastScannedLocalText}"
+                                Width="170"
+                                SortMemberPath="LastScannedLocalText" />
+          </DataGrid.Columns>
+        </DataGrid>
+
+        <!--
+          A9: Empty-collection placeholder. Overlaid on the DataGrid
+          (same Grid.Column="0") and visible only when Rows is empty.
+          When rows are present the DataGrid is populated and this
+          TextBlock is hidden. IsHitTestVisible="False" so it never
+          intercepts clicks intended for the DataGrid.
+        -->
+        <TextBlock x:Name="EmptyCollectionHint"
+                   Grid.Column="0"
+                   Text="No cards yet — start scanning"
+                   IsVisible="{Binding IsEmpty}"
+                   IsHitTestVisible="False"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="#555555"
+                   FontSize="13" />
+
+        <!--
+          Column 1: export picker sidebar.
+          ExporterList shows one row per ICollectionExporter with a
+          visible "unverified" badge on any whose IsVerified is false.
+          The badge is a Border whose IsVisible is bound to IsUnverified so
+          the visual-tree test can find it by walking the tree.
+          No per-format code exists here — the UI iterates ExporterItems
+          generically and never names any concrete exporter or format.
+        -->
+        <DockPanel Grid.Column="1"
+                   Background="#202020"
+                   LastChildFill="True">
+
+          <!-- Export button anchored to the bottom -->
+          <Button DockPanel.Dock="Bottom"
+                  Content="Export…"
+                  Click="OnExportClick"
+                  HorizontalAlignment="Stretch"
+                  Margin="8,4" />
+
+          <!-- "Export Format" label at the top -->
+          <TextBlock DockPanel.Dock="Top"
+                     Text="Export Format"
+                     Foreground="#888888"
+                     FontSize="10"
+                     Margin="8,6,8,2" />
+
+          <!--
+            ListBox (not ComboBox): all items are in the visual tree at all
+            times, so the test can confirm the "unverified" badge without
+            needing to open a dropdown.
+          -->
+          <ListBox x:Name="ExporterList"
+                   ItemsSource="{Binding ExporterItems}"
+                   SelectionMode="Single"
+                   Background="Transparent">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ExporterItem">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding DisplayName}"
+                             Foreground="#CCCCCC"
+                             FontSize="11"
+                             VerticalAlignment="Center" />
+                  <!--
+                    Unverified badge: IsVisible is bound to IsUnverified on the
+                    Border itself so the visual-tree test can filter on Border.IsVisible
+                    (the TextBlock child does NOT duplicate the binding — searching
+                    for the Border is more specific and unambiguous).
+                  -->
+                  <Border Background="#883333"
+                          CornerRadius="2"
+                          Padding="3,1"
+                          IsVisible="{Binding IsUnverified}"
+                          VerticalAlignment="Center">
+                    <TextBlock Text="unverified"
+                               Foreground="White"
+                               FontSize="9" />
+                  </Border>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+        </DockPanel>
+      </Grid>
+    </Grid>
+
+    <!--
+      Main content: live preview on the left, cohort grid on the right.
+
+      A2: ONE WriteableBitmap, allocated and mutated by MainWindow.axaml.cs
+      from IScanPipeline.FrameProcessed frames. Stretch="Uniform" letterboxes
+      a 16:9 (or rotated) frame rather than distorting it.
+
+      A3: quads drawn as vector children on QuadOverlayCanvas, layered over
+      the Image — never baked into pixels. IsHitTestVisible="False" keeps
+      the overlay from stealing input.
+
+      A5: cohort grid on the right. WrapPanel so all items are instantiated
+      (no virtualisation), which lets the visual-tree test walk all tiles.
+      The DataTemplate renders four tile states with per-state overlays:
+        Included    — no marker
+        Excluded    — dark overlay + ✕ text + grey border
+        Unresolved  — red border, no name shown
+        ManuallySet — blue border + M badge, distinct from a machine match
+      IsLowConfidence adds an amber border on top of the Included appearance.
+    -->
+    <Grid ColumnDefinitions="*, 280">
+
+      <!-- Column 0: preview + quad overlay -->
+      <Grid Grid.Column="0">
+        <Image x:Name="PreviewImage" Stretch="Uniform" />
+        <Canvas x:Name="QuadOverlayCanvas" IsHitTestVisible="False" />
+      </Grid>
+
+      <!-- Column 1: cohort grid -->
+      <Border Grid.Column="1" Background="#181818" x:DataType="vm:MainViewModel">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <ItemsControl x:Name="CohortGrid" ItemsSource="{Binding Tiles}" Padding="4">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <!--
+                  WrapPanel (not a virtualising VirtualizingStackPanel): all
+                  tile containers are realised immediately after Show(), so
+                  the visual-tree test can walk them without scrolling.
+                -->
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TileViewModel">
+                <!--
+                  Tile card: 80 × 141 px. Children are stacked (Grid default
+                  cell 0,0) and positioned by alignment. Hit-test-invisible
+                  border overlays sit on top without intercepting clicks — A6
+                  attaches its handlers to the outermost Grid.
+
+                  A6 interactions:
+                    Left-click (Tapped)     → OnTileTapped → ToggleExcludedFromUi
+                    Right-click ContextMenu → "Set card manually…" / "Clear"
+                    AutoCompleteBox overlay → shown when IsTypeAheadOpen is true
+
+                  State visuals:
+                    IsLowConfidence → amber border (on Included tiles)
+                    IsUnresolved    → red border, blank DisplayName
+                    IsExcluded      → grey border + dark overlay + ✕ text
+                    IsManuallySet   → blue border + M badge
+                -->
+                <Grid Width="80" Height="141" Margin="4,4,0,0"
+                      Tapped="OnTileTapped">
+                  <!--
+                    A6: Context menu — two items as specified:
+                      1. "Set card manually…" → opens the type-ahead overlay (IsTypeAheadOpen = true)
+                      2. "Clear"              → reverts a manual pick to the hash's own proposal
+                    PlacementTarget is implicitly the Grid that owns this ContextMenu, whose
+                    DataContext is the TileViewModel — so the Click handlers find the VM via
+                    ((MenuItem)sender).Parent as ContextMenu → PlacementTarget.DataContext.
+                  -->
+                  <Grid.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Set card manually…" Click="OnTileSetManuallyClick" />
+                      <MenuItem Header="Clear" Click="OnTileClearClick" />
+                    </ContextMenu>
+                  </Grid.ContextMenu>
+
+                  <!-- Base card background -->
+                  <Border Background="#2D2D2D" CornerRadius="3" />
+
+                  <!-- Thumbnail image (top 111 px); null-safe — Thumbnail is
+                       null in plain unit tests where Avalonia is not initialised. -->
+                  <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                         VerticalAlignment="Top" Height="111" ClipToBounds="True" />
+
+                  <!-- Excluded: dark grey overlay across the thumbnail area -->
+                  <Rectangle Fill="#80000000" VerticalAlignment="Top" Height="111"
+                             IsVisible="{Binding IsExcluded}" />
+
+                  <!-- Name + distance at the bottom (30 px) -->
+                  <Border VerticalAlignment="Bottom" Height="30"
+                          Background="#CC000000" CornerRadius="0,0,3,3"
+                          Padding="3,2">
+                    <StackPanel>
+                      <TextBlock Text="{Binding DisplayName}"
+                                 Foreground="White" FontSize="9"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding DistanceText}"
+                                 Foreground="#888888" FontSize="8" />
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Excluded: large ✕ marker centred on thumbnail area -->
+                  <TextBlock Text="✕" FontSize="40" FontWeight="Bold"
+                             Foreground="#CC4444"
+                             HorizontalAlignment="Center" VerticalAlignment="Top"
+                             Margin="0,22,0,0"
+                             IsVisible="{Binding ShowExcludedMarker}" />
+
+                  <!-- ManuallySet: small "M" badge at top-left -->
+                  <Border Background="#2244AA" CornerRadius="2" Padding="2,1"
+                          Margin="3,3,0,0"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          IsVisible="{Binding IsManuallySet}">
+                    <TextBlock Text="M" Foreground="White"
+                               FontSize="8" FontWeight="Bold" />
+                  </Border>
+
+                  <!--
+                    State border overlays — IsHitTestVisible="False" so
+                    they never eat clicks that A6 wires to the outer Grid.
+                    Only one is visible at a time (states are mutually
+                    exclusive), except low-confidence which overlaps Included.
+                  -->
+                  <!-- Low-confidence: amber border (Included tiles only) -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#FFA500"
+                          IsVisible="{Binding IsLowConfidence}"
+                          IsHitTestVisible="False" />
+                  <!-- Unresolved: red border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#FF4444"
+                          IsVisible="{Binding IsUnresolved}"
+                          IsHitTestVisible="False" />
+                  <!-- Excluded: grey border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#666666"
+                          IsVisible="{Binding IsExcluded}"
+                          IsHitTestVisible="False" />
+                  <!-- ManuallySet: blue border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#4488FF"
+                          IsVisible="{Binding IsManuallySet}"
+                          IsHitTestVisible="False" />
+
+                  <!--
+                    A9: "Set manually" hint on Unresolved tiles (A9). Visible
+                    only when ShowSetManuallyHint is true, i.e. the tile is
+                    Unresolved. Directs the user to the right-click context menu
+                    so they don't assume the app is broken when a card goes
+                    unrecognised. IsHitTestVisible="False" — interaction still
+                    goes through the outer Grid's Tapped handler and ContextMenu.
+                  -->
+                  <TextBlock x:Name="SetManuallyHint"
+                             Text="Right-click to set"
+                             Foreground="#FF8888"
+                             FontSize="7"
+                             FontStyle="Italic"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             Margin="0,0,0,32"
+                             IsVisible="{Binding ShowSetManuallyHint}"
+                             IsHitTestVisible="False" />
+
+                  <!--
+                    A6: Type-ahead overlay for "Set card manually…".
+                    Shown only when IsTypeAheadOpen = true (the "Set card manually…"
+                    ContextMenu item sets this). The AutoCompleteBox fits in the
+                    tile's name strip area; its dropdown popup extends outside the
+                    tile bounds. ZIndex=200 keeps it above all state-border overlays.
+
+                    MinimumPrefixLength, MinimumPopulateDelay and AsyncPopulator are
+                    all set in code-behind via OnTypeAheadLoaded — setting them here
+                    would require XAML TypeSpan / delegate conversion that is less
+                    predictable than explicit C# assignment.
+
+                    Loaded="OnTypeAheadLoaded"     — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
+                    SelectionChanged="…"           — calls SetManuallyFromUi + closes overlay
+                  -->
+                  <AutoCompleteBox IsVisible="{Binding IsTypeAheadOpen}"
+                                   PlaceholderText="Set card manually…"
+                                   VerticalAlignment="Bottom"
+                                   ZIndex="200"
+                                   Loaded="OnTypeAheadLoaded"
+                                   SelectionChanged="OnTypeAheadSelectionChanged" />
+
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+
+    </Grid>
+  </DockPanel>
+</Window>

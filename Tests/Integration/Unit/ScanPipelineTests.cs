@@ -449,6 +449,168 @@ public class ScanPipelineTests
         Assert.Equal(0, tornFrameCount);
     }
 
+    // -- Cohort tile order follows QuadOrdering.ReadingOrder --------------
+
+    /// The pipeline-level proof to go with `QuadOrderingTests`' pure-function
+    /// coverage: a detector handing back a 3x3 in shuffled (tie-broken)
+    /// area order must still produce a `Cohort` whose TILES — not just some
+    /// intermediate quad list — read out in reading order. `RectifiedCard`
+    /// carries its `SourceQuad`, which is what lets this test see which
+    /// physical card each tile came from without touching Abstractions.
+    [Fact]
+    public async Task CaptureAsync_CohortTiles_ComeOutInReadingOrder_WhenDetectorReturnsShuffledQuads()
+    {
+        var pool = new CountingArrayPool();
+        var source = new TestFrameSource(pool, frameCount: 1, delayMs: 2, width: 1200, height: 1600);
+        var settings = new ScanSettings { ExpectedCount = 9 };
+
+        var rowMajor = BuildGrid3x3(cardWidth: 300f, cardHeight: 419f, gap: 10f);
+        var shuffled = Shuffle(rowMajor, seed: 12345);
+        var detector = new FixedQuadDetector(shuffled);
+
+        await using var pipeline = new ScanPipeline(
+            source, detector, new StubRectifier(), new StubCardIdentifier(),
+            new ControllableTrigger(), settings);
+
+        await pipeline.RunAsync(TestContext.Current.CancellationToken);
+        var cohort = await pipeline.CaptureAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(cohort);
+        Assert.Equal(9, cohort!.Tiles.Count);
+
+        // rowMajor IS reading order for this fixture (built row-major with
+        // no skew), so the expectation is the fixture itself.
+        for (var i = 0; i < rowMajor.Count; i++)
+        {
+            Assert.Equal(rowMajor[i], cohort.Tiles[i].Image.SourceQuad);
+        }
+    }
+
+    /// Proves ordering is applied AFTER area-based selection, never before.
+    /// The detector is handed 12 quads — 3 tiny "noise" quads placed ABOVE
+    /// (smaller Y than) a real 3x3 grid, plus the 9 real cards — modelling
+    /// any spec-compliant `ICardDetector` (it sorts by descending area and
+    /// clamps to `maxCards` itself, exactly like `StubCardDetector`). Since
+    /// the pipeline asks for `ScanPipeline.MaxDetectionCards` (9), a
+    /// correct detector already drops the 3 noise quads before reading
+    /// order ever sees them — survivors are chosen by AREA, not by
+    /// whichever quads happen to sort first once reading order is applied.
+    /// Chaos case 5 in the package brief (ask the detector for everything,
+    /// apply reading order across all of it, THEN take 9) would let the
+    /// noise quads — ranked first because they sit above every real card —
+    /// displace real cards from the survivor set entirely; this test is
+    /// what catches that.
+    [Fact]
+    public async Task CaptureAsync_MoreThanMaxDetectionCardsCandidates_SelectsSurvivorsByArea_NotByReadingPosition()
+    {
+        var pool = new CountingArrayPool();
+        var source = new TestFrameSource(pool, frameCount: 1, delayMs: 2, width: 1400, height: 1800);
+        var settings = new ScanSettings { ExpectedCount = 9 };
+
+        var realCards = BuildGrid3x3(cardWidth: 300f, cardHeight: 419f, gap: 10f);
+        var noise = new[]
+        {
+            MakeSmallQuad(centerX: 100f, centerY: 20f),
+            MakeSmallQuad(centerX: 400f, centerY: 20f),
+            MakeSmallQuad(centerX: 700f, centerY: 20f),
+        };
+        var allDetected = noise.Concat(realCards).ToList(); // 12 total, > MaxDetectionCards (9)
+
+        var detector = new AreaClampingQuadDetector(allDetected);
+
+        await using var pipeline = new ScanPipeline(
+            source, detector, new StubRectifier(), new StubCardIdentifier(),
+            new ControllableTrigger(), settings);
+
+        await pipeline.RunAsync(TestContext.Current.CancellationToken);
+        var cohort = await pipeline.CaptureAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(cohort);
+        Assert.Equal(9, cohort!.Tiles.Count);
+
+        var survivorAreas = cohort.Tiles.Select(t => t.Image.SourceQuad.AreaPx).ToList();
+        Assert.All(survivorAreas, area => Assert.True(
+            area > 10_000f,
+            $"Every surviving tile must be a real card (area ~125,700), never a noise quad (area 400); got {area}."));
+    }
+
+    private static CardQuad MakeSmallQuad(float centerX, float centerY)
+    {
+        const float half = 10f; // 20x20 "noise" quad -- far smaller than any real card
+        return new CardQuad(
+            TL: new PointF2(centerX - half, centerY - half),
+            TR: new PointF2(centerX + half, centerY - half),
+            BR: new PointF2(centerX + half, centerY + half),
+            BL: new PointF2(centerX - half, centerY + half));
+    }
+
+    /// Models a spec-compliant `ICardDetector`: sorts everything it was
+    /// given by descending area and clamps to `maxCards` ITSELF, exactly
+    /// as `ICardDetector.Detect`'s own contract requires. Selection is
+    /// therefore already done before this fake ever returns — the pipeline
+    /// (and `QuadOrdering` after it) never sees the discarded candidates.
+    private sealed class AreaClampingQuadDetector : ICardDetector
+    {
+        private readonly IReadOnlyList<CardQuad> _all;
+
+        public AreaClampingQuadDetector(IReadOnlyList<CardQuad> all) => _all = all;
+
+        public IReadOnlyList<CardQuad> Detect(CameraFrame frame, int maxCards) =>
+            _all.OrderByDescending(q => q.AreaPx).Take(maxCards).ToList();
+    }
+
+    private static List<CardQuad> BuildGrid3x3(float cardWidth, float cardHeight, float gap)
+    {
+        const float originX = 60f;
+        const float originY = 60f;
+
+        var quads = new List<CardQuad>(9);
+        for (var r = 0; r < 3; r++)
+        {
+            for (var c = 0; c < 3; c++)
+            {
+                var centerX = originX + (cardWidth / 2f) + (c * (cardWidth + gap));
+                var centerY = originY + (cardHeight / 2f) + (r * (cardHeight + gap));
+                var hw = cardWidth / 2f;
+                var hh = cardHeight / 2f;
+                quads.Add(new CardQuad(
+                    TL: new PointF2(centerX - hw, centerY - hh),
+                    TR: new PointF2(centerX + hw, centerY - hh),
+                    BR: new PointF2(centerX + hw, centerY + hh),
+                    BL: new PointF2(centerX - hw, centerY + hh)));
+            }
+        }
+
+        return quads;
+    }
+
+    private static List<T> Shuffle<T>(IReadOnlyList<T> items, int seed)
+    {
+        var list = items.ToList();
+        var rng = new Random(seed); // fixed seed: deterministic test
+        for (var i = list.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (list[i], list[j]) = (list[j], list[i]);
+        }
+
+        return list;
+    }
+
+    /// An `ICardDetector` that always returns a fixed quad list, clamped to
+    /// `maxCards` — models a real detector handing the pipeline quads in
+    /// whatever (tie-broken) area order it produced, without needing a real
+    /// contour pass.
+    private sealed class FixedQuadDetector : ICardDetector
+    {
+        private readonly IReadOnlyList<CardQuad> _quads;
+
+        public FixedQuadDetector(IReadOnlyList<CardQuad> quads) => _quads = quads;
+
+        public IReadOnlyList<CardQuad> Detect(CameraFrame frame, int maxCards) =>
+            _quads.Take(maxCards).ToList();
+    }
+
     // -- Test doubles --------------------------------------------------
 
     /// A frame source with total control over count, pacing and failure, so

@@ -21,7 +21,7 @@ Cataloging Magic cards shouldn't mean a monthly subscription or holding your pho
 
 Cards are identified by **perceptual hash**, not OCR. Nothing reads the card name — at a realistic overhead camera height the name is about five pixels tall, which rules text-reading out entirely. Instead each card is rectified, reduced to a 32×32 thumbnail and turned into a 1024-bit fingerprint, then matched by Hamming distance against a prebuilt index.
 
-That approach isn't novel here: it's a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause), which is the engine behind Wizards of the Coast's own SpellTable. Using a technique already proven in production at this exact camera geometry was the single biggest risk reduction available.
+That approach isn't novel here: it's a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause), a perceptual-hash card matcher proven against real webcam capture. Note that CardSpotter identifies a card the user *clicks on*; LoreFetch additionally has to find the cards, unassisted, which is the harder half.
 
 ## Planned scope for v0.1.0
 
@@ -66,6 +66,16 @@ Details and reasoning are in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
 
+## Cameras
+
+Any webcam that delivers 1080p should work. These are the ones actually run, rather than the ones expected to work — if you use another, open an issue with the camera, resolution and OS and it gets added.
+
+| Camera | Tested at | Notes |
+|---|---|---|
+| Logitech C920 | 1920×1080, 30 fps, Windows 11 (2026-09) | USB 2.0, so 1080p only reaches 30 fps in MJPG; uncompressed caps at 5 fps on that bus. Capture negotiates the format explicitly through FlashCap and logs what it got, so a camera that quietly falls back is visible rather than silently slow. |
+
+The lamp matters more than the camera: put it low and off to one side, never beside the lens. Glare is the main way identification fails.
+
 ## Working on it
 
 ```sh
@@ -88,7 +98,27 @@ scripts/lorefetch.sh test
 
 ## Stream A — UI
 
-Filled in by Stream A as the Avalonia app, auto-capture trigger and capture/cohort UI land.
+The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a layout selector (1 card / 3 × 1 / 3 × 3) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented in [Stream D](#stream-d--collection--export).
+
+Every interaction has a keyboard path, and the happy path never touches the mouse:
+
+| Key / action | Effect |
+|---|---|
+| **Space** | Capture whatever is detected right now — ignores the expected count, so two cards down still makes a two-card cohort. Replaces any pending cohort. No-op with nothing detected. |
+| **Enter** | Accept the cohort: commit every tile that isn't X'd, clear the grid, re-arm auto mode. |
+| **Escape** | Discard the cohort. Nothing is written. |
+| **Left-click a tile** | Toggle its **X** (opt-out). No X means included — the default is to keep a card, not to affirm it. |
+| **Right-click a tile** | *Set card manually…* opens a type-ahead over the oracle catalog; *Clear* reverts a manual pick back to the hash's own proposal. |
+
+Capture only fills the grid — commit is always the separate Enter. That's what makes a spurious capture cheap: Escape costs nothing, where a wrong commit would cost a hand-edit.
+
+**Tile visuals.** No border means a confident match. An amber border means low-confidence — the hash proposed a card, but not as closely as a confident match; worth a second look. It's emphasis, never a gate, and a low-confidence tile still commits on Enter like any other included tile. A red border with a "Right-click to set" hint means Unresolved: nothing was proposed. A grey border, a dark overlay and a ✕ mean Excluded. A blue border with a small "M" badge means the card was set by hand rather than proposed by the hash, so it stays visibly distinct from a machine match.
+
+**Auto mode** fires on a count-gated settle: the expected count has to hold steady for the settle window (≥500 ms by default) before it captures, and any card movement restarts that timer. It fires once per scene and then stays armed-off until the count itself changes — without that re-arm rule a tableau that stays put would re-fire every settle window forever. One consequence worth knowing: swapping one card for another without lifting the rest doesn't change the count, so it doesn't restart the clock and doesn't re-fire on its own — press Space to capture the swap.
+
+**Non-happy states.** An empty collection shows a placeholder instead of an empty table. If the frame source dies — camera unplugged, a folder that vanished — a banner shows the failure's message text, never a stack trace. If the collection file can't be written (e.g. it's open in Excel), a banner offers Retry and keeps the pending cohort intact so nothing already captured is lost. A missing hash index or thresholds file surfaces the same way, as a plain-text banner rather than a crash.
+
+**Try it without a camera.** In the current build the app runs in Fakes mode — no webcam and no real card identification yet. Set `LOREFETCH_FRAMES_DIR` to a folder of your own images and the preview cycles through them instead of generated placeholder frames. Identification in this mode is a demo: a stand-in identifier cycles each captured tile through confident, low-confidence and Unresolved in turn, so every tile state is reachable — it is not a real card match. The real webcam and the real identifier arrive once the streams are integrated.
 
 ## Stream B — Identification
 
@@ -118,7 +148,24 @@ Hardware-verified on the Windows PC with a Logitech C920 (2026-09-22):
 
 ## Stream D — Collection & export
 
-Filled in by Stream D as the collection store, native format and export adapters land.
+v1 ships two formats: the **native LoreFetch CSV** (source of truth, UTF-8 with BOM so Excel opens it without mangling accented card names) and a **Moxfield** adapter — the one researched tool that provably accepts name-only rows. [Moxfield's importer](https://moxfield.com/help/help-articles/importing-collection) requires only `Name`; we emit `Count` and `Name`, leaving printing columns blank.
+
+> [!IMPORTANT]
+> **Import under Collection, not as a decklist.** LoreFetch emits a *collection* CSV (`Count,Name,…`). Export it, then upload it at [moxfield.com/collection](https://moxfield.com/collection) with the Collection view's CSV upload. Do **not** paste or upload it into the decklist import box on Moxfield's home page — that path expects a deck list, not a collection, and will not ingest the file correctly.
+
+Verified by a real import on 2026-09-22 (`IsVerified = true`): a 6-card sample — including `+2 Mace`, `Borrowing 100,000 Arrows`, `Kongming, "Sleeping Dragon"` and `Lim-Dûl's Vault` — imported with every name intact, `Forest` merged to quantity 9, and the blank `Condition` defaulting to **Near Mint**. Moxfield assigns an arbitrary printing per card, as expected for oracle-name-only rows.
+
+| Tool | Why not in v1 |
+|---|---|
+| **ManaBox** | Requires card name plus set name or code, or a Scryfall printing ID — oracle-name-only rows can't satisfy its documented minimum. ([guide](https://www.manabox.app/guides/collection/import-export/)) |
+| **Archidekt** | Blocks name-only uploads as ambiguous; also has no fixed import header to target by design. ([forum](https://archidekt.com/forum/thread/15700538), [release post](https://archidekt.com/news/5891613)) |
+| **Deckbox** | Technically accepts `Count` + `Name` with edition blank, but the column spec is community folklore with no first-party documentation — held for a future release. ([community source](https://deckbox.org/forum/viewtopic.php?id=30026)) |
+| **Dragon Shield** | No first-party import documentation exists; cannot be shipped without a verified real import. |
+
+> [!NOTE]
+> **`+2 Mace` in Excel.** That card's name begins with `+`, which Excel treats as a formula character and may try to evaluate. The native CSV is correct — this is a display quirk in Excel only. The file is deliberately **not** sanitised: a `'` or tab prefix would corrupt the source of truth for every machine reader.
+
+Reprints sharing artwork are indistinguishable by perceptual hash, so the collection carries oracle name only — no set, no price column. See [Known limitations, by design](#known-limitations-by-design).
 
 ## Licence
 

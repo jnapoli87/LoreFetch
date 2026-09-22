@@ -259,8 +259,16 @@ public sealed class ScanPipeline : IScanPipeline
 
         try
         {
-            var tiles = new List<CohortTile>(ownedSnapshot.Quads.Count);
-            foreach (var quad in ownedSnapshot.Quads)
+            // Area order (ICardDetector's own ordering, preserved verbatim
+            // in ownedSnapshot.Quads and in FrameProcessed's snapshot) is
+            // what already chose these survivors out of everything
+            // detected. Reading order is applied HERE, after that
+            // selection and before any tile exists, so it can only ever
+            // reshuffle who already made the cut — never change who did.
+            var readingOrderQuads = QuadOrdering.ReadingOrder(ownedSnapshot.Quads);
+
+            var tiles = new List<CohortTile>(readingOrderQuads.Count);
+            foreach (var quad in readingOrderQuads)
             {
                 ct.ThrowIfCancellationRequested();
 

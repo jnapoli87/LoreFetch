@@ -47,6 +47,40 @@ A proposal raised after Stream 0's contract work: identification already produce
 
 **The fold rule is agree-or-null, never last-write-wins.** A non-null `ArtworkId` must be trustworthy; a value that is right sometimes and wrong sometimes, with nothing able to tell which, is worse than null for a field whose purpose is price resolution. Same reasoning as *Condition is blank in v1*.
 
+### Contract change — cohort tiles in grid (reading) order, requested 2026-09-22 by the user, executed on `main` 2026-09-22
+
+**Executed** at `0bf9d76` (Sonnet implementer, main checkout), **pulled ahead of A's merge**, because the user's new real 3×3 corpora (`test-images/a_corpus`, `b_corpus`, `d_corpus`) needed it for UI validation. `QuadOrdering.ReadingOrder` in `Core/Scanning` is applied in `ScanPipeline` after area selection and before tiles are built. `FrameProcessed`/`DetectionSnapshot` keep the detector's area order. The optional `CohortTile.Quad` was **not** taken. Integration 143 → **155 passed / 8 skipped** (orchestrator re-ran it). All 5 chaos cases fail correctly; cases 4 (mean vs median) and 5 (order before selection) needed new tests, which are now committed. **No overlap with B's "grid inference":** that is `SlotMapper` in the B6 accuracy harness (Lab), which maps detections to ground-truth slots and does not change detector output order. **Still to do:** merge `main` into `stream/b` and `stream/d`. Leave that to their own sessions; the change touches no file in their scopes.
+
+**The problem (seen in the user's live A10 run, 9-card layout):** the cohort grid does not match the physical 3×3 grid. `ScanPipeline` builds tiles in detector order, and `ICardDetector` returns quads **by descending area**. That is correct for choosing the top N, but meaningless as an order: with nine near-equal cards it is effectively arbitrary. The user's verdict: "a terrible experience without fixing this". The user also noted that **the nine cards will sit about 10 px apart in the frame**, a much tighter grid than the stub's widely spaced layout.
+
+**Why the fix belongs in the pipeline, not the UI:** `CohortTile` does not carry its quad, so the App cannot re-sort tiles. Area order must stay, because it selects which N quads survive when more are detected. **The order has to be imposed after selection and before tiles are built**, in `ScanPipeline`, which is frozen `Core/Scanning`. So this is a contract change: **land it on `main`, then merge `main` into every stream branch**, following the `ArtworkId` precedent above.
+
+**The rule — reading order as the preview displays it** (post-rotation frame coordinates, which is what the user sees):
+1. Take the selected quads and compute each one's centroid and height.
+2. Sort by centroid Y. Start a new row when a centroid's Y differs from the current row's mean Y by more than **half the median quad height**. Cards are about 483 px tall at the locked height, so a 10 px gap or a slight skew cannot split or merge rows.
+3. Sort within each row by centroid X, left to right, then concatenate the rows top to bottom.
+4. This covers 1, a 3-in-a-line in either orientation, a 3×3, and **partial Space captures** (e.g. 7 of 9, which keep their relative order).
+5. Write it once, as a pure function in `Core/Scanning` (e.g. `QuadOrdering.ReadingOrder`). Tiles, keys 1–9 (if ever added) and commit order all follow from it.
+6. **Optionally** add `CardQuad Quad` to `CohortTile`, so the UI can highlight which outline a tile came from. Decide at execution; it is not needed for the ordering itself.
+
+**Tests (Integration + unit):**
+- a 3×3 of quads with ~10 px gaps, supplied in shuffled/area order, comes out row-major;
+- a ±3° skew and ±5 px jitter per card does not change the order;
+- 3-in-a-row and 3-in-a-column both work;
+- a partial capture of 7 keeps its relative order;
+- geometry rotated 1080×1920 works.
+
+Chaos cases: sort by X before Y; set the row threshold to 0 (every card becomes its own row); skip the sort entirely. Each must fail.
+
+**The knock-on for stream B — tight spacing is a detection risk, not only an ordering one.** `ContourCardDetector` runs a 5×5 Gaussian and a 5×5 morphological close (B5a). At ~10 px gaps, glare, shadow or a bridging sleeve edge can merge neighbours into one contour. That contour then fails the aspect filter, and **cards silently vanish from a 9-card capture.** Add to B's remaining work:
+- a synthetic B5a-style test of a 3×3 with 10 px (and 6 px) gaps that must yield 9 distinct quads;
+- a tight 3×3 in the H3 fixture corpus and B6's layouts;
+- E1 measures the minimum reliable gap at the locked height.
+
+If the close bridges gaps, the fix is the kernel size or its removal, measured rather than guessed. The stub detector's widely spaced layout (`Core/Fakes`, frozen) does not model this, so any tight-grid fake case goes into the new ordering tests instead.
+
+**Sequencing:** A's merge gate does not depend on this change; A10 can pass without it. Execute it on `main` **right after stream A merges** (it touches `Core/Scanning`, which A's branch does not), then merge `main` into `stream/b` and `stream/d`. It needs no stream-A UI change unless the optional `Quad` field is taken.
+
 ## 0. How the orchestrator uses this file
 
 **Roles**
@@ -418,6 +452,78 @@ Rules that follow from the split:
 3. **Code tested on the Mac meets Windows first in CI's Windows leg** at merge time. A10 and C4 on the PC remain the real acceptance for A and C.
 4. **If the Mac ever has to run a B package** (by override), it may use the committed index as is, but it **must not rebuild the index, regenerate goldens, or commit a measured threshold**. It needs the cache copied outside git (not re-pulled with a fresh `bulk`: a new day's bulk file drifts from the committed index), and a copy of `scryfall-bulk/filtered-artworks.jsonl` to drive `images --manifest`. Then `test-images/ad-hoc/` needs copying by hand as well.
 
+### Handoff — end of the A-merge session, 2026-09-22 evening, Windows PC
+
+**Newest handoff; read this first.** A new orchestrator takes over from here and "puts it all together": B's merge, D's merge, integration I1–I6. The checkboxes and their per-item notes are authoritative; this section adds only where things stand.
+
+**State.**
+
+| Branch | Where | Pushed? |
+|---|---|---|
+| `main` | `Merge branch 'stream/a' into main` plus this handoff. It contains stream A (A0–A10), stream C, the reading-order contract change (`0bf9d76`) and the B session's `main` (`16ed6bc`, merged at `b0464ab`). | **No.** `origin/main` is still `31fb642`. **P2 is due: show the summary, then push on the user's approval.** Watch the macOS CI leg for the screenshot tests (see the A10-prep note). |
+| `stream/a` | Merged. Done. | Local tip ahead of `origin/stream/a`; pushing it is optional now that it is in `main`. |
+| `stream/b` | `origin/stream/b` = `8e4e7aa` (B2, B5c, B7 done; B6 in progress; `RetrievalMode.List`; digital-only filter). The **local `stream/b` ref is stale** (`41f0e22`) and the `stream-b` worktree is clean. Fast-forward it before B resumes. | Remote is the truth. |
+| `stream/d` | `origin/stream/d` = `574ac13`; local ref stale (`08446f7`). | Remote is the truth. |
+| `validate/ui-real-frames` | Throwaway worktree `.claude/worktrees/ui-validation`: `stream/a` + `origin/stream/b` + `main`. **Never merge it.** | No. |
+
+Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 errors; StreamA **132/132**; Integration **155 passed / 8 skipped**; StreamC **39/39** (`Category!=Hardware`); StreamB 1 and StreamD 1 (placeholders until those streams merge).
+
+**Next, in order:**
+1. **P2 push** of `main` (user approval). Until it lands, any session merging "main" into a stream is merging a `main` nobody else has. That is exactly how the two `main`s diverged today.
+2. **Merge `main` into `stream/b` and `stream/d`** (reading order + stream A). This belongs to their sessions or the new orchestrator. Nothing in their scopes changes.
+3. **Fix the open known A bugs** (A10's "Known bugs, deferred"): bug 1 (type-ahead focus) and bug 3 (overlay vertical offset, confirmed live by the user). Bug 2 is **resolved**: the user confirmed tile order is correct from `main`.
+4. **B:** B6 → B8 → merge → P3. **Follow "Handoff — the shortest path to closing B, for the Windows PC"** in the B section (the Mac session's handoff, merged in from `origin/main` at `f0a9e2a`). **Correction to it:** it says `test-images/b_corpus/` and `d_corpus/` are Mac-only, but **both are present on the Windows PC** in `C:\Repos\LoreFetch\test-images\` (6 and 2 frames, used by this session's probes), along with `a_corpus/`. Only `ground-truth.csv` still has to come from the Mac. **D:** merge → P5. Then **I1–I6**. I2 is where `LOREFETCH_DETECTOR=real`-style wiring becomes the real `Real` mode, and I3 must set `CameraRotationDegrees = 0` (geometry re-ruling).
+
+**Real test imagery (user-supplied, gitignored, "absolutely real data").** `test-images/a_corpus` (6), `b_corpus` (6) and `d_corpus` (2) are real 1920×1080 C920 frames of **tight 3×3 grids**: a and b on white paper over a cluttered desk, d on a black mat. `test-images/ad-hoc` (12) holds single cards on black, brown and white. The layout `test-images/README.md` describes (`fixtures/`, `ground-truth.csv`) is the H3 corpus, which does not exist yet. The a/b/d folders are not described there; add them when B6 or H3 next touches it. Ground truth for the two frames checked by eye (row-major):
+- `a_1`/`b_1`: Freya Crescent, Zidane Tantalus Thief, Adventurer's Airship / You're Not Alone, Summon: Fat Chocobo, Instant Ramen / Cactuar, Cat Warriors, Defibrillating Current.
+- `d_4`: Ilysian Caryatid, Farhaven Elf, Sagu Wildling / Ruby Medallion, Meteor Sword, Kyoshi Battle Fan / Loch Dragon, Dirgur Island Dragon, Barrels of Blasting Jelly.
+
+**Detector findings on those frames (old `RETR_EXTERNAL` detector, `41f0e22`), for B:**
+1. **White paper: 0–2 of 9 found.** The sheet's outline encloses every card, so `RETR_EXTERNAL` never returns them. `RETR_LIST` lifts a_corpus to 7–9/9 but b_corpus only to 2–5/9, so a second cause remains there. `RETR_TREE` with parent-only dedupe double- or triple-counts cards (outer border, frame, art box). B had already switched to `List` in `6828ad5`.
+2. **Black-bordered cards on the black mat vanish** (d_6 3/9, atarka_black, verix_black). This is CLAUDE.md risk 4, reproduced; retrieval mode doesn't matter.
+3. **Edge placement is disputed:** the probe agent says d_4's quads sit on the outer edge, but the orchestrator's zoom of its own crop shows the green line inside the black border (≈8 px). Treat it as B5b's inset question: check it, don't assume it.
+
+**Real-frames UI validation (package UV): wrapped up early at the user's request**, `validate/ui-real-frames` `b0dfe50`. **Throwaway, never merge.**
+- `LOREFETCH_DETECTOR=real` swaps in B's `ContourCardDetector` + `PerspectiveRectifier`, with `DemoCardIdentifier` still stubbing identification. `LOREFETCH_FRAME_INTERVAL_MS` holds each frame on screen. Unset gives today's behaviour.
+- Artifact-gated headless tests render all 26 real frames through the real `MainWindow`.
+- Suites on that branch: StreamA 141, StreamB 272/8, Integration 155/8, StreamC 39, StreamD 1. A smoke launch on `d_corpus` exits 0.
+- **Chaos testing was skipped** at the wrap-up.
+- Tiles per frame with B's `origin/stream/b` (`8e4e7aa`) detector:
+
+  | Frames | Tiles |
+  |---|---|
+  | a_1–a_6 | 8, 9, 8, 9, 7, 8 |
+  | b_1–b_6 | 3, 2, 4, 5, 2, 2 |
+  | d_4, d_6 | 8, 3 |
+  | ad-hoc | 11/12 correct; atarka_black 0; solring_black 2 (a false positive) |
+
+- The orchestrator's eye check of the renders: **d_4 and a_2 tiles come out in the physical reading order.**
+
+Launch it live from `.claude/worktrees/ui-validation/src/LoreFetch.App/bin/Release/net10.0` with `LOREFETCH_DETECTOR=real LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/a_corpus LOREFETCH_FRAME_INTERVAL_MS=4000 ./LoreFetch.App.exe`. I2 should re-do this wiring properly on `main` after B merges, not port this branch.
+
+**Learned this session.**
+1. **Two `main`s can diverge silently when stream branches carry `main` to the remote but `main` itself isn't pushed.** Each machine then holds a different "main". Push `main` whenever it is merged into a pushed stream branch, or don't merge it.
+2. **The detector probe duplicated B's work,** because B's newest commits weren't pushed yet. `git fetch` before any cross-stream investigation.
+3. **A headless focus assertion passed while the live window failed** (bug 1). For focus and keyboard behaviour, the hands-on run stays the acceptance.
+
+### Handoff — end of the A10 session, 2026-09-22, Windows PC
+
+**Superseded by the handoff above for overall state; its notes still apply.** Paused at the user's request (token budget). The notes under A10 are authoritative; this section adds only where things stand.
+
+**State.** `stream/a` is at `e9f4a59`, **not pushed**, with a clean worktree: A10-prep (6 commits), a merge of `main`, and README §A. `main` holds two plan commits this session, **not pushed**. A10 is **not ticked**. **The user's hands-on run failed on two points: *Set card manually…* does nothing, and Enter does not commit** (see A10's note). Memory and fps pass.
+
+**Next, in order:**
+1. **A10-fix package** (Sonnet, `stream/a`): reproduce both bugs through the real `MainWindow` in failing headless tests, then fix them. Then the user re-runs the live exe: `LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/ad-hoc` plus `.claude/worktrees/stream-a/src/LoreFetch.App/bin/Release/net10.0/LoreFetch.App.exe`. Tick A10 only on the user's confirmation.
+2. **Merge gate:** `git merge --no-ff stream/a` into `main`, then the full suite on `main`. The expected baseline is StreamA 119/119 and Integration 143 passed / 8 skipped. Merging stream/a after main was merged into it should be conflict-free.
+3. **P2:** show the summary, and push only on approval. **Watch the macOS CI leg.** The two screenshot tests lost their `WindowsOnly` trait at A10-prep; if they fail on macOS, re-trait them with the real reason.
+4. **Contract change: cohort tiles in reading order** (the section near the top of this file, requested by the user). Execute on `main` right after A merges, then merge `main` into `stream/b` and `stream/d`. It also adds tight-grid (~10 px gap) detection tests to B's remaining work.
+5. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
+
+**Learned this session.**
+1. **A memory soak with zero GCs proves nothing.** On a quiet app, "rising memory" is just uncollected garbage. Force the question: `DOTNET_GCgen0size` shows gen0 behaviour, and `DOTNET_GCHeapHardLimit` forces gen2. Size the cap at about 2× the idle floor; at 1.5× it OOMs on a legitimate 8 MiB allocation.
+2. **An exclusion rationale ("fails on macOS ARM64") was never tested on the other platform.** The first Windows run showed the tests failed everywhere. When a test is traited out, verify the stated reason on the platform where it still runs.
+3. **A green unit suite can hide an app that can't be used.** Fakes mode left every tile Unresolved and the layout fixed at 1. Every view-model test passed because the tests set their own thresholds. Only launching the real exe exposed it.
+
 ### Handoff — end of the Mac A/D session, 2026-09-22
 
 **Newest handoff; the ones below still apply.** Covers the Mac's lanes only (A, C3, D). The B/PC handoffs below remain the truth for their lanes. Checkboxes and their per-item notes are authoritative.
@@ -565,7 +671,17 @@ Any clone predating that must `git fetch && git reset --hard origin/main` — **
 
 **Verified rather than assumed**, because conditioning a `PackageReference` on `$(Configuration)` is not automatically reliable — NuGet restore is configuration-agnostic. A plain `win-x64` publish (used instead of `PublishSingleFile`, which bundles the file list out of sight) contains no `AvaloniaUI.DiagnosticsSupport.Avalonia.dll` and no `Avalonia.Diagnostics*`; `bin/Release/net10.0/win-x64/` and the App's whole `obj/` tree agree. `project.assets.json` still lists the package — inert, never copied in Release. The simple condition sufficed; no `ExcludeAssets` workaround needed. Debug output still carries the assembly. **Also proved in passing that the documented ship command works cross-platform from the Mac**, producing a 201 MB exe, inside CLAUDE.md's predicted 150–250 MB.
 
-⚠ **Owed: merge `main` into every stream branch.** The freeze process requires an approved change to land on `main` and then be merged into each stream. Deferred deliberately while an implementer was live in `stream-b`; do it at the next package boundary. Only `stream/a` (A10 pending) and `stream/b` are still active lanes.
+✅ **Merged into every stream branch, 2026-09-22, at the clean boundary after B5c.** `main` → `stream/a`, `stream/b`, `stream/d` (`stream/c` is already merged *into* `main`, so it needed nothing). All four worktrees were confirmed clean first. Each branch re-verified after its merge, with the macOS filter the test script itself applies:
+
+| Branch | Own suite | Integration | Build |
+|---|---|---|---|
+| `stream/a` | 106 passed / 0 failed | 143 / 8 skipped | 0 errors, **9 pre-existing `xUnit1051` warnings** (A6's `TileInteractionTests`, a known adjacent find — not merge damage) |
+| `stream/b` | 212 passed / 1 soft-skip / 213 | 143 / 8 skipped | 0 errors, 0 warnings |
+| `stream/d` | 70 passed / 0 failed | 143 / 8 skipped | 0 errors, 0 warnings |
+
+This also removes a live trap: the fixed `capture-fixtures.sh` now exists in the stream worktrees, so running the stale copy from inside one is no longer possible.
+
+⚠ **A precision on the `WindowsOnly` trait, learned while verifying these merges — do not over-generalise the goldens finding.** Run unfiltered on this Mac, `stream/a` fails 2 and `stream/d` fails 1, and they are *exactly* the `WindowsOnly`-traited tests: A's two Avalonia screenshot tests, and D's `Commit_WhenTheTargetCannotBeReplaced_…` write-lock test (macOS `rename(2)` replaces an open target, recorded at D4 `ed60d6c`). **So `WindowsOnly` is load-bearing for A and D** — those behaviours genuinely differ by platform. The finding that the trait looks unnecessary applies **only to stream B's golden hashes**, which pass bit-exact on ARM64. Anyone acting on that finding must scope it to B's goldens; dropping the trait wholesale would make the macOS leg permanently red for real reasons.
 
 ### Empirical finding — the win-x64 goldens pass on ARM64, 2026-09-22
 
@@ -578,6 +694,128 @@ That **contradicts the premise behind the trait**, which CLAUDE.md states as "si
 **Evidence, not proof** — a pixel sitting exactly on its cell median could still flip, and OpenCV #24163 is a real confirmed bug. So `thresholds.json` stays `provisional` until win-x64 re-measurement. But two consequences are worth acting on:
 1. **The `WindowsOnly` trait on the goldens looks unnecessary**, and `scripts/lorefetch.sh`'s macOS filter is discarding a guard that would in fact pass. Revisit — this is evidence against a recorded ruling, so it is the user's call, not a unilateral change.
 2. **Mac-measured thresholds are far more likely promotable than assumed.** B2's witness will settle it from the other direction the moment the PC regenerates it.
+
+### Measured — ARM64 index divergence is real but vanishing, 2026-09-22
+
+**Settled by experiment, not inference.** Rebuilt the full index on the Mac (arm64-darwin) from the **identical** manifest and image cache the committed win-x64 index was built from:
+
+| | |
+|---|---|
+| win-x64 committed | SHA-256 `6495314eb3e5f37e3c1bd5830aa506d6efc617e23303c46f87851edef09e4dd3` |
+| arm64 rebuild | SHA-256 `9fac40ee20537f7facfc168806fd45817a5f2531ded6c9bbe72a4e260ec7d9fd` |
+| size / counts | **identical** — 10,460,648 bytes, 48,750 arts / 33,612 oracle / 1,882 lands |
+| **differing bytes** | **7** of 10,460,648 (0.0001%) |
+| **differing bits** | **11** of 49,920,000 hash bits |
+
+Two conclusions, and they point opposite ways:
+
+1. **Machine split rule 4 STANDS for the index.** The SHA differs, so a Mac-built index must never be committed. This is now measured rather than assumed.
+2. **Rule 4's *threshold* clause is demonstrably over-cautious.** At ~1 divergent bit per 4.5 million, a card's distance to its own reference entry shifts by at most a bit or two — against `referenceFloor` 55 and margins of 60+, that is noise. **B2's `referenceFloor` 55 measured on arm64 is promotable rather than requiring re-measurement.**
+
+⚠ **This corrects the "the `WindowsOnly` trait looks unnecessary" reading recorded above.** The goldens *do* pass on arm64 (8/8, verified) — but that is a small-sample consequence of this divergence rate, not evidence of bit-exactness: 8 goldens are 8,192 bits, and at ~1 bit per 4.5M the probability any is touched is tiny. The trait's stated premise ("a shared golden cannot pass there") is wrong; the trait itself is defensible caution. **Do not act on the earlier reading without this correction.** The mechanism proposed for it does hold, and is now quantified: the per-cell median threshold absorbs **99.999978%** of sub-LSB resize error.
+
+### Found by B6's first real run — digital-only cards are same-art impostors, 2026-09-22
+
+**The index contains 132 Alchemy (`A-` prefixed) entries, 0.27% of 48,750 — and 128 of them have their non-Alchemy twin also present.** Alchemy cards are digital-only MTG Arena cards; they share artwork with the paper card, so the hash **cannot** distinguish them, and they can never be the correct answer for a physical scan — only a confidently wrong one.
+
+This is not theoretical: it is the single gate failure in B6's first real run. `Young Red Dragon // Bathe in Gold` rank-1-matched `A-Young Red Dragon // A-Bathe in Gold` at **distance 93, margin 12** — well inside any plausible `OkDistance`, so a *confident* wrong answer, which CLAUDE.md calls "permanent bad inventory."
+
+B4a's cascade already excludes `art_series` and `token` layouts. **This is the same category of exclusion and was simply missed**, and it is a Risk 5 instance that is *fixable* rather than inherent — unlike two paper printings sharing art, a digital-only card is never a legitimate answer. Fix in progress; filtering must be keyed on Scryfall's own `games`/`digital`/`set_type` fields, **not** the `A-` name prefix, which is a symptom.
+
+**Consequence for the shippable artifact:** the filtered index must be **rebuilt on win-x64** (see the divergence finding above). A Mac rebuild verifies the fix but cannot produce the committed file.
+
+### B6 first real run — the frame-drop policy was hiding the result, 2026-09-22
+
+Against a real 54-slot corpus (6 frames, 15″, light mat, ground truth validated name-by-name against the 33,596-name oracle catalog):
+
+| Retrieval mode | correct@1 | wrong@1 | no-match | scored slots |
+|---|---|---|---|---|
+| `RETR_EXTERNAL` (baseline) | 0 | 0 | 54 (all dropped-frame) | **0 of 54** |
+| `RETR_LIST` | 14 (25.9%) | 1 | 39 (36 dropped-frame) | **18 of 54** |
+
+**The 25.9% is an artifact of dropping any frame whose detected count ≠ the layout count.** Detection yields 8–9 per frame and only two frames hit exactly 9, so four frames — 36 slots — were discarded wholesale. **Of the 18 slots actually scored, 14 were correct (78%)**, 3 were correctly flagged above `OkDistance`, and 1 was the Alchemy collision.
+
+The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked exactly as designed on real data.** Detection found 1–2 of 9, and rather than pairing two quads against nine slots and manufacturing seven wrong answers, the harness refused each frame and reported it in its own bucket. That guard exists because of a user question about slot ordering.
+
+**Two harness findings to fix:**
+1. **The gate passes at 0% correct.** `wrong@1 = 0` is satisfied by identifying nothing at all, so the gate alone can be met by total failure. The done-when separately requires ≥90% correct@1; **both conditions must be checked**, and CI must not gate on the exit code alone.
+2. **"Full corpus" overstates.** It means every ground-truth row has its file on disk, not that the corpus is complete. The coverage line beside it is honest; the header is not.
+
+### Rulings — the 90% gate and B5c's sweep, 2026-09-22 (user)
+
+**1. The ≥90% correct@1 gate is waived for v1. 70.4% is accepted.** Stream B's *Done when* requires ≥90% correct@1 on real normal-card fixtures, and the measured figure on the 54-slot corpus is **70.4%** (38/54), which triggered the recorded stop-and-ask. The user's ruling: accept it for v1 and take the plan's own fallback — the **candidate-list flow**, surfacing the top 3 and letting the confirmation grid resolve the rest. That costs no rework: `CohortTile.Candidates` is already *"ranked, unfiltered"* at the contract level and Stream A already renders ranked candidates.
+
+**What justifies waiving it** rather than treating it as a failure: the metric the stream doc itself calls more important is satisfied with room to spare. `wrong@1` is **0** at any `OkDistance` between **209 and 271** — a 63-point window — because every correct match across six independent frames lands at ≤208 and every wrong one at ≥272. *"A silent miss is recoverable, a confident wrong answer is permanent bad inventory."* Seven cards in ten identify outright; the other three are **flagged**, not silently entered wrong. **The accuracy table must state 70.4% plainly** — it is not to be rounded up or described as "about 90%".
+
+**2. B5c's 3-scale crop sweep is REJECTED for v1.** B5c deferred the decision pending corpus evidence, and the corpus answered it: every wrong match sits at **272–344**, far outside the ~5% crop tolerance the curve identified, so crop error is not what is failing these cards. The sweep would cost **~6× query time** (53 ms → 295 ms per 9-card cohort) to fix a failure mode the data does not show.
+
+**Consequent cleanup owed:** `CropScaleTransform` (93 lines) sits in `Core/Imaging` and is diagnostic-only. Its placement there was correct *if* the sweep were adopted; since it is rejected, **move it to `Lab`** so it does not ship in the product assembly. Keep `lab crop-scale` working — the curve is real evidence and should stay reproducible.
+
+### B8 done-when review — scorecard, 2026-09-22 🧭
+
+Against `docs/stream-b-identification.md` §*Done when*:
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Round-trip gate passes, floor recorded | ✅ B2 — 200/200 rank-1 `ArtworkId`, `referenceFloor` **55** |
+| 2 | ≥90% correct@1 on real normal-card fixtures | ❌ **70.4%** — **waived by user ruling**, candidate-list fallback taken |
+| 3 | `wrong@1` ≤ explicit count at calibrated `OkDistance`, asserted by the harness | ✅ **0**, and the assertion is proven live — the gate *did* fail on the Alchemy collision. ⏳ needs the filtered committed index |
+| 4 | Goldens committed, win-x64, green on the Windows leg, `WindowsOnly`-traited | ✅ B1b — 8 goldens |
+| 5 | `GoodDistance`/`OkDistance` committed as measured values with margin data | ❌ **not written** — the one hard blocker |
+| 6 | `IOracleCatalog` returns every oracle card in the index | ⚠ **no test exists** — gap found in this review |
+| 7 | Detection returns 0 on an empty mat, right count on a partial grid | ✅ B7's bare-mat generator (light/mid/dark) + detector tests |
+| 8 | The accuracy table is committed | ⚠ partial — in `docs/accuracy.md`, but the numbers were measured against the *unfiltered* index |
+
+**Items 3, 5 and 8 all resolve from one PC task** (the filtered win-x64 index rebuild). Item 2 is waived. Item 6 needs a small test.
+
+⚠ **Item 6 is worth closing before A resumes, not after.** `IOracleCatalog.All` is what backs Stream A's *"Set card manually…"* type-ahead over the oracle catalog — and the PC's A10 run found that **"Set card manually… does nothing."** An empty or truncated `All` would present as exactly that symptom. `HashIndexFileTests` asserts the index *file's* oracle-table count, which is the reader, not the interface implementation on `HashCardIdentifier`. A test that loads the real committed index and asserts `All.Count` equals the index's oracle count would rule out half of A10's bug for free.
+
+### Handoff — the shortest path to closing B, for the Windows PC
+
+Approved by the user 2026-09-22. `stream/b` is pushed at `8e4e7aa`; `main` is pushed at whatever this section's own commit is — check `git log`, and do not trust a SHA quoted in prose here, because this file is edited on both machines.
+
+🔴 **STEP 0, AND STEP 2 IS IMPOSSIBLE WITHOUT IT: the fixture corpus and its ground truth exist ONLY on the Mac, and they are gitignored.** `AccuracyCorpusLoader` requires both at exact paths:
+
+| Needed at | What it is | Where it exists |
+|---|---|---|
+| `test-images/ground-truth.csv` | **54 hand-validated rows**, every `oracle_name` checked against the 33,596-name oracle catalog | **Mac only.** Never committed, cannot be |
+| `test-images/fixtures/15in/9/a_1.png` … `a_6.png` | the six 3×3 frames the whole accuracy number rests on | **Mac only** at that path (the PC has the raw captures elsewhere, unstructured) |
+
+**In practice only ONE file has to move.** The six fixture frames were verified **byte-identical** (SHA-256) to the PC's own `a_corpus/a_1.png`…`a_6.png`, and the filenames already match — so the PC places its own copies at `test-images/fixtures/15in/9/` and needs nothing transferred for them. **`ground-truth.csv` (3,494 bytes) is the only genuinely Mac-only artifact**, and it was handed to the user directly to move.
+
+`test-images/*` is gitignored tree-wide and the pre-commit hook rejects staged rasters, so **neither can travel through git** — deliberate, because the frames are WotC IP regardless of who shot them.
+
+**Do not regenerate the ground truth by hand on the PC.** It took an image-by-image read of all six frames plus a catalog validation pass that caught four Omen/Adventure cards whose oracle names carry both halves (`Young Red Dragon // Bathe in Gold`, `Whirlwing Stormbrood // Dynamic Soar`, `Dirgur Island Dragon // Skimming Strike`, `Sagu Wildling // Roost Seek`). Retyping it invites exactly the typo-becomes-fake-`wrong@1` failure the labels were validated to prevent — and a typo lands as a *low-distance* wrong answer, which would drag the calibrated `okDistance` tighter for no reason.
+
+**Decision recorded:** `ground-truth.csv` stays **uncommitted**. It carries no imagery and committing just the labels was considered, but it is meaningless without the frames — which can never be committed — and `test-images/*` is deliberately a blunt rule so nothing slips through on `git add -A`. The cost is that the 70.4% figure is **not independently reproducible from a fresh clone**; that limitation belongs in README §B rather than being quietly hidden.
+
+**Also Mac-only, lower priority:** `test-images/b_corpus/` (six 20″ frames) and `test-images/d_corpus/` (two dark-mat frames). Their detection numbers are already recorded above, and the v1 accuracy table is single-height/single-mat, so the PC does **not** need them to finish B — only to extend the table later.
+
+**Step 1 — rebuild the index, filtered.** On `stream/b`, from the worktree, with the 5.1 GB cache already present on that machine:
+```
+lab bulk        --out scryfall-bulk
+lab images      --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache
+lab build-index --manifest scryfall-bulk/filtered-artworks.jsonl --cache C:\LoreFetchData\scryfall-cache --out C:\LoreFetchData\index-out\cards.lfidx
+```
+Expect roughly **47,417 arts / 32,743 oracle ids** — the digital-only filter removes ~1,333 arts / ~869 oracle ids. Images resume and skip what is present, so this is not a fresh 6 GB pull. Copy the result over `data/index/cards.lfidx`, commit it, and **record the new SHA-256 here**. `*.lfidx` is pinned binary in `.gitattributes`, so it round-trips safely.
+
+⚠ **Re-run `lab bulk` deliberately**, unlike previous sessions: the cascade changed, so the manifest must be regenerated. Note this means a *newer* bulk snapshot than the one behind the 48,750 index — so counts may differ slightly from the figures above. That is expected; record what you actually get.
+
+**Step 2 — re-run B6 and write the thresholds.** `lab accuracy` against the new index. `wrong@1` should be **0**; `AccuracyHarnessRealCaptureTests` should go green, clearing the one red test on `stream/b`. Then write `goodDistance`/`okDistance` into `data/index/thresholds.json`. **`OkDistance` has a 63-point window: every correct match ≤8 lands ≤208, every wrong one ≥272.** ~240 is the natural midpoint. Also **promote `referenceFloor` 55 from `provisional`** — the ARM64 divergence was measured at 11 bits of 49.9M, so the Mac figure holds.
+
+**Step 3 — close item 6**, the `IOracleCatalog.All` test.
+
+**Expected test counts, so a regression is visible:** `Tests/StreamB` is **280 total, 1 failing** right now (`AccuracyHarnessRealCaptureTests`). After step 2 it should be **280 passing**, and after step 3 **281**. `Tests/Integration` must stay **143 passed / 8 skipped** throughout — it guards the frozen contracts, so any change there means something went wrong.
+
+**Free measurement while you are there:** B2 committed a **query-hash witness** (50 query-side hashes, generated on arm64, arch-aware test). Regenerating it on win-x64 makes that test report the *query-side* divergence directly, which nothing has yet measured in isolation — the 11-bit figure above is whole-index. Cheap, and it closes the last open question on Risk 2.
+
+**Step 4 — B8**: README §B with the honest numbers (**70.4% correct@1, `wrong@1` 0, 91% detection at 15″** — not rounded up), the per-project README "Internals" line, then the merge gate and **P3**.
+
+**Also owed, lower priority:** move `CropScaleTransform` from `Core/Imaging` to `Lab` (sweep rejected, so it is diagnostic-only code shipping in the product assembly).
+
+🔴 **Coordination hazard — `stream/a` has DIVERGED. Read this before touching it.** The A10 handoff records `stream/a` local at **`e9f4a59`, not pushed** (A10-prep, a merge of `main`, README §A). Meanwhile the Mac pushed `origin/stream/a` to **`4e70123`** — a merge of `main` into the *older* tip `611dfb3`, carrying the approved `DiagnosticsSupport` Debug-only change. **So both machines merged `main` independently and the branch now has two heads.** On resuming: `git fetch` then **merge** `origin/stream/a` into the local branch. **Do not force-push, do not `git reset --hard`, and do not `git pull` expecting a fast-forward** — the local A10-prep commits exist only on that machine and a reset would destroy them. No conflict is expected (the Mac touched nothing in `src/LoreFetch.App/**` or README §A), but verify README §A survives the merge before committing.
+
+✅ **The cohort reading-order contract change already has its algorithm — do not write it twice.** The A10 session recorded *"Contract change — cohort tiles in grid (reading) order, requested… not yet executed"*, correctly diagnosing that `ScanPipeline` builds tiles in detector order while `ICardDetector` returns quads **by descending area** — arbitrary for nine near-equal cards. **Stream B independently built and chaos-tested exactly that inference this session:** `src/LoreFetch.Lab/Accuracy/SlotMapper.cs`, `TryInferGrid` — it infers rows and columns from quad centroids, places each quad by position, and emits a distinct `NoDetection` outcome for an empty cell. Measured on the real corpus it took correctly-assigned slots from **18/54 to 49/54**. So the contract change is a **promotion from `Lab` into `Core/Scanning`**, not new work. Two things it already handles that a fresh implementation would likely miss: a naive `OrderBy(Y).ThenBy(X)` **scrambles a row** whenever same-row centroids differ by a few pixels of tilt (pinned as a regression test with the real coordinates `(593,92)/(839,99)/(1109,96)`), and a short row must not shift the remaining slots. The A10 note that *"the nine cards will sit about 10 px apart"* is almost certainly the same root cause as `RETR_EXTERNAL` merging adjacent cards through the morphological close — one cause, two symptoms.
 
 ### ⛩ G1 — Fork gate
 Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. Then create the four worktrees (§0). From here on, `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen**. A stop-and-ask from any stream is taken to the user, and a change that is approved lands on `main` and is then merged into every stream branch.
@@ -637,10 +875,35 @@ At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×23
   - ground truth goes in `test-images/ground-truth.csv` with columns `file,height_in,layout,slot,oracle_name,rung,mat`
   - back it up outside git
 
-  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand: it validates every label, refuses a height/layout
-  combination that cannot physically fit, warns under 0.5″ of margin, and writes the ground-truth row only after the frame
-  lands. `--dry-run` validates a whole shot list without touching the camera. Frames land as **`.png`**, not `.jpg` — see the
-  ruling below.
+  Use **`scripts/capture-fixtures.sh`** rather than copying frames by hand. It validates every label, refuses a
+  height/layout/orientation combination that cannot physically fit, warns under 0.5″ of margin, validates each
+  `--card` against the 33,596-name oracle catalog and writes the catalog's **canonical** spelling, quotes per
+  RFC 4180, and writes the ground-truth row only after the frame lands. `--dry-run` validates a whole shot list
+  without touching the camera; `--verify <csv>` audits rows already written. Frames land as **`.png`**.
+
+  **Shot list, revised 2026-09-22 after the user chose portrait cards over rotating them:**
+
+  | Batch | Height | Layout | Mat | Captures |
+  |---|---|---|---|---|
+  | A — six groups of 9 | **15″** | 3×3 portrait | light | 6 |
+  | B — **same six groups** | 20″ | 3×3 portrait | light | 6 |
+  | C / D — two groups from A | 15″ | 3×3 portrait | mid / dark | 4 |
+  | E — lines | 12″ + 20″ | 3-in-a-line | light | 4 |
+  | F — singles | 12″ + 20″ | 1 card | light | 4 |
+  | G — lands | 15″ | 3×3 portrait | light | 2 |
+  | H — sleeved, foil | 15″ | 1 or 3 | light | 4 |
+
+  **15″, not 12″, for every 3×3** — a portrait 3×3 needs h ≥ **13.47″** (it wants 10.7″ on the 1080 axis), so 12″ portrait misses by −1.17″ and 14″ leaves only +0.42″. 15″ gives **+1.21″**, and at 15″ *both* orientations fit, so the height alone makes the geometry safe. A and B are **paired on the same cards** so height is isolated; C and D reuse A's groups so the mat is attributable. E and F stay at 12″ because a single card and a 3-line fit portrait at any height, which makes the card-width sweep three points — **283 / 227 / 170 px** — instead of two. Resolution is not the binding constraint: the reference side downsamples to **96 px wide**, so even 170 px carries ~1.8× what the index retains.
+
+  🔴 **Defect found and fixed 2026-09-22, before the bench session: `compute_fit()` hardcoded layout 9's ROTATED footprint**, so it silently overstated margin for portrait cards — at 12″ it reported a comfortable **+1.83″** when portrait actually runs **−1.17″** off the frame. It would have filed a frame with its top and bottom rows cropped away: precisely the silent crop-scale failure B5c had just finished quantifying as the cause of a confident *wrong* identification. Now `--orientation portrait|rotated`, **defaulting to portrait** (the stricter case), with the other orientation's margin printed as information. Verified: default at 12″/L9 refuses with the −1.17″ reason and points out rotated would fit; 15″ portrait reports +1.21″; 20″ portrait +5.18″; layouts 1 and 3 are byte-identical across orientations. **How it surfaced is the lesson:** the implementer hit a margin that disagreed with the orchestrator's brief and reported the disagreement as information rather than emitting the number the brief expected. Both numbers were right — for different card orientations — and the brief was the thing that was underspecified.
+
+  **`--height` is now a numeric range (6–30″, decimals allowed), not an allowlist**, because `compute_fit()` is the real guard and an allowlist had to grow every time the bench picked a new height. 9.75″ is consequently *accepted* now, and correctly warns at 0.04″ of margin — which tells the operator the real reason rather than refusing blankly.
+
+  **RULING — `ground-truth.csv` keeps its 7 columns; orientation does NOT become a column.** Its schema stays `file,height_in,layout,slot,oracle_name,rung,mat`. Three reasons: orientation is **invisible to identification by design** (B5a orders corners short-edge-first so a rectified card is always upright-or-180°, and B3b hashes both 180° orientations), so B6 does not need it to score; it is recoverable from the `file` path, which now carries `-portrait`/`-rotated` for layout 9, the only layout where it varies; and a schema change while the operator is mid-capture would orphan rows already written. If the orientation-invariance claim is ever worth falsifying, parsing it back out of the filename is sufficient for a one-off analysis.
+
+  **Cosmetic nit, not a bug:** the fit line labels the footprint "short x long" while printing portrait's as `10.70"x7.70"`. Those are the dimensions checked against the short and long *axes* respectively, not sorted by size. The verdicts and margins are correct; only the label reads oddly.
+
+  🔴 **B6 requirement, surfaced by a user question about slot order — do not skip it.** B6 must map detected quads back to slot numbers, and the only sane rule is sorting quad centroids **row-major: top-to-bottom, then left-to-right**. That rule must be pinned in code with its own test, and the operator must lay grids in aligned rows for it to be unambiguous. **Critically: if the detected count disagrees with the layout count, B6 must NOT pair by position** — a 3×3 frame that detects 8 of 9 would silently misalign every slot after the gap and manufacture eight wrong answers from one missed card. B5a proved missed detections happen (a sleeved card on black). B6 fails such a frame loudly, or resolves the gap by position rather than by index.
 
   Gates B6.
 - [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
@@ -711,13 +974,52 @@ Global overrides for every A brief:
 
   No stack traces in the UI.
   - *(stream/a `ac55852`; empty-collection placeholder (`CollectionViewModel.IsEmpty`/`HasRows`), `SourceFailed` banner (subscribed + marshalled, `.Message` only, unsubscribed on close), store-lock retry banner on `CollectionStoreException` from commit/export with a Retry that re-attempts and clears on success (cohort retained — builds on A7), startup-error surface via `MainViewModel.StartupErrorMessage` string (composition sets it — **no contract change; STOP not triggered**), and a visible "Set card manually…" hint on `Unresolved` tiles. No stack traces in any surface. Verified: scope App+StreamA only, **StreamA 106 pass/0 fail** (2 WindowsOnly screenshots excluded), Integration 143 pass/8 skip, `grep -ri moxfield src/LoreFetch.App` empty, smoke-launch exit 0. Un-briefed chaos: `ex.Message`→`ex.ToString()` in the SourceFailed handler → no-stack-trace test fails on "System." at line 213 — the invariant is real. Adjacent find: 9 pre-existing `xUnit1051` analyzer warnings in A6's `TileInteractionTests.cs` (non-blocking).)*
-- [ ] **A10** 🧭👤 Done-when run on the Windows PC:
+- [x] **A10** 🧭👤 Done-when run on the Windows PC: — *closed 2026-09-22 by the user's ruling: **merge A now with two known bugs, to be fixed later** (see "Known bugs, deferred" at the end of this item).*
   - all three layouts work
   - a keyboard-only loop works
   - all four tile states are reached (two through configured distances, two through user action)
   - memory stays flat for 5 minutes under `dotnet-counters`
 
   Record the fps and memory results. Then README §A. **Merge gate, then P2.**
+
+  **A10-prep, done 2026-09-22 on the Windows PC**, `stream/a` `7311e87`…`866b3ea`. The first Windows run of `stream/a` found that A10 could not be performed as written:
+  1. **The screenshot tests had never passed anywhere.** `TestApp` set `UseHeadlessDrawing = true`, which is Avalonia's no-op renderer, so `CaptureRenderedFrame()` returns null on Windows too. The A4/A5 notes blaming macOS ARM64 were wrong. Fixed with `UseSkia()` plus `UseHeadlessDrawing = false`, and the `WindowsOnly` trait was removed from both tests. **The macOS CI leg must confirm at P2;** if it fails, re-trait them with the real reason.
+  2. **Fakes mode never set `GoodDistance`/`OkDistance`.** Both were 0, so every tile came up Unresolved and the keyboard loop could commit nothing.
+  3. **The fake detector ignored the 1/3/9 selector.** It was fixed at `CardCount = 1` from startup, so the 3- and 9-card layouts were unreachable.
+  4. **Nothing measured fps or memory.**
+
+  The fixes: `LayoutFollowingCardDetector` and `DemoCardIdentifier`. The demo identifier cycles confident → low-confidence → Unresolved per `Identify` call, with distances derived from the loaded good/ok values; the cycle runs across captures, so the 1-card layout also walks all three states. A `Diagnostics:` log line every 10 s reports preview fps (frames rendered), pipeline fps, managed memory, working set and GC counts. The 9 `xUnit1051` warnings are gone, and there is a new `A10-cohort-9.png` screenshot test. StreamA 106 + 2 failing → **119/119**, Integration 143/8, 0 warnings. All 6 briefed chaos cases fail correctly. **Independent chaos:** putting the low-confidence distance on the `good` boundary fails 2 tests.
+  **Ruling (orchestrator, 2026-09-22): demo thresholds live in `src/LoreFetch.App/Fakes/DemoThresholds.cs` (good 100, ok 200).** The frozen `App.csproj` ships only `data/index/**`, stream B's scope, so a demo JSON file cannot ship from stream A. This is the one sanctioned App file with distance literals, it is used by Fakes mode only, and **I4 exempts it**. Real mode (I2) loads `DataFiles.ThresholdsPath`.
+  **A10 run, 2026-09-22 on the Windows PC.** Fakes mode, `LOREFETCH_FRAMES_DIR` = the 12 ad-hoc captures.
+  - **The user's hands-on run:** the 1/3/9 layouts and the Space/Enter/Escape loop. The user's verdict was "looks great".
+  - **fps:** preview 4.0 and pipeline 4.0. That is the folder source's 250 ms frame interval, not a limit in the app; real camera throughput waits for I3/E1.
+  - **Memory, four soaks, raw data in the session scratchpad only.**
+    1. **Plain soak:** managed memory 53 → 108 MB, but **zero GCs in 5 minutes**. Uncollected garbage, so inconclusive.
+    2. **`DOTNET_GCgen0size=0x200000`:** gen0 GCs ran and the small-object heap stayed flat. The **LOH grew 45 → 95 MB in 8 MiB steps**, which is `ArrayPool<byte>.Shared` rounding a 1920×1080×3 frame up to 2²³ bytes. The fake folder source's pooled buffer occasionally misses the pool, and a gen2 GC had yet to run.
+    3. **`DOTNET_GCHeapHardLimit` = 80 MB:** gen2 GCs reclaimed memory (73 → 60 MB), so the buffers are garbage, not retained. An 8 MiB decode then OOM'd because the cap was too tight against a 53 MB idle floor. It surfaced cleanly as `FrameSourceException` through `SourceFailed`, with no crash, which incidentally confirms A9.
+    4. **112 MB cap, 5.7 minutes, PASS:** no OOM and exit 0. Managed memory is a sawtooth from 69 to 78 MB that returns to 69 after every GC, and working set plateaus at about 233 MB from minute 2.5. **Memory is flat.**
+  - **A10 FAILED on two points in the user's hands-on run** (live exe, Fakes mode, ad-hoc frames). Space captures ✅ and left-click toggles Excluded ✅.
+    1. **Right-click → *Set card manually…* does nothing.** No type-ahead appears, so ManuallySet cannot be reached by hand.
+    2. **The collection view doesn't reload after Enter.** The commit works: the user confirmed that A8's manual Refresh shows the rows. **Ruling (user + orchestrator, 2026-09-22):** reload the collection view automatically after a *successful* `CommitAsync` (Enter), not on capture, because capture writes nothing. Do not reload on `CollectionStoreException`, where the retry banner and the retained cohort apply. Keep the Refresh button for changes made to the file outside the app. Test: Enter through the real `MainWindow` makes the new row appear with no Refresh call.
+    3. **The collection table needs polish** (user screenshot of the live exe, 2026-09-22). The `Qty` header does not render at all, and `Condition`, `Source` and `Dist` are clipped ("Condi", "Sou", "D"). `Name` takes about half the width. **Last Scanned read "9/22/2026 6:11:10" during the user's afternoon (EDT)**: it looks like UTC with no AM/PM. Fix it: every header fully visible at the default window size, and Name sized to share the space. Show `LastScannedAt` in local time with an unambiguous format (24-hour or with AM/PM); the stored value stays UTC. The header row should also match the dark theme; in the headless render it showed light. Verify with a headless screenshot, then in the user's live re-run.
+    4. **Relabel the layout selector (user ruling, 2026-09-22).** The radio buttons read **"1 card"**, **"3 × 1"** and **"3 × 3"**, replacing "1 / 3 / 9". The prefix label becomes "Layout:" instead of "Count:". The values written to `ScanSettings.ExpectedCount` stay 1, 3 and 9, so the change is labels only and no contract changes. Still no `IsDefault`. Update any test that finds a button by its text, and README §A's "count selector (1 / 3 / 9)" wording.
+    A6 and A7's headless tests pass, so they drive the view models or keys in a way the real window does not. **The fix package must first reproduce each bug in a headless test that fails through the real `MainWindow`** (actual right-click → menu item; Enter after focusing a selector control), then fix it, then have the user re-run the live exe. Do not tick A10 until the user confirms both by hand.
+  - **A10-fix, done 2026-09-22 on the Windows PC** (Sonnet implementer), `stream/a` `5d1bbb4`…`806a8cf`, one commit per item. Every bug was first reproduced as a failing headless test through the real `MainWindow`.
+    1. **Manual set:** Avalonia's native right-click path never sets `ContextMenu.PlacementTarget` (only `ContextMenu.Open(control)` does), so the handler's `PlacementTarget?.DataContext` silently no-opped. Also fixed: the type-ahead never received focus.
+    2. **Enter:** the success branch never told `CollectionViewModel` to reload. It now reloads after a successful commit only. Tests cover Enter with focus on a layout `RadioButton` and Space with focus on the Auto `CheckBox`.
+    3. **Table:** headers fit, `Name` is star-sized, `LastScannedAt` shows local 24-hour time (the display zone is injectable for tests), and `App.axaml` sets `RequestedThemeVariant="Dark"` so Fluent's own brushes match the hand-painted window.
+    4. **Relabel:** "Layout: 1 card / 3 × 1 / 3 × 3".
+
+    StreamA 119 → **132/132**, Integration 143/8 (both re-run by the orchestrator). Chaos: the 4 briefed cases fail correctly. Case (b) was vacuous against an empty store until the implementer seeded a row. **Seen in the screenshot, for the user's re-run:** the type-ahead is only as wide as a tile, so "Set card m…" is cramped. `origin/stream/a` (the B session's `main` merge `4e70123`) was merged in cleanly afterwards.
+  - **`main` reconciled, 2026-09-22.** Two sessions had diverged `main`s, neither pushed. The B session's (`16ed6bc`) had been merged into and pushed with `stream/a`, `b` and `d`. It is merged into this PC's `main` at `b0464ab`, cleanly. **Push `main` at the next checkpoint (P2), or the next `main` merge into a stream will diverge again.**
+  - **Real-frames UI validation (user request, 2026-09-22).** A throwaway branch `validate/ui-real-frames` (worktree `.claude/worktrees/ui-validation`, **never merged**) combines `stream/a` + `origin/stream/b` + `main`. It wires B's `ContourCardDetector`/`PerspectiveRectifier` behind `LOREFETCH_DETECTOR=real`, with identification stubbed (`DemoCardIdentifier`), and runs the user's 26 real 1920×1080 frames. The detector probe that preceded it (old `RETR_EXTERNAL` detector) found white-paper 3×3s at 0–2/9, because the sheet's outline encloses every card. B had independently reached and fixed the same thing (`6828ad5`, `RetrievalMode.List`), so the probe duplicated B's work.
+  - **README §A** and the stream A internals are done on `stream/a`: `0b445ec` + `e9f4a59` (low-confidence wording fixed on review).
+  - **Known bugs, deferred (user's hands-on re-run of the A10-fix exe, 2026-09-22).** The user ruled: merge A with these bugs, and fix them later.
+    1. **"Set card manually…" does not focus the input box.** The type-ahead opens, but the keyboard focus does not land in it, and it should. The A10-fix headless test `ManualSetContextMenuTests` asserts focus and passes, so **headless focus differs from the live window**; the test is not proof. Suspects: the context menu closing *after* the focus call and returning focus to the tile, or a `Focus()` issued before the box is attached or visible. Posting the focus via `Dispatcher.UIThread.Post` at a lower priority is the usual fix. Re-verify by hand, not only headless.
+    2. **RESOLVED 2026-09-22.** The user re-tested from `main` and tile order is correct. The cause was as hypothesised: the tested exe came from `stream/a`, which lacked `0bf9d76`. **Original report:** the 3 × 1 and 3 × 3 layouts' tile order on the capture side did not match the camera side. Hypothesis at the time: the exe under test was built from `stream/a`, which did **not** yet contain the reading-order contract change (`0bf9d76`, on `main` only), so tiles were still in the detector's area order. **First step:** re-test from `main` after this merge. If the order is still wrong, check the fake `LayoutFollowingCardDetector`'s coordinates against what the preview draws (rotation and axes), and whether the preview overlay and `QuadOrdering` use the same coordinate space. The real-frames validation branch (`validate/ui-real-frames`) asserts reading order against real 3×3 frames and is the place to reproduce it.
+    3. **CONFIRMED live by the user, 2026-09-22: the quad overlay is drawn about 35 px above the cards when the preview is letterboxed top and bottom.** Seen in the UV branch's headless render of `a_2`: a 1920×1080 frame in a 744-wide preview pane, which leaves bars of about 35 px. That matches a **missing vertical letterbox offset**. A3's `FrameToControlTransform` unit tests pass, so suspect the wiring instead: the overlay `Canvas` sitting at the top of the host while the `Image` is centred, or the transform receiving the host's size instead of the image's. The user saw it in the live exe as well; the source is not yet known. A10 missed it because the fake detector's widely spaced quads hide a small offset. Next: write a failing test through the real `MainWindow` that compares the overlay polygon bounds against the rendered image bounds.
+  - `main` was merged into `stream/a` at `700347e` with no conflicts.
+  Adjacent finds for E2 polish, not blocking: **the idle heap holds about 45 MB of LOH at startup** (suspects: the 33k `StubOracleCatalog`, demo setup), plus the two below. the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
 
 ### Stream B — Identification (critical path) · worktree `stream-b` · scope `src/LoreFetch.Core/Identification/**`, `src/LoreFetch.Core/Imaging/**`, `src/LoreFetch.Lab/**`, `Tests/StreamB/**`, `data/index/**`, `docs/accuracy.md`, README §B
 Global overrides for every B brief:
@@ -950,10 +1252,11 @@ Global overrides for every D brief:
 - [x] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.** *(stream/d `844c7f3`; native SOT + Moxfield, unsupported table for ManaBox/Archidekt/Deckbox/Dragon Shield, `+2 Mace` `> [!NOTE]`, oracle-name-only limitation cross-referenced. Only README.md; anchor + links verified. D5 will amend §D with the verification record.)*
 
 ### Integration I (on `main`, after the relevant streams have merged)
+**Stream D merged to `main` 2026-09-22** at `0ee2d29` (`origin/stream/d` `574ac13`), with no conflicts; README §A–§D sit side by side. Suites on the merge: build 0 warnings / 0 errors; StreamA 132, Integration 155/8, StreamD **71/71**, StreamC 39 (`Category!=Hardware`), StreamB 1 (placeholder). **P5 is pending the user's push approval.** Stream C was already in `main` (`c26ae12`), and `origin/stream/c` has nothing further. **I1 is now unblocked.** The App still composes `StubCollectionStore` and two stub exporters by design, so nothing uses the real CSV store until I1. A's commit path already handles `CollectionStoreException` (A7/A9), which is what `CsvCollectionStore` throws on a locked file. I1 should still test that path against the real store on Windows, where the lock actually occurs (D's write-lock test is `WindowsOnly`).
 - [ ] **I1** After D merges: implement `Real` in `Tests/Integration` for the store and exporters, and switch `AppComposition` to use them.
 - [ ] **I2** After A and B merge: `Real` gets the detector, rectifier, identifier and catalog, loaded from `DataFiles`. B7's synthetic frames take the `FolderFrameSource` slot. `AppComposition` gets a `Real` mode that loads the index and thresholds.
 - [ ] **I3** After C merges: `WebcamFrameSourceFactory` goes into `AppComposition`, with a switch between the demo folder and the camera.
-- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none.
+- [ ] **I4** 🧭 Grep for any hardcoded distance outside `Core/Scanning`, `CohortTile` and `thresholds.json`. There must be none. **Exempt:** `src/LoreFetch.App/Fakes/DemoThresholds.cs`, Fakes-mode demo values (ruled at A10-prep).
 - [ ] **I5** `THIRD-PARTY-NOTICES`: an entry for every package, so the hook's advisory list is empty. Chase down the FFmpeg notices in the OpenCvSharp runtimes (PLAN risk 7).
 - [ ] **I6** 🧭👤 `LOREFETCH_REQUIRE_REAL=1 dotnet test` on the **Windows PC** with every artifact present gives **0 skipped**. Then P6.
 

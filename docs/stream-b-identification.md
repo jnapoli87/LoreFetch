@@ -25,7 +25,7 @@ Needs no camera and no UI. Runs entirely on images on disk, on the Mac.
 
 ## What it implements
 
-A C# port of **CardSpotter**'s 1024-bit perceptual hash (`github.com/relgin/cardspotter`, **BSD-3-Clause**, GPLv3-compatible, must be attributed in `THIRD-PARTY-NOTICES`). This is the algorithm Wizards' SpellTable actually ships — verified by inspecting its production WASM bundle, which contains no neural net.
+A C# port of **CardSpotter**'s 1024-bit perceptual hash (`github.com/relgin/cardspotter`, **BSD-3-Clause**, GPLv3-compatible, must be attributed in `THIRD-PARTY-NOTICES`). Wizards' SpellTable uses image hashing rather than a neural net — verified by inspecting its production WASM bundle — but whether it specifically ships CardSpotter was not independently re-verified in this review (see *Target 1* below).
 
 Seven steps. ~~**The reference side and the query side must apply byte-identical transforms.**~~ **Corrected by review:** in the upstream source the two sides are *deliberately asymmetric* — steps 2–3 are **reference-side only**. See *Which steps run on which side* below, and **Open question 1**.
 
