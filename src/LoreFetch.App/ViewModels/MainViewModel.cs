@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using LoreFetch.Core.Abstractions;
 
@@ -109,6 +110,35 @@ public sealed partial class MainViewModel : ObservableObject
         {
             if (!SetProperty(ref _autoCaptureEnabled, value)) return;
             _settings.AutoCaptureEnabled = value;
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Cohort tiles — the grid of TileViewModel wrappers (A5)
+    // ------------------------------------------------------------------
+
+    private readonly ObservableCollection<TileViewModel> _tiles = new();
+
+    /// <summary>
+    /// The tile view-models for the current cohort, bound to the cohort grid
+    /// in <c>MainWindow</c>. Empty until <see cref="LoadCohort"/> is called
+    /// and cleared when a new cohort replaces the old one.
+    /// </summary>
+    public ObservableCollection<TileViewModel> Tiles => _tiles;
+
+    /// <summary>
+    /// Replaces the tile collection with view-models wrapping
+    /// <paramref name="cohort"/>'s tiles, in order. A7 (Space / auto-capture)
+    /// calls this when a new cohort arrives; A5 provides it so the grid and
+    /// its tests can bind without wiring capture logic.
+    /// </summary>
+    public void LoadCohort(Cohort cohort)
+    {
+        ArgumentNullException.ThrowIfNull(cohort);
+        _tiles.Clear();
+        foreach (var tile in cohort.Tiles)
+        {
+            _tiles.Add(new TileViewModel(tile));
         }
     }
 }

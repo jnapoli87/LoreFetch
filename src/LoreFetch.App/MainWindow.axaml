@@ -54,21 +54,139 @@
     </Border>
 
     <!--
-      A2: the live preview. ONE WriteableBitmap, allocated and mutated by
-      MainWindow.axaml.cs from IScanPipeline.FrameProcessed frames.
-      Stretch="Uniform" letterboxes a 16:9 (or rotated) frame rather than
-      distorting it to fill the control — which is exactly what the quad
-      overlay's frame->control transform (A3) has to account for.
+      Main content: live preview on the left, cohort grid on the right.
 
-      A3: quads are drawn as vector children on QuadOverlayCanvas, layered
-      over the Image in the same Grid cell — never baked into its pixels.
-      IsHitTestVisible="False" keeps the overlay from stealing input from
-      anything placed above it in a later package. The cohort grid (A5)
-      lands in a later package.
+      A2: ONE WriteableBitmap, allocated and mutated by MainWindow.axaml.cs
+      from IScanPipeline.FrameProcessed frames. Stretch="Uniform" letterboxes
+      a 16:9 (or rotated) frame rather than distorting it.
+
+      A3: quads drawn as vector children on QuadOverlayCanvas, layered over
+      the Image — never baked into pixels. IsHitTestVisible="False" keeps
+      the overlay from stealing input.
+
+      A5: cohort grid on the right. WrapPanel so all items are instantiated
+      (no virtualisation), which lets the visual-tree test walk all tiles.
+      The DataTemplate renders four tile states with per-state overlays:
+        Included    — no marker
+        Excluded    — dark overlay + ✕ text + grey border
+        Unresolved  — red border, no name shown
+        ManuallySet — blue border + M badge, distinct from a machine match
+      IsLowConfidence adds an amber border on top of the Included appearance.
     -->
-    <Grid>
-      <Image x:Name="PreviewImage" Stretch="Uniform" />
-      <Canvas x:Name="QuadOverlayCanvas" IsHitTestVisible="False" />
+    <Grid ColumnDefinitions="*, 280">
+
+      <!-- Column 0: preview + quad overlay -->
+      <Grid Grid.Column="0">
+        <Image x:Name="PreviewImage" Stretch="Uniform" />
+        <Canvas x:Name="QuadOverlayCanvas" IsHitTestVisible="False" />
+      </Grid>
+
+      <!-- Column 1: cohort grid -->
+      <Border Grid.Column="1" Background="#181818" x:DataType="vm:MainViewModel">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <ItemsControl x:Name="CohortGrid" ItemsSource="{Binding Tiles}" Padding="4">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <!--
+                  WrapPanel (not a virtualising VirtualizingStackPanel): all
+                  tile containers are realised immediately after Show(), so
+                  the visual-tree test can walk them without scrolling.
+                -->
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TileViewModel">
+                <!--
+                  Tile card: 80 × 141 px. Children are stacked (Grid default
+                  cell 0,0) and positioned by alignment. Hit-test-invisible
+                  border overlays sit on top without intercepting clicks — A6
+                  attaches its handlers to the outermost Grid.
+
+                  State visuals:
+                    IsLowConfidence → amber border (on Included tiles)
+                    IsUnresolved    → red border, blank DisplayName
+                    IsExcluded      → grey border + dark overlay + ✕ text
+                    IsManuallySet   → blue border + M badge
+                -->
+                <Grid Width="80" Height="141" Margin="4,4,0,0">
+
+                  <!-- Base card background -->
+                  <Border Background="#2D2D2D" CornerRadius="3" />
+
+                  <!-- Thumbnail image (top 111 px); null-safe — Thumbnail is
+                       null in plain unit tests where Avalonia is not initialised. -->
+                  <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
+                         VerticalAlignment="Top" Height="111" ClipToBounds="True" />
+
+                  <!-- Excluded: dark grey overlay across the thumbnail area -->
+                  <Rectangle Fill="#80000000" VerticalAlignment="Top" Height="111"
+                             IsVisible="{Binding IsExcluded}" />
+
+                  <!-- Name + distance at the bottom (30 px) -->
+                  <Border VerticalAlignment="Bottom" Height="30"
+                          Background="#CC000000" CornerRadius="0,0,3,3"
+                          Padding="3,2">
+                    <StackPanel>
+                      <TextBlock Text="{Binding DisplayName}"
+                                 Foreground="White" FontSize="9"
+                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding DistanceText}"
+                                 Foreground="#888888" FontSize="8" />
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Excluded: large ✕ marker centred on thumbnail area -->
+                  <TextBlock Text="✕" FontSize="40" FontWeight="Bold"
+                             Foreground="#CC4444"
+                             HorizontalAlignment="Center" VerticalAlignment="Top"
+                             Margin="0,22,0,0"
+                             IsVisible="{Binding ShowExcludedMarker}" />
+
+                  <!-- ManuallySet: small "M" badge at top-left -->
+                  <Border Background="#2244AA" CornerRadius="2" Padding="2,1"
+                          Margin="3,3,0,0"
+                          HorizontalAlignment="Left" VerticalAlignment="Top"
+                          IsVisible="{Binding IsManuallySet}">
+                    <TextBlock Text="M" Foreground="White"
+                               FontSize="8" FontWeight="Bold" />
+                  </Border>
+
+                  <!--
+                    State border overlays — IsHitTestVisible="False" so
+                    they never eat clicks that A6 wires to the outer Grid.
+                    Only one is visible at a time (states are mutually
+                    exclusive), except low-confidence which overlaps Included.
+                  -->
+                  <!-- Low-confidence: amber border (Included tiles only) -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#FFA500"
+                          IsVisible="{Binding IsLowConfidence}"
+                          IsHitTestVisible="False" />
+                  <!-- Unresolved: red border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#FF4444"
+                          IsVisible="{Binding IsUnresolved}"
+                          IsHitTestVisible="False" />
+                  <!-- Excluded: grey border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#666666"
+                          IsVisible="{Binding IsExcluded}"
+                          IsHitTestVisible="False" />
+                  <!-- ManuallySet: blue border -->
+                  <Border BorderThickness="3" CornerRadius="3"
+                          BorderBrush="#4488FF"
+                          IsVisible="{Binding IsManuallySet}"
+                          IsHitTestVisible="False" />
+
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+
     </Grid>
   </DockPanel>
 </Window>
