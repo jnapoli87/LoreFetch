@@ -74,7 +74,19 @@ Filled in by Stream C as the webcam capture pipeline lands.
 
 ## Stream D — Collection & export
 
-Filled in by Stream D as the collection store, native format and export adapters land.
+v1 ships two formats: the **native LoreFetch CSV** (source of truth, UTF-8 with BOM so Excel opens it without mangling accented card names) and a **Moxfield** adapter — the one researched tool that provably accepts name-only rows. [Moxfield's importer](https://moxfield.com/help/help-articles/importing-collection) requires only `Name`; we emit `Count` and `Name`, leaving printing columns blank. The adapter is shipped but **not yet verified by a real import** (`IsVerified = false`).
+
+| Tool | Why not in v1 |
+|---|---|
+| **ManaBox** | Requires card name plus set name or code, or a Scryfall printing ID — oracle-name-only rows can't satisfy its documented minimum. ([guide](https://www.manabox.app/guides/collection/import-export/)) |
+| **Archidekt** | Blocks name-only uploads as ambiguous; also has no fixed import header to target by design. ([forum](https://archidekt.com/forum/thread/15700538), [release post](https://archidekt.com/news/5891613)) |
+| **Deckbox** | Technically accepts `Count` + `Name` with edition blank, but the column spec is community folklore with no first-party documentation — held for a future release. ([community source](https://deckbox.org/forum/viewtopic.php?id=30026)) |
+| **Dragon Shield** | No first-party import documentation exists; cannot be shipped without a verified real import. |
+
+> [!NOTE]
+> **`+2 Mace` in Excel.** That card's name begins with `+`, which Excel treats as a formula character and may try to evaluate. The native CSV is correct — this is a display quirk in Excel only. The file is deliberately **not** sanitised: a `'` or tab prefix would corrupt the source of truth for every machine reader.
+
+Reprints sharing artwork are indistinguishable by perceptual hash, so the collection carries oracle name only — no set, no price column. See [Known limitations, by design](#known-limitations-by-design).
 
 ## Licence
 
