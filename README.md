@@ -72,6 +72,17 @@ Filled in by Stream B as the hash port, index build and detection/accuracy work 
 
 Filled in by Stream C as the webcam capture pipeline lands.
 
+Hardware-verified on the Windows PC with a Logitech C920 (2026-09-22):
+
+| Check | Result |
+|---|---|
+| Format negotiation | Negotiated `HD Pro Webcam C920 1920x1080 MJPG @30fps (DirectShow)`; the VfW "Default" device was enumerated and correctly skipped; Media Foundation offered 335 characteristics, DirectShow 35 |
+| Delivered rate | 28.6 fps over a 10 s window; first frame ~720–790 ms after `StartAsync` |
+| JPEG decode | 11–15 ms average per 150-frame window, max 42 ms (one outlier) |
+| Sustained memory | 3-minute run, 5,035 frames: private bytes oscillated 180–190 MB, post-warm-up growth 9.5 MB (well under the 100 MB bound) |
+| Slow consumer | 500 ms/frame for 60 s: +5.7 MB private-bytes growth, capture→consume latency mean 33 ms, max 77 ms |
+| Unplug | `FrameSourceException` raised 2,002 ms after the last frame (`FrameWatchdogMs` = 2000); `DisposeAsync` completed in 23 ms; replugging and reopening worked, first frame in 719 ms |
+
 ## Stream D — Collection & export
 
 Filled in by Stream D as the collection store, native format and export adapters land.
