@@ -471,7 +471,7 @@ Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 e
 **Next, in order:**
 1. **P2 push** of `main` (user approval). Until it lands, any session merging "main" into a stream is merging a `main` nobody else has. That is exactly how the two `main`s diverged today.
 2. **Merge `main` into `stream/b` and `stream/d`** (reading order + stream A). This belongs to their sessions or the new orchestrator. Nothing in their scopes changes.
-3. **Fix the two known A bugs** (A10's "Known bugs, deferred"). Re-test bug 2 from `main` first: the exe the user tested came from `stream/a`, which lacked the reading-order change. Confirmed with `git merge-base --is-ancestor`.
+3. **Fix the open known A bugs** (A10's "Known bugs, deferred"): bug 1 (type-ahead focus) and bug 3 (overlay vertical offset, confirmed live by the user). Bug 2 is **resolved**: the user confirmed tile order is correct from `main`.
 4. **B:** B6 → B8 → merge → P3. **D:** merge → P5. Then **I1–I6**. I2 is where `LOREFETCH_DETECTOR=real`-style wiring becomes the real `Real` mode, and I3 must set `CameraRotationDegrees = 0` (geometry re-ruling).
 
 **Real test imagery (user-supplied, gitignored, "absolutely real data").** `test-images/a_corpus` (6), `b_corpus` (6) and `d_corpus` (2) are real 1920×1080 C920 frames of **tight 3×3 grids**: a and b on white paper over a cluttered desk, d on a black mat. `test-images/ad-hoc` (12) holds single cards on black, brown and white. The layout `test-images/README.md` describes (`fixtures/`, `ground-truth.csv`) is the H3 corpus, which does not exist yet. The a/b/d folders are not described there; add them when B6 or H3 next touches it. Ground truth for the two frames checked by eye (row-major):
@@ -483,12 +483,23 @@ Suites on `main` after the A merge, all orchestrator-run: build 0 warnings / 0 e
 2. **Black-bordered cards on the black mat vanish** (d_6 3/9, atarka_black, verix_black). This is CLAUDE.md risk 4, reproduced; retrieval mode doesn't matter.
 3. **Edge placement is disputed:** the probe agent says d_4's quads sit on the outer edge, but the orchestrator's zoom of its own crop shows the green line inside the black border (≈8 px). Treat it as B5b's inset question: check it, don't assume it.
 
-**Real-frames UI validation (package UV): in flight at the end of this session.** A Sonnet implementer was building, on `validate/ui-real-frames`:
-- `LOREFETCH_DETECTOR=real` (B's detector + rectifier, `DemoCardIdentifier` stub) and `LOREFETCH_FRAME_INTERVAL_MS`;
-- artifact-gated headless tests rendering all 26 real frames through the real `MainWindow`, asserting tile count and reading order;
-- screenshots and tile crops under this session's scratchpad (`…\scratchpad\uv\`), which the next session can't rely on.
+**Real-frames UI validation (package UV): wrapped up early at the user's request**, `validate/ui-real-frames` `b0dfe50`. **Throwaway, never merge.**
+- `LOREFETCH_DETECTOR=real` swaps in B's `ContourCardDetector` + `PerspectiveRectifier`, with `DemoCardIdentifier` still stubbing identification. `LOREFETCH_FRAME_INTERVAL_MS` holds each frame on screen. Unset gives today's behaviour.
+- Artifact-gated headless tests render all 26 real frames through the real `MainWindow`.
+- Suites on that branch: StreamA 141, StreamB 272/8, Integration 155/8, StreamC 39, StreamD 1. A smoke launch on `d_corpus` exits 0.
+- **Chaos testing was skipped** at the wrap-up.
+- Tiles per frame with B's `origin/stream/b` (`8e4e7aa`) detector:
 
-**Check `git -C .claude/worktrees/ui-validation log` for its commits.** If they're incomplete, re-dispatch from the brief's intent above. Its results are the best repro for known bug 2.
+  | Frames | Tiles |
+  |---|---|
+  | a_1–a_6 | 8, 9, 8, 9, 7, 8 |
+  | b_1–b_6 | 3, 2, 4, 5, 2, 2 |
+  | d_4, d_6 | 8, 3 |
+  | ad-hoc | 11/12 correct; atarka_black 0; solring_black 2 (a false positive) |
+
+- The orchestrator's eye check of the renders: **d_4 and a_2 tiles come out in the physical reading order.**
+
+Launch it live from `.claude/worktrees/ui-validation/src/LoreFetch.App/bin/Release/net10.0` with `LOREFETCH_DETECTOR=real LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/a_corpus LOREFETCH_FRAME_INTERVAL_MS=4000 ./LoreFetch.App.exe`. I2 should re-do this wiring properly on `main` after B merges, not port this branch.
 
 **Learned this session.**
 1. **Two `main`s can diverge silently when stream branches carry `main` to the remote but `main` itself isn't pushed.** Each machine then holds a different "main". Push `main` whenever it is merged into a pushed stream branch, or don't merge it.
@@ -848,7 +859,8 @@ Global overrides for every A brief:
   - **README §A** and the stream A internals are done on `stream/a`: `0b445ec` + `e9f4a59` (low-confidence wording fixed on review).
   - **Known bugs, deferred (user's hands-on re-run of the A10-fix exe, 2026-09-22).** The user ruled: merge A with these bugs, and fix them later.
     1. **"Set card manually…" does not focus the input box.** The type-ahead opens, but the keyboard focus does not land in it, and it should. The A10-fix headless test `ManualSetContextMenuTests` asserts focus and passes, so **headless focus differs from the live window**; the test is not proof. Suspects: the context menu closing *after* the focus call and returning focus to the tile, or a `Focus()` issued before the box is attached or visible. Posting the focus via `Dispatcher.UIThread.Post` at a lower priority is the usual fix. Re-verify by hand, not only headless.
-    2. **The 3 × 1 and 3 × 3 layouts: tile order on the capture side does not match the camera side.** Hypothesis, **unverified**: the exe under test was built from `stream/a`, which did **not** yet contain the reading-order contract change (`0bf9d76`, on `main` only), so tiles were still in the detector's area order. **First step:** re-test from `main` after this merge. If the order is still wrong, check the fake `LayoutFollowingCardDetector`'s coordinates against what the preview draws (rotation and axes), and whether the preview overlay and `QuadOrdering` use the same coordinate space. The real-frames validation branch (`validate/ui-real-frames`) asserts reading order against real 3×3 frames and is the place to reproduce it.
+    2. **RESOLVED 2026-09-22.** The user re-tested from `main` and tile order is correct. The cause was as hypothesised: the tested exe came from `stream/a`, which lacked `0bf9d76`. **Original report:** the 3 × 1 and 3 × 3 layouts' tile order on the capture side did not match the camera side. Hypothesis at the time: the exe under test was built from `stream/a`, which did **not** yet contain the reading-order contract change (`0bf9d76`, on `main` only), so tiles were still in the detector's area order. **First step:** re-test from `main` after this merge. If the order is still wrong, check the fake `LayoutFollowingCardDetector`'s coordinates against what the preview draws (rotation and axes), and whether the preview overlay and `QuadOrdering` use the same coordinate space. The real-frames validation branch (`validate/ui-real-frames`) asserts reading order against real 3×3 frames and is the place to reproduce it.
+    3. **CONFIRMED live by the user, 2026-09-22: the quad overlay is drawn about 35 px above the cards when the preview is letterboxed top and bottom.** Seen in the UV branch's headless render of `a_2`: a 1920×1080 frame in a 744-wide preview pane, which leaves bars of about 35 px. That matches a **missing vertical letterbox offset**. A3's `FrameToControlTransform` unit tests pass, so suspect the wiring instead: the overlay `Canvas` sitting at the top of the host while the `Image` is centred, or the transform receiving the host's size instead of the image's. The user saw it in the live exe as well; the source is not yet known. A10 missed it because the fake detector's widely spaced quads hide a small offset. Next: write a failing test through the real `MainWindow` that compares the overlay polygon bounds against the rendered image bounds.
   - `main` was merged into `stream/a` at `700347e` with no conflicts.
   Adjacent finds for E2 polish, not blocking: **the idle heap holds about 45 MB of LOH at startup** (suspects: the 33k `StubOracleCatalog`, demo setup), plus the two below. the collection `DataGrid`'s column headers truncate ("Condi", "Sou") and render light on the dark theme. Every stub tile is named "Stub Card 0", because `StubCardIdentifier` names candidates by rank, so all commits fold into one row.
 
