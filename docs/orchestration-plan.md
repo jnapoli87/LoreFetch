@@ -572,7 +572,7 @@ Open only when G0.* and S0.1–S0.8 plus P1 are all ticked. S0.0 may be waived. 
   - back it up outside git
 
   Gates B6.
-- [ ] **H4** 👤 A Moxfield account. Gates D5.
+- [x] **H4** 👤 A Moxfield account. Gates D5. *(user confirmed account ready 2026-09-22)*
 - [x] **H6** 👤 A C920 attached to the Windows PC. Gates C4. — *confirmed attached 2026-09-21 (G0.3).*
 
 ### Stream A — UI · worktree `stream-a` · scope `src/LoreFetch.App/**`, `src/LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, README §A
@@ -799,7 +799,7 @@ Global overrides for every D brief:
 
   Accept: the blank-condition round trip yields 1 row with quantity 2; nine Forests return 9; a file locked with `FileShare.None` throws and leaves the original byte-identical; the temp file lives in the target directory.
 - [x] **D4** `MoxfieldCsvExporter`: the header per stream-d §D2 (`Count`, `Name`, printing columns blank), no BOM, `IsVerified = false`. Accept: tests for the header and the 5 vectors. *(stream/d `68e749f`; also `ed60d6c` marks the write-lock test WindowsOnly — macOS `rename(2)` replaces an open target. 70 StreamD + 143 Integration green on Mac filter; chaos: CRLF flip fails 9 tests, line endings pinned.)*
-- [ ] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`.
+- [x] **D5** 👤 Real import into Moxfield (gated on H4). Record the tool, date, row count, and what printings and blank conditions resolved to in README §D. Then set `IsVerified = true`. *(stream/d `bd106e0`; user imported a 6-card sample via Moxfield's Collection-view CSV upload on 2026-09-22 — all 6 names intact incl. `+2 Mace`/`Borrowing 100,000 Arrows`/`Kongming, "Sleeping Dragon"`/`Lim-Dûl's Vault`, `Forest` merged to qty 9, blank Condition → Near Mint, printings auto-assigned by Moxfield as expected for oracle-name-only rows. `IsVerified` flipped false→true; StreamD metadata test now asserts true, chaos-checked. README §D amended with the import instruction + verified result. StreamD 70 pass, Integration 143 pass/8 skip.)*
 - [x] **D6** README §D: the unsupported-tools table and the `+2 Mace` Excel note. **Merge gate, then P5.** *(stream/d `844c7f3`; native SOT + Moxfield, unsupported table for ManaBox/Archidekt/Deckbox/Dragon Shield, `+2 Mace` `> [!NOTE]`, oracle-name-only limitation cross-referenced. Only README.md; anchor + links verified. D5 will amend §D with the verification record.)*
 
 ### Integration I (on `main`, after the relevant streams have merged)
