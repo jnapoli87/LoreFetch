@@ -33,15 +33,24 @@ public sealed class HeadlessTestApp : Application
 
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<HeadlessTestApp>()
-            // UseSkia() registers the Skia drawing backend — even in headless mode,
-            // UseHeadlessDrawing=true still needs a raster drawing engine to produce
-            // the in-memory bitmap that CaptureRenderedFrame() returns.
+            // UseSkia() registers the real Skia drawing backend, which is what
+            // actually produces pixels for CaptureRenderedFrame() to return.
             .UseSkia()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions
             {
-                // UseHeadlessDrawing=true renders to an in-memory surface so
-                // CaptureRenderedFrame() returns a non-null RenderTargetBitmap.
-                UseHeadlessDrawing = true,
+                // Orchestrator diagnosis (2026-09-22): UseHeadlessDrawing=true
+                // is Avalonia.Headless's OWN no-op stub renderer — a
+                // NullRenderer-style drawing context that never touches Skia and
+                // never populates a real surface, regardless of platform. That is
+                // why CaptureRenderedFrame() returned null here even on win-x64:
+                // there was never a rendered frame to capture, on any OS. The old
+                // comment claiming this "renders to an in-memory surface" and that
+                // the failure was "absent on macOS ARM64" was wrong — the
+                // behaviour is identical on every platform, and it was verified
+                // failing on Windows too before this fix. Setting it to false
+                // routes drawing through the real Skia backend (UseSkia() above),
+                // which is what makes CaptureRenderedFrame() return actual pixels.
+                UseHeadlessDrawing = false,
 
                 // ShouldRenderOnUIThread=true makes the renderer run synchronously
                 // on the UI thread, so CaptureRenderedFrame() can return the frame

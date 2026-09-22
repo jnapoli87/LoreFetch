@@ -19,12 +19,18 @@ namespace LoreFetch.Tests.StreamA;
 ///     every platform because visual-tree inspection requires no pixel
 ///     rendering — the layout engine builds the tree after <c>Show()</c>
 ///     even without a headless drawing surface.
-///   - <c>MainWindow_RendersSelector_AndToggleIsVisible_Screenshot</c> is
-///     tagged <c>WindowsOnly</c>. <c>CaptureRenderedFrame()</c> needs the
-///     headless drawing backend; on macOS (ARM64) the in-memory surface is
-///     not produced in this headless context, the same platform split as the
-///     golden-hash test. The test WILL run on the win-x64 CI leg and produce
-///     the PNG required by the A4 acceptance criteria.
+///   - <c>MainWindow_RendersSelector_AndToggleIsVisible_Screenshot</c> renders
+///     the window and asserts on the actual pixels. It runs on every
+///     platform: with <c>TestApp.cs</c>'s <c>UseHeadlessDrawing = false</c>
+///     (plus <c>.UseSkia()</c>), the headless backend produces a real
+///     rendered surface everywhere, not just on win-x64 — the earlier
+///     <c>WindowsOnly</c> trait rested on a false platform rationale
+///     (orchestrator diagnosis, 2026-09-22: <c>UseHeadlessDrawing = true</c>
+///     is Avalonia.Headless's own no-op stub renderer, which returns null
+///     from <c>CaptureRenderedFrame()</c> on every OS, not just macOS —
+///     verified failing on win-x64 too before the fix) and has been removed.
+///     The test still produces the PNG required by the A4 acceptance
+///     criteria; it just no longer needs a CI-leg split to do it.
 ///
 /// The PNG is saved to <see cref="AppContext.BaseDirectory"/> (the test
 /// output directory), never to the repo tree — the commit hook's imagery
@@ -75,19 +81,16 @@ public class ScreenshotTests
     }
 
     // ------------------------------------------------------------------
-    // Screenshot — WindowsOnly (headless drawing surface; macOS excluded
-    // for the same reason as the golden-hash tests: INTER_AREA and the
-    // headless render backend behave differently on ARM64 macOS)
+    // Screenshot — cross-platform (see TestApp.cs: UseHeadlessDrawing=false
+    // + UseSkia() produces a real rendered surface on every OS)
     // ------------------------------------------------------------------
 
     /// Renders the MainWindow to a PNG using the headless drawing backend and
-    /// verifies it is non-empty. Produces the PNG file that satisfies the A4
-    /// "PNG is produced" acceptance criterion.
-    ///
-    /// Traited <c>WindowsOnly</c> — the headless in-memory surface is only
-    /// produced on win-x64 in this project's configuration, the same platform
-    /// split as <see cref="Avalonia.Headless.AvaloniaHeadlessPlatformOptions.UseHeadlessDrawing"/>.
-    [Trait("Category", "WindowsOnly")]
+    /// verifies the pixels are meaningful — not merely non-null, but the
+    /// right size and not a single flat colour (which is what a broken or
+    /// unrendered surface would still pass a bare not-null check with).
+    /// Produces the PNG file that satisfies the A4 "PNG is produced"
+    /// acceptance criterion.
     [AvaloniaFact]
     public void MainWindow_RendersSelector_AndToggleIsVisible_Screenshot()
     {
@@ -115,6 +118,8 @@ public class ScreenshotTests
         var info = new FileInfo(pngPath);
         Assert.True(info.Exists, $"Screenshot PNG must exist at: {pngPath}");
         Assert.True(info.Length > 0, "Screenshot must be non-empty.");
+        ScreenshotAssertions.AssertDimensions(pngPath, 1024, 768);
+        ScreenshotAssertions.AssertNotUniformColor(pngPath);
 
         window.Close();
     }

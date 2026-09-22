@@ -20,9 +20,14 @@ namespace LoreFetch.Tests.StreamA;
 ///   <item><c>CohortGrid_VisualTree_ShowsCorrectMarkersForEachState</c> runs
 ///     on every platform — visual-tree inspection builds the tree after
 ///     <c>Show()</c> without pixel rendering.</item>
-///   <item><c>CohortGrid_Screenshot_SavesPng</c> is tagged <c>WindowsOnly</c>
-///     — <c>CaptureRenderedFrame()</c> needs the headless drawing backend,
-///     absent on macOS ARM64 in this configuration.</item>
+///   <item><c>CohortGrid_Screenshot_SavesPng</c> renders the window and
+///     asserts on the actual pixels; it runs on every platform now that
+///     <c>TestApp.cs</c> sets <c>UseHeadlessDrawing = false</c> (plus
+///     <c>.UseSkia()</c>) — the earlier <c>WindowsOnly</c> trait rested on a
+///     false platform rationale (orchestrator diagnosis, 2026-09-22:
+///     <c>UseHeadlessDrawing = true</c> is Avalonia.Headless's own no-op stub
+///     renderer and returns null from <c>CaptureRenderedFrame()</c> on every
+///     OS, not just macOS) and has been removed.</item>
 /// </list>
 ///
 /// The PNG is saved to <see cref="AppContext.BaseDirectory"/> (the test
@@ -118,19 +123,16 @@ public class CohortGridTests
     }
 
     // ------------------------------------------------------------------
-    // Screenshot — WindowsOnly (headless drawing surface)
+    // Screenshot — cross-platform (see TestApp.cs: UseHeadlessDrawing=false
+    // + UseSkia() produces a real rendered surface on every OS)
     // ------------------------------------------------------------------
 
     /// <summary>
     /// Renders the <c>MainWindow</c> with all five tile states to a PNG using
-    /// the headless drawing backend. Satisfies the A5 "PNG is produced"
-    /// acceptance criterion.
-    ///
-    /// Tagged <c>WindowsOnly</c> — the headless in-memory surface is produced
-    /// on win-x64 in this configuration; macOS ARM64 returns null from
-    /// <see cref="HeadlessWindowExtensions.CaptureRenderedFrame"/>.
+    /// the headless drawing backend and verifies the pixels are meaningful —
+    /// right size, not a single flat colour. Satisfies the A5 "PNG is
+    /// produced" acceptance criterion.
     /// </summary>
-    [Trait("Category", "WindowsOnly")]
     [AvaloniaFact]
     public void CohortGrid_Screenshot_SavesPng()
     {
@@ -160,6 +162,8 @@ public class CohortGridTests
         var info = new FileInfo(pngPath);
         Assert.True(info.Exists, $"Screenshot PNG must exist at: {pngPath}");
         Assert.True(info.Length > 0, "Screenshot must be non-empty.");
+        ScreenshotAssertions.AssertDimensions(pngPath, 1024, 768);
+        ScreenshotAssertions.AssertNotUniformColor(pngPath);
 
         window.Close();
     }
