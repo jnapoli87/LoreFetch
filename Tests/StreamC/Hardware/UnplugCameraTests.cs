@@ -57,7 +57,22 @@ public sealed class UnplugCameraTests : IDisposable
             {
                 while (true)
                 {
-                    if (!await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(waitSeconds + 10), TestContext.Current.CancellationToken))
+                    // C4-fix: the per-call bound must be at least the
+                    // product's own watchdogs plus margin (see
+                    // HardwareTestSupport.ComputeMoveNextBound) — the old
+                    // `waitSeconds + 10` constant already exceeded that in
+                    // practice at the default waitSeconds=120, but if
+                    // LOREFETCH_HW_UNPLUG_WAIT_S is set low it could have
+                    // raced FrameWatchdog exactly like
+                    // Negotiates1080pMjpgAndDeliversLiveFrames did, and
+                    // masked the result the same way at dispose.
+                    // `minimumBound` keeps the human-unplug allowance.
+                    if (!await HardwareTestSupport.MoveNextWithHarnessBoundAsync(
+                            enumerator,
+                            settings,
+                            cts,
+                            TestContext.Current.CancellationToken,
+                            minimumBound: TimeSpan.FromSeconds(waitSeconds + 10)))
                     {
                         Assert.Fail("Enumerator completed without throwing — expected FrameSourceException after the unplug.");
                     }

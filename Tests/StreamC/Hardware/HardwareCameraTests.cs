@@ -73,7 +73,11 @@ public sealed class HardwareCameraTests : IDisposable
         CameraFrame? last = null;
         var frameCount = 0;
 
-        using var readCts = new CancellationTokenSource(TimeSpan.FromSeconds(30)); // absolute bound, well past the 10s read window
+        // The absolute bound must itself exceed the per-MoveNext harness
+        // bound below (settings-derived, ~15s by default) plus the 10s read
+        // window, or this outer token could cut the run short before the
+        // per-call bound even gets a chance to matter.
+        using var readCts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
         var enumerator = source.ReadAsync(readCts.Token).GetAsyncEnumerator(readCts.Token);
         var runSw = Stopwatch.StartNew();
         try
@@ -81,7 +85,14 @@ public sealed class HardwareCameraTests : IDisposable
             while (runSw.Elapsed < TimeSpan.FromSeconds(10))
             {
                 var moveNextSw = Stopwatch.StartNew();
-                var hasNext = await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+                // C4-fix: was `.WaitAsync(TimeSpan.FromSeconds(5), ...)` — a
+                // constant shorter than ScanSettings.FirstFrameTimeoutMs's
+                // 10s default, which let the harness's own timeout fire
+                // before FrameWatchdog's FrameSourceException ever could,
+                // and then masked it with NotSupportedException at dispose.
+                // See HardwareTestSupport.MoveNextWithHarnessBoundAsync.
+                var hasNext = await HardwareTestSupport.MoveNextWithHarnessBoundAsync(
+                    enumerator, settings, readCts, TestContext.Current.CancellationToken);
                 moveNextSw.Stop();
 
                 if (!hasNext)
@@ -161,7 +172,11 @@ public sealed class HardwareCameraTests : IDisposable
         {
             while (overallSw.Elapsed < duration)
             {
-                if (!await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken))
+                // C4-fix: see Negotiates1080pMjpgAndDeliversLiveFrames — a
+                // raw constant bound here shorter than the product's own
+                // watchdogs risks the same NotSupportedException-masks-
+                // FrameSourceException failure mode.
+                if (!await HardwareTestSupport.MoveNextWithHarnessBoundAsync(enumerator, settings, cts, TestContext.Current.CancellationToken))
                 {
                     break;
                 }
@@ -231,7 +246,8 @@ public sealed class HardwareCameraTests : IDisposable
         {
             while (overallSw.Elapsed < duration)
             {
-                if (!await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken))
+                // C4-fix: see Negotiates1080pMjpgAndDeliversLiveFrames.
+                if (!await HardwareTestSupport.MoveNextWithHarnessBoundAsync(enumerator, settings, cts, TestContext.Current.CancellationToken))
                 {
                     break;
                 }
