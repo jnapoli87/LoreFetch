@@ -47,6 +47,38 @@ A proposal raised after Stream 0's contract work: identification already produce
 
 **The fold rule is agree-or-null, never last-write-wins.** A non-null `ArtworkId` must be trustworthy; a value that is right sometimes and wrong sometimes, with nothing able to tell which, is worse than null for a field whose purpose is price resolution. Same reasoning as *Condition is blank in v1*.
 
+### Contract change — cohort tiles in grid (reading) order, requested 2026-09-22 by the user, not yet executed
+
+**The problem (seen in the user's live A10 run, 9-card layout):** the cohort grid does not match the physical 3×3 grid. `ScanPipeline` builds tiles in detector order, and `ICardDetector` returns quads **by descending area**. That is correct for choosing the top N, but meaningless as an order: with nine near-equal cards it is effectively arbitrary. The user's verdict: "a terrible experience without fixing this". The user also noted that **the nine cards will sit about 10 px apart in the frame**, a much tighter grid than the stub's widely spaced layout.
+
+**Why the fix belongs in the pipeline, not the UI:** `CohortTile` does not carry its quad, so the App cannot re-sort tiles. Area order must stay, because it selects which N quads survive when more are detected. **The order has to be imposed after selection and before tiles are built**, in `ScanPipeline`, which is frozen `Core/Scanning`. So this is a contract change: **land it on `main`, then merge `main` into every stream branch**, following the `ArtworkId` precedent above.
+
+**The rule — reading order as the preview displays it** (post-rotation frame coordinates, which is what the user sees):
+1. Take the selected quads and compute each one's centroid and height.
+2. Sort by centroid Y. Start a new row when a centroid's Y differs from the current row's mean Y by more than **half the median quad height**. Cards are about 483 px tall at the locked height, so a 10 px gap or a slight skew cannot split or merge rows.
+3. Sort within each row by centroid X, left to right, then concatenate the rows top to bottom.
+4. This covers 1, a 3-in-a-line in either orientation, a 3×3, and **partial Space captures** (e.g. 7 of 9, which keep their relative order).
+5. Write it once, as a pure function in `Core/Scanning` (e.g. `QuadOrdering.ReadingOrder`). Tiles, keys 1–9 (if ever added) and commit order all follow from it.
+6. **Optionally** add `CardQuad Quad` to `CohortTile`, so the UI can highlight which outline a tile came from. Decide at execution; it is not needed for the ordering itself.
+
+**Tests (Integration + unit):**
+- a 3×3 of quads with ~10 px gaps, supplied in shuffled/area order, comes out row-major;
+- a ±3° skew and ±5 px jitter per card does not change the order;
+- 3-in-a-row and 3-in-a-column both work;
+- a partial capture of 7 keeps its relative order;
+- geometry rotated 1080×1920 works.
+
+Chaos cases: sort by X before Y; set the row threshold to 0 (every card becomes its own row); skip the sort entirely. Each must fail.
+
+**The knock-on for stream B — tight spacing is a detection risk, not only an ordering one.** `ContourCardDetector` runs a 5×5 Gaussian and a 5×5 morphological close (B5a). At ~10 px gaps, glare, shadow or a bridging sleeve edge can merge neighbours into one contour. That contour then fails the aspect filter, and **cards silently vanish from a 9-card capture.** Add to B's remaining work:
+- a synthetic B5a-style test of a 3×3 with 10 px (and 6 px) gaps that must yield 9 distinct quads;
+- a tight 3×3 in the H3 fixture corpus and B6's layouts;
+- E1 measures the minimum reliable gap at the locked height.
+
+If the close bridges gaps, the fix is the kernel size or its removal, measured rather than guessed. The stub detector's widely spaced layout (`Core/Fakes`, frozen) does not model this, so any tight-grid fake case goes into the new ordering tests instead.
+
+**Sequencing:** A's merge gate does not depend on this change; A10 can pass without it. Execute it on `main` **right after stream A merges** (it touches `Core/Scanning`, which A's branch does not), then merge `main` into `stream/b` and `stream/d`. It needs no stream-A UI change unless the optional `Quad` field is taken.
+
 ## 0. How the orchestrator uses this file
 
 **Roles**
@@ -428,7 +460,8 @@ Rules that follow from the split:
 1. **A10-fix package** (Sonnet, `stream/a`): reproduce both bugs through the real `MainWindow` in failing headless tests, then fix them. Then the user re-runs the live exe: `LOREFETCH_FRAMES_DIR=C:/Repos/LoreFetch/test-images/ad-hoc` plus `.claude/worktrees/stream-a/src/LoreFetch.App/bin/Release/net10.0/LoreFetch.App.exe`. Tick A10 only on the user's confirmation.
 2. **Merge gate:** `git merge --no-ff stream/a` into `main`, then the full suite on `main`. The expected baseline is StreamA 119/119 and Integration 143 passed / 8 skipped. Merging stream/a after main was merged into it should be conflict-free.
 3. **P2:** show the summary, and push only on approval. **Watch the macOS CI leg.** The two screenshot tests lost their `WindowsOnly` trait at A10-prep; if they fail on macOS, re-trait them with the real reason.
-4. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
+4. **Contract change: cohort tiles in reading order** (the section near the top of this file, requested by the user). Execute on `main` right after A merges, then merge `main` into `stream/b` and `stream/d`. It also adds tight-grid (~10 px gap) detection tests to B's remaining work.
+5. **Streams remaining after A:** B (B7 → B2 → B5c → B6 → B8, on the PC) and D's merge. C is merged.
 
 **Learned this session.**
 1. **A memory soak with zero GCs proves nothing.** On a quiet app, "rising memory" is just uncollected garbage. Force the question: `DOTNET_GCgen0size` shows gen0 behaviour, and `DOTNET_GCHeapHardLimit` forces gen2. Size the cap at about 2× the idle floor; at 1.5× it OOMs on a legitimate 8 MiB allocation.
