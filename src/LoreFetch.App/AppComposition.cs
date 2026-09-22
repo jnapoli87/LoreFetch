@@ -1,3 +1,4 @@
+using LoreFetch.App.Diagnostics;
 using LoreFetch.App.Fakes;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Fakes;
@@ -52,6 +53,18 @@ public sealed class AppSession : IAsyncDisposable
     /// null or empty, the export picker shows nothing.
     /// </param>
     /// <param name="onDisposed">Optional cleanup action run after the frame source is closed.</param>
+    /// <param name="diagnostics">
+    /// A10's preview/pipeline fps counters. Optional so that existing test
+    /// constructors continue to compile without change. When null,
+    /// <c>MainWindow</c> simply does not record any frame counts.
+    /// </param>
+    /// <param name="reporter">
+    /// The background loop that logs <paramref name="diagnostics"/> every
+    /// 10 s. Optional; disposed (if present) as part of
+    /// <see cref="DisposeAsync"/>. Composition owns starting it — never
+    /// pass one without also passing the <paramref name="diagnostics"/> it
+    /// reads from.
+    /// </param>
     public AppSession(
         IScanPipeline pipeline,
         IFrameSource source,
@@ -60,7 +73,9 @@ public sealed class AppSession : IAsyncDisposable
         IOracleCatalog? catalog = null,
         ICollectionStore? store = null,
         IReadOnlyList<ICollectionExporter>? exporters = null,
-        Action? onDisposed = null)
+        Action? onDisposed = null,
+        PreviewDiagnostics? diagnostics = null,
+        DiagnosticsReporter? reporter = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentNullException.ThrowIfNull(source);
@@ -75,7 +90,11 @@ public sealed class AppSession : IAsyncDisposable
         Store = store;
         Exporters = exporters;
         _onDisposed = onDisposed;
+        Diagnostics = diagnostics;
+        _reporter = reporter;
     }
+
+    private readonly DiagnosticsReporter? _reporter;
 
     public IScanPipeline Pipeline { get; }
 
@@ -123,6 +142,16 @@ public sealed class AppSession : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<ICollectionExporter>? Exporters { get; }
 
+    /// <summary>
+    /// A10's preview/pipeline fps counters. <c>MainWindow</c> records into
+    /// this from <c>OnFrameProcessed</c> (pipeline frames) and
+    /// <c>OnRenderFrame</c> (frames actually blitted). May be null when
+    /// composition does not supply one (e.g. tests that construct
+    /// <see cref="AppSession"/> directly) — <c>MainWindow</c> treats that as
+    /// "don't record".
+    /// </summary>
+    public PreviewDiagnostics? Diagnostics { get; }
+
     /// Disposes the pipeline (which cancels and drains its loop), awaits the
     /// run task, then disposes the frame source itself — only at that point
     /// has `FolderFrameSource`'s own decode loop actually stopped, which is
@@ -147,6 +176,11 @@ public sealed class AppSession : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
+        }
+
+        if (_reporter is not null)
+        {
+            await _reporter.DisposeAsync().ConfigureAwait(false);
         }
 
         await Pipeline.DisposeAsync().ConfigureAwait(false);
@@ -383,8 +417,17 @@ public static class AppComposition
         var pipeline = ScanPipelineFactory.Create(source, detector, rectifier, identifier, trigger, settings, loggers);
         var runTask = pipeline.RunAsync(ct);
 
+        // Item 5 (A10-prep): start the A10 diagnostics loop alongside the
+        // pipeline, for every composed session — MainWindow records into
+        // `diagnostics` (frames processed / frames actually rendered) and
+        // `reporter` logs both, plus memory and GC counters, every 10 s.
+        // AppSession.DisposeAsync stops it.
+        var diagnostics = new PreviewDiagnostics(DateTimeOffset.UtcNow);
+        var reporter = new DiagnosticsReporter(diagnostics, loggers.CreateLogger("LoreFetch.App.Diagnostics"));
+
         return new AppSession(pipeline, source, runTask, settings,
-            catalog: catalog, store: store, exporters: exporters, onDisposed: onDisposed);
+            catalog: catalog, store: store, exporters: exporters, onDisposed: onDisposed,
+            diagnostics: diagnostics, reporter: reporter);
     }
 
     // A4: image extensions that FolderFrameSource can decode. Must stay in

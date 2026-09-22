@@ -10,6 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using LoreFetch.App.Diagnostics;
 using LoreFetch.App.ViewModels;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Scanning;
@@ -74,6 +75,11 @@ public partial class MainWindow : Window
 
     private IScanPipeline? _pipeline;
 
+    // A10-prep item 5: fps counters. Null when the session didn't supply one
+    // (e.g. tests that construct AppSession directly) — recording is then
+    // simply skipped everywhere below.
+    private PreviewDiagnostics? _diagnostics;
+
     // A8: collection view model — always non-null; initialised with empty state
     // in the parameterless ctor, replaced with the session-wired instance in
     // the session ctor. CollectionPanel.DataContext is set to this so bindings
@@ -118,6 +124,7 @@ public partial class MainWindow : Window
         StatusText.Text = session.Pipeline.SourceDescription;
 
         _pipeline = session.Pipeline;
+        _diagnostics = session.Diagnostics;
         _pipeline.FrameProcessed += OnFrameProcessed;
 
         // A7: AutoCaptured fires on the pipeline's background thread;
@@ -295,6 +302,11 @@ public partial class MainWindow : Window
         _frameHandoff.Publish(
             frame.Pixels.Span, frame.Width, frame.Height, frame.Stride, frame.Layout, snapshot.Quads, sequence);
 
+        // A10-prep item 5: "pipeline frames processed per second" — every
+        // frame the pipeline hands the UI, independent of whether the ~15 fps
+        // gate below actually renders it.
+        _diagnostics?.RecordFrameProcessed();
+
         ScheduleRenderIfDue();
     }
 
@@ -378,6 +390,14 @@ public partial class MainWindow : Window
             }
 
             PreviewImage.InvalidateVisual();
+
+            // A10-prep item 5: "rendered preview fps" — counted HERE, after
+            // the bitmap lock is disposed and the blit has actually happened,
+            // never in OnFrameProcessed. The ~15 fps gate above means most
+            // processed frames never reach this line, which is the whole
+            // point of tracking the two rates separately (see
+            // PreviewDiagnostics's own doc comment).
+            _diagnostics?.RecordFrameRendered();
 
             DrawQuadOverlay(metadata.Quads, metadata.Width, metadata.Height);
         }
