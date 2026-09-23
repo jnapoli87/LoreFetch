@@ -16,6 +16,14 @@ Measured 2026-09-23 against `main` at `178b712`. Numbers here come from the tree
 
 Test lines exceed source lines. That ratio is the single most atypical thing about the output.
 
+## The first release build
+
+`v0.1.0` was cut on 2026-09-22 and has required no product-code change since. The only two follow-up commits corrected tests rather than the application: a `FolderFrameSource` cycling test that asserted stricter frame delivery than `IFrameSource` guarantees, and a `ResolveCacheDir` test that hardcoded a path separator. Both are what a suite finds when it meets its second operating system, and neither reached the product.
+
+The release notes are the other half of this result. They named five failure modes in advance, in user-facing terms: oracle name only with reprints indistinguishable, modern-frame English non-foil single-faced scope, sets newer than the index going unrecognised, edge-to-edge cards merging into one detection, and dark mats degrading detection. None of those were discovered after shipping.
+
+So the first build holding is only half an achievement about the build. The other half is that the expectations it met had been written down accurately before anyone ran it, which is the part the approach should be credited for.
+
 ## Dependency direction
 
 ```
