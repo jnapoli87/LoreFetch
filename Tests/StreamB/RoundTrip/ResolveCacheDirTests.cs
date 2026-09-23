@@ -12,9 +12,13 @@ namespace LoreFetch.Tests.StreamB.RoundTrip;
 /// skipping silently as a result.
 public class ResolveCacheDirTests
 {
+    // Built with Path.Combine, as ResolveCacheDir builds them, because these
+    // tests pin the resolution ORDER, not the separator. Hardcoded "\\"
+    // literals only ever matched on Windows: on the macOS leg Path.Combine
+    // joins with "/", so every branch that returns a candidate failed there.
     private const string HomeDir = "C:\\Users\\test";
-    private const string HomeCandidate = "C:\\Users\\test\\LoreFetchData\\scryfall-cache";
-    private const string WindowsCandidate = "C:\\LoreFetchData\\scryfall-cache";
+    private static readonly string HomeCandidate = Path.Combine(HomeDir, "LoreFetchData", "scryfall-cache");
+    private static readonly string WindowsCandidate = Path.Combine("C:" + Path.DirectorySeparatorChar, "LoreFetchData", "scryfall-cache");
 
     private static string Resolve(
         string? overrideValue,
