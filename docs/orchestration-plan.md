@@ -1365,6 +1365,7 @@ Global overrides for every D brief:
 
 ### Endgame E
 - [ ] **E1** 👤🧭 Live calibration at the locked height, all three layouts, the full ladder. Record "predicted X, measured Y" and the difference in `docs/accuracy.md`.
+  - *Live run 1, 2026-09-22 (user, Windows PC, C920 at ~15″, light mat): **"it works"**, end to end on the real camera, index and CSV store. Build: `main` `52ad949` plus the plan commits, which covers I1–I3, the camera-deadlock hotfix `64c767d` and stream A's focus/overlay fixes `d756e74`. It does **not** include dual-hypothesis. The build was run from a copy at `C:\LoreFetchData\live-run`, so it could not lock the main checkout's build output while the DH package built. The collection went to a test CSV. The user was given a 7-item checklist (camera, overlay on resize, Space capture, type-ahead focus, commit/escape, auto mode, Moxfield export) and reported overall success. **Still open for E1:** a second live pass on the dual-hypothesis build (a black mat and a tight grid), and the accuracy table in `docs/accuracy.md`, which the DH package writes.*
 - [ ] **E2** Polish:
   - README final pass: install, known limitations, SmartScreen
   - publish with `-r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true`
