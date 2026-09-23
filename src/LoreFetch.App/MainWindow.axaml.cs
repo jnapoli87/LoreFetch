@@ -415,16 +415,33 @@ public partial class MainWindow : Window
     /// `QuadOverlayCanvas` — over the `Image`, never baked into its pixel
     /// buffer (A3). `quads` are in FRAME coordinates (CONTRACTS.md
     /// `CardQuad`), so they are mapped through `FrameToControlTransform`
-    /// using `PreviewImage`'s own rendered bounds, which is what accounts
-    /// for the `Stretch="Uniform"` letterboxing. The canvas is cleared and
-    /// rebuilt each call rather than diffed — at ~15 fps and at most a
-    /// handful of quads, a handful of small control allocations costs
-    /// nothing next to the bitmap blit above it.
+    /// using `QuadOverlayCanvas`'s own rendered bounds — NOT `PreviewImage`'s
+    /// (A10 known bug 3, fixed): with `Stretch="Uniform"`, Avalonia's `Image`
+    /// arrange rect is ALREADY the tightly-fit, centred content rectangle —
+    /// its own `Bounds.Size` is the post-letterbox size and `Bounds.Position`
+    /// is the centring offset, not the full cell. Feeding that size into
+    /// `FrameToControlTransform.Compute` re-applies the SAME uniform-fit math
+    /// to an already-fitted rect (which is why it silently computed near-1.0
+    /// scale and near-zero offset), and then discarding `Bounds.Position`
+    /// throws away the one number that mattered: the actual centring offset
+    /// where the image content really sits. The quads were drawn relative to
+    /// `QuadOverlayCanvas`'s own origin (the FULL cell's top-left), so they
+    /// landed at the top/left of the whole preview pane instead of on the
+    /// letterboxed image — reported as "the overlay sits ~35 px too high."
+    /// `QuadOverlayCanvas` is a plain `Canvas` filling the full cell (it has
+    /// no Stretch-mode arrange logic of its own), so ITS `Bounds` is the
+    /// outer container `FrameToControlTransform.Compute` expects, and its
+    /// coordinate origin is exactly the one the drawn `Polygon` points use —
+    /// which is what makes this the correct fix rather than another
+    /// coordinate-space mismatch. The canvas is cleared and rebuilt each call
+    /// rather than diffed — at ~15 fps and at most a handful of quads, a
+    /// handful of small control allocations costs nothing next to the bitmap
+    /// blit above it.
     private void DrawQuadOverlay(IReadOnlyList<CardQuad> quads, int frameWidth, int frameHeight)
     {
         QuadOverlayCanvas.Children.Clear();
 
-        var bounds = PreviewImage.Bounds;
+        var bounds = QuadOverlayCanvas.Bounds;
         if (frameWidth <= 0 || frameHeight <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
         {
             return;
@@ -735,6 +752,38 @@ public partial class MainWindow : Window
     /// with nowhere to land; this walks the (already-realized, template
     /// already applied by the time <c>Loaded</c> fired) visual tree to find it.
     /// </summary>
+    /// <remarks>
+    /// A10 known bug 1 (deferred at A10-fix, fixed here): this call used to
+    /// run SYNCHRONOUSLY, inline with the <c>PropertyChanged</c> notification
+    /// that <c>IsTypeAheadOpen = true</c> triggers. That notification fires
+    /// while <see cref="OnTileSetManuallyClick"/> — the <c>ContextMenu</c>
+    /// item's own <c>Click</c> handler — is STILL on the call stack: a real
+    /// right-click's <c>MenuItem.Click</c> is only step one of Avalonia's own
+    /// menu-item-selection handling, which closes the popup and restores
+    /// focus to whatever had it before the menu opened (the tile) right
+    /// after <c>Click</c> returns. So the synchronous <c>Focus()</c> call
+    /// here landed a moment BEFORE that close-time restoration ran, and was
+    /// promptly stolen back — invisibly, because the box was already visible
+    /// and nothing un-focused it in an obviously wrong way, it just never
+    /// really had focus by the time the user could type. Headless tests that
+    /// raise <c>Click</c> and then call <c>ContextMenu.Close()</c> explicitly
+    /// (see <see cref="ManualSetContextMenuTests"/>) run that close step
+    /// AFTER asserting focus, so they never observed the steal-back — which
+    /// is exactly the "headless focus assertion passed while the live window
+    /// failed" gap.
+    ///
+    /// Posting the focus at <see cref="DispatcherPriority.Input"/> — lower
+    /// than the dispatcher's own default (<c>Normal</c>) — fixes it two ways
+    /// at once: a <c>Post</c> always runs on a LATER dispatcher pass than the
+    /// still-executing synchronous call stack, so it can no longer land
+    /// before the popup finishes closing; and even if that close path is
+    /// itself dispatched rather than synchronous, <c>Input</c> being lower
+    /// priority than <c>Normal</c> means ours is serviced after it rather
+    /// than racing it. The visual-tree walk is deferred along with the
+    /// focus call (not just captured now and focused later) in case the
+    /// FIRST time this fires the box's template hasn't produced its inner
+    /// <c>TextBox</c> yet.
+    /// </remarks>
     private void OnTypeAheadPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property != Visual.IsVisibleProperty || sender is not AutoCompleteBox { IsVisible: true } acb)
@@ -742,11 +791,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        var innerTextBox = acb.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
-        if (innerTextBox is not null)
-            innerTextBox.Focus();
-        else
-            acb.Focus();
+        Dispatcher.UIThread.Post(() =>
+        {
+            // The box may have been hidden again (e.g. "Clear" or a fast
+            // second right-click) by the time this runs — re-check rather
+            // than blindly stealing focus for a closed overlay.
+            if (!acb.IsVisible)
+            {
+                return;
+            }
+
+            var innerTextBox = acb.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+            if (innerTextBox is not null)
+                innerTextBox.Focus();
+            else
+                acb.Focus();
+        }, DispatcherPriority.Input);
     }
 
     /// <summary>
