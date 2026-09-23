@@ -31,6 +31,19 @@ public class HashCardIdentifierPerformanceTests
     private const int QueryCount = 9;
     private const double SoftBudgetMs = 50;
 
+    /// Package DH: `DualHypothesisIdentification.Identify` calls
+    /// `ICardIdentifier.Identify` up to TWICE per tile (as-detected, then
+    /// expanded, unless the expanded quad would leave the frame) -- so a
+    /// 9-card cohort's identification cost is up to 18 raw `Identify` calls,
+    /// not 9. This measures that directly against `HashCardIdentifier`
+    /// (bypassing rectify, same as `QueryCount`'s own test, since this is
+    /// about identification cost specifically) rather than assuming 2x the
+    /// 9-call figure is representative -- the two hypotheses query the SAME
+    /// underlying identifier and index, so there is no reason to expect a
+    /// non-linear cost, but this is the actual measurement rather than an
+    /// assumption.
+    private const int DualHypothesisQueryCount = QueryCount * 2;
+
     private readonly ITestOutputHelper _output;
 
     public HashCardIdentifierPerformanceTests(ITestOutputHelper output)
@@ -67,6 +80,43 @@ public class HashCardIdentifierPerformanceTests
             Assert.Skip(
                 $"{QueryCount} Identify calls took {elapsedMs:F3} ms, over the {SoftBudgetMs} ms soft budget -- " +
                 "recorded above, not failed. See CLAUDE.md \"Step 7\" (0.243 ms/query baseline).");
+        }
+    }
+
+    /// Package DH's own cohort-identification cost: 18 raw `Identify` calls
+    /// (2 hypotheses x 9 cards), same realistic index/query fixture as
+    /// <see cref="NineIdentifyCalls_AgainstRealisticIndex_MeasuredAgainstSoftBudget"/>.
+    /// Same soft-skip discipline -- recorded, not gated, since hardware and
+    /// build configuration both move this number.
+    [Fact]
+    public void EighteenIdentifyCalls_DualHypothesisNineCardCohort_MeasuredAgainstSoftBudget()
+    {
+        var identifier = BuildRealisticSizedIndex();
+        var card = BuildQueryCard();
+
+        identifier.Identify(card, maxCandidates: 5); // warm-up, excluded from the measurement
+
+        var stopwatch = Stopwatch.StartNew();
+        for (var i = 0; i < DualHypothesisQueryCount; i++)
+        {
+            identifier.Identify(card, maxCandidates: 5);
+        }
+
+        stopwatch.Stop();
+
+        var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+        _output.WriteLine(
+            $"{DualHypothesisQueryCount} Identify calls (package DH: a 9-card cohort's worth of dual-hypothesis " +
+            $"identification) against a {EntryCount:N0}-entry / {OracleCount:N0}-oracle index: " +
+            $"{elapsedMs:F3} ms total, {elapsedMs / DualHypothesisQueryCount:F3} ms/query, " +
+            $"{elapsedMs / QueryCount:F3} ms/cohort-card (dual).");
+
+        if (elapsedMs > SoftBudgetMs)
+        {
+            Assert.Skip(
+                $"{DualHypothesisQueryCount} Identify calls took {elapsedMs:F3} ms, over the {SoftBudgetMs} ms soft " +
+                "budget -- recorded above, not failed. See CLAUDE.md \"Step 7\" (0.243 ms/query baseline); dual-" +
+                "hypothesis identification is expected to cost roughly 2x that per card.");
         }
     }
 

@@ -1,17 +1,18 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Lab.CropScale;
+using LoreFetch.Core.Imaging;
 using Xunit;
 
-namespace LoreFetch.Tests.StreamB.CropScale;
+namespace LoreFetch.Tests.StreamB;
 
-/// Package E1a: `QuadExpansion` is diagnostic tooling for the crop-
-/// expansion experiment, not part of the shipping detect/rectify/identify
-/// path (see that type's own doc comment), so these tests pin its GEOMETRY
+/// `QuadExpansion` now ships in `Core/Imaging` (package DH: dual-hypothesis
+/// identification uses it to build its expanded hypothesis), moved here
+/// from `Tests/StreamB/CropScale` accordingly. These tests pin its GEOMETRY
 /// directly -- the centroid stays fixed, each axis scales independently
 /// regardless of the quad's own rotation, and factor 1.0 is an EXACT
 /// identity (not merely close) -- rather than anything about hash distance
-/// or identification outcome, which the command-level experiment measures
-/// separately against real frames.
+/// or identification outcome, which `DualHypothesisIdentificationTests`
+/// (Tests/Integration) and the command-level experiment measure separately
+/// against real frames.
 public class QuadExpansionTests
 {
     private const float Tolerance = 0.01f;

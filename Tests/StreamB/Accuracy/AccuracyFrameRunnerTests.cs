@@ -15,11 +15,27 @@ namespace LoreFetch.Tests.StreamB.Accuracy;
 /// same run lives in `AccuracyHarnessSyntheticTests`.
 public class AccuracyFrameRunnerTests
 {
+    /// Package DH: `AccuracyFrameRunner` now identifies through
+    /// `DualHypothesisIdentification.Identify`, which calls
+    /// `ICardIdentifier.Identify` TWICE per slot (as-detected, then
+    /// expanded) whenever the expanded quad stays inside the frame --
+    /// `StubCardDetector`'s own margin/gutter geometry always leaves that
+    /// much room, so every `ScriptedIdentifier` program below needs one
+    /// deliberately-worse second response per slot (via
+    /// `WorseSecondHypothesis`) so the AS-DETECTED hypothesis keeps
+    /// winning and every existing assertion's outcome is unchanged --
+    /// these tests are about `AccuracyFrameRunner`'s own classification
+    /// logic, not about which dual-hypothesis winner is picked (that
+    /// decision has its own coverage: `DualHypothesisIdentificationTests`,
+    /// Tests/Integration).
     [Fact]
     public void Run_RankOneMatchesExpected_ClassifiesCorrect()
     {
         var frame = BuildFrame(layout: 1, ("Sol Ring", "oracle-solring", false));
-        var identifier = new ScriptedIdentifier([[Candidate("oracle-solring", "Sol Ring", 40), Candidate("other", "Other", 300)]]);
+        var identifier = new ScriptedIdentifier([
+            [Candidate("oracle-solring", "Sol Ring", 40), Candidate("other", "Other", 300)],
+            WorseSecondHypothesis(40),
+        ]);
 
         var results = Run(frame, detectedCount: 1, identifier);
 
@@ -32,7 +48,10 @@ public class AccuracyFrameRunnerTests
     public void Run_RankOneWrongButWithinOkDistance_ClassifiesWrong()
     {
         var frame = BuildFrame(layout: 1, ("Sol Ring", "oracle-solring", false));
-        var identifier = new ScriptedIdentifier([[Candidate("oracle-mountain", "Mountain", 200), Candidate("oracle-solring", "Sol Ring", 260)]]);
+        var identifier = new ScriptedIdentifier([
+            [Candidate("oracle-mountain", "Mountain", 200), Candidate("oracle-solring", "Sol Ring", 260)],
+            WorseSecondHypothesis(200),
+        ]);
 
         var results = Run(frame, detectedCount: 1, identifier, options: new AccuracyHarnessOptions { OkDistance = 270 });
 
@@ -44,7 +63,10 @@ public class AccuracyFrameRunnerTests
     public void Run_RankOneWrongAndBeyondOkDistance_ClassifiesUnresolved()
     {
         var frame = BuildFrame(layout: 1, ("Sol Ring", "oracle-solring", false));
-        var identifier = new ScriptedIdentifier([[Candidate("oracle-mountain", "Mountain", 350), Candidate("oracle-solring", "Sol Ring", 360)]]);
+        var identifier = new ScriptedIdentifier([
+            [Candidate("oracle-mountain", "Mountain", 350), Candidate("oracle-solring", "Sol Ring", 360)],
+            WorseSecondHypothesis(350),
+        ]);
 
         var results = Run(frame, detectedCount: 1, identifier, options: new AccuracyHarnessOptions { OkDistance = 270 });
 
@@ -55,7 +77,7 @@ public class AccuracyFrameRunnerTests
     public void Run_NoCandidatesReturned_ClassifiesUnresolved()
     {
         var frame = BuildFrame(layout: 1, ("Sol Ring", "oracle-solring", false));
-        var identifier = new ScriptedIdentifier([[]]);
+        var identifier = new ScriptedIdentifier([[], []]);
 
         var results = Run(frame, detectedCount: 1, identifier);
 
@@ -112,11 +134,17 @@ public class AccuracyFrameRunnerTests
 
         // StubCardDetector(8)'s own row-major placement (GenericGrid(8) ==
         // 3x3, filled sequentially) leaves exactly the LAST cell (slot 9)
-        // empty -- see StubCardDetector.BuildLayout/GenericGrid.
-        var responses = Enumerable.Range(1, 8)
-            .Select(i => (IReadOnlyList<CardCandidate>)[Candidate($"oracle-{i}", $"Card {i}", 40)])
-            .ToList();
-        var identifier = new ScriptedIdentifier(responses); // exactly 8 -- a 9th call throws
+        // empty -- see StubCardDetector.BuildLayout/GenericGrid. Two
+        // responses per detected slot (as-detected, then a deliberately
+        // worse expanded hypothesis) -- see this class's own doc comment.
+        var responses = new List<IReadOnlyList<CardCandidate>>();
+        for (var i = 1; i <= 8; i++)
+        {
+            responses.Add([Candidate($"oracle-{i}", $"Card {i}", 40)]);
+            responses.Add(WorseSecondHypothesis(40));
+        }
+
+        var identifier = new ScriptedIdentifier(responses); // exactly 16 (8 slots x 2 hypotheses) -- a 17th call throws
 
         var results = Run(frame, detectedCount: 8, identifier);
 
@@ -174,6 +202,15 @@ public class AccuracyFrameRunnerTests
 
     private static CardCandidate Candidate(string oracleId, string oracleName, int distance) =>
         new(oracleId, oracleName, distance, ArtworkId: $"art-{oracleId}");
+
+    /// A single-candidate response for the "expanded" hypothesis slot in a
+    /// `ScriptedIdentifier` program, deliberately at a distance strictly
+    /// worse (higher) than `asDetectedTop1Distance` -- so
+    /// `DualHypothesisIdentification.SelectWinner`'s strict less-than
+    /// comparison always keeps the AS-DETECTED hypothesis, leaving this
+    /// file's existing outcome assertions unaffected by the extra call.
+    private static IReadOnlyList<CardCandidate> WorseSecondHypothesis(int asDetectedTop1Distance) =>
+        [Candidate("oracle-worse-expanded-hypothesis", "Worse Expanded Hypothesis", asDetectedTop1Distance + 500)];
 
     private static GroundTruthFrame BuildFrame(int layout, params (string OracleName, string OracleId, bool IsBasicLand)[] cards)
     {

@@ -1,29 +1,21 @@
 using LoreFetch.Core.Abstractions;
 
-namespace LoreFetch.Lab.CropScale;
+namespace LoreFetch.Core.Imaging;
 
-/// Package E1a: scales a detected `CardQuad` about its own centroid, along
-/// its own (possibly rotated) width/height axes, independently -- the
-/// pre-rectification analogue of `CropScaleTransform` (which scales an
-/// already-rectified, axis-aligned canonical card, package B5c). This
-/// exists because E1a's orchestrator finding is upstream of rectification:
-/// on `tight_white` and the matching black-mat frame
-/// (`normal_black_matches_tight_white`), the detector's own accepted quad
-/// sits on the INNER edge of the card's black border -- the border itself
-/// is cropped away and the coloured inner frame fills the crop -- exactly
-/// the crop-scale defect CLAUDE.md's Risk 4 and B5c's curve describe, but
-/// caught here at the quad, before `PerspectiveRectifier` ever runs, so the
-/// expansion widens the SOURCE geometry rather than resampling an already-
-/// canonical 488x680 card.
-///
-/// Diagnostic-only, `LoreFetch.Lab`-scoped, same status as
-/// `CropScaleTransform` -- see that type's own doc comment for why B5c's
-/// committed conclusion put this class of fix in Lab rather than
-/// Core/Imaging (B5c's own 3-scale sweep was REJECTED for v1; this package
-/// re-opens the question on DIFFERENT evidence -- a confirmed crop-inset
-/// on this specific corpus -- but the ruling on where a fix ships, if any,
-/// is still the user's, not this package's). `Core/Imaging` and
-/// `Core/Scanning` are untouched by this file.
+/// Scales a detected `CardQuad` about its own centroid, along its own
+/// (possibly rotated) width/height axes, independently. Moved into
+/// `Core/Imaging` from `LoreFetch.Lab.CropScale` (package DH) because
+/// package E1a's finding is no longer diagnostic-only: on `tight_white` and
+/// the matching black-mat frame, the detector's own accepted quad sits on
+/// the INNER edge of the card's black border -- the border itself is
+/// cropped away and the coloured inner frame fills the crop -- exactly the
+/// crop-scale defect CLAUDE.md's Risk 4 and B5c's curve describe, caught
+/// here at the quad, before `PerspectiveRectifier` ever runs. Package DH's
+/// dual-hypothesis identification (`Core/Scanning/DualHypothesisIdentification`)
+/// uses this type's <see cref="BorderWidthCorrectionFactor"/>/
+/// <see cref="BorderHeightCorrectionFactor"/> to build its second, expanded
+/// hypothesis, so it ships in the product assembly rather than only
+/// `LoreFetch.Lab`.
 ///
 /// A quad from `ContourCardDetector` is not generally axis-aligned in frame
 /// coordinates -- portrait cards, a keystoned camera angle, or freehand
@@ -50,9 +42,29 @@ namespace LoreFetch.Lab.CropScale;
 /// then expands (factor &gt; 1) or shrinks (factor &lt; 1) the quad about its
 /// own centroid, along its own width/height axes, regardless of rotation --
 /// unlike scaling X/Y in frame coordinates, this is correct for the
-/// portrait-oriented quads the 3x3-grid frames in this corpus contain.
+/// portrait-oriented quads a 3x3-grid frame contains.
 public static class QuadExpansion
 {
+    /// The measured black-border correction factor, width axis: growing a
+    /// quad that landed exactly on the border's inner edge by this factor
+    /// recovers the card's true outer edge. Measured over 40 real Scryfall
+    /// `normal` renders (`BorderRatioMeasurement`, package E1a, non-land
+    /// sample, seed 20260922, `stream/b` `4154a6b`) -- see
+    /// `docs/orchestration-plan.md`'s 2026-09-22 "dual-hypothesis
+    /// identification ships in v0.1.0" ruling for the full evidence
+    /// (baseline 22/38, expanded-only 17/38, dual 37/38 non-land correct@1
+    /// on the 15in integration corpus). This is the value
+    /// `DualHypothesisIdentification` uses to build its expanded
+    /// hypothesis; `LoreFetch.Lab`'s `expand-experiment` may still pass a
+    /// DIFFERENT factor explicitly (or re-measure one from the cache) to
+    /// explore the space this constant was chosen from.
+    public const float BorderWidthCorrectionFactor = 1.085f;
+
+    /// The measured black-border correction factor, height axis. Same
+    /// measurement as <see cref="BorderWidthCorrectionFactor"/> -- see that
+    /// constant's own doc comment.
+    public const float BorderHeightCorrectionFactor = 1.089f;
+
     /// `widthFactor`/`heightFactor` multiply the quad's own half-width/
     /// half-height vectors: 1.0 is a no-op (returns an equal quad, modulo
     /// floating-point rounding), &gt;1.0 grows the quad outward -- the
@@ -61,8 +73,7 @@ public static class QuadExpansion
     /// independent so an anisotropic correction (e.g. the black border
     /// being proportionally different in width vs. height, as B5b/B5c
     /// measured for `plains_black`: ~5% width / ~3.5% height) can be
-    /// modelled exactly, matching `CropScaleTransform`'s own width/height-
-    /// independent design.
+    /// modelled exactly.
     public static CardQuad Expand(CardQuad quad, float widthFactor, float heightFactor)
     {
         if (widthFactor <= 0f)

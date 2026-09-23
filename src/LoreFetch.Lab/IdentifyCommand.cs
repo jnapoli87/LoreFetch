@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Identification;
 using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Scanning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;
@@ -17,9 +18,11 @@ namespace LoreFetch.Lab;
 /// ranked candidate table per detected card. This exists so the stream can
 /// look at real accuracy numbers (and specifically Sol Ring's matched art)
 /// well before B6's full accuracy harness, without waiting on B2/B6 to be
-/// built. It deliberately reuses `ContourCardDetector` and
-/// `PerspectiveRectifier` exactly as `detect` does and `HashCardIdentifier`
-/// exactly as the real app will -- no third implementation of any step.
+/// built. It deliberately reuses `ContourCardDetector` exactly as `detect`
+/// does and, since package DH, `Core.Scanning.DualHypothesisIdentification`
+/// for the rectify+identify step -- exactly the same as-detected/border-
+/// expanded decision `ScanPipeline` makes -- so this command's printed
+/// distances match what the app would actually produce.
 public static class IdentifyCommand
 {
     private const int DefaultMaxCards = 9; // matches DetectCommand's own default -- the 3x3 grid ceiling
@@ -100,11 +103,19 @@ public static class IdentifyCommand
         var rectifier = new PerspectiveRectifier();
         for (var i = 0; i < detected.Count; i++)
         {
-            var card = rectifier.Rectify(frame, detected[i]);
-            var candidates = identifier.Identify(card, parsed.TopN);
+            // Package DH: the same dual-hypothesis decision ScanPipeline
+            // and the accuracy harness make -- as-detected vs. border-
+            // expanded, keep the lower top-1 distance -- so this command's
+            // numbers match what the app would actually produce, not a
+            // single-hypothesis approximation of it.
+            var outcome = DualHypothesisIdentification.Identify(frame, detected[i], rectifier, identifier, parsed.TopN);
+            var card = outcome.Image;
+            var candidates = outcome.Candidates;
 
             Console.WriteLine();
-            Console.WriteLine($"Card {i}:");
+            Console.WriteLine(
+                $"Card {i}: (dual-hypothesis winner={outcome.Winner}" +
+                (outcome.ExpandedHypothesisSkipped ? ", expanded hypothesis skipped -- would leave the frame)" : ")"));
             for (var rank = 0; rank < candidates.Count; rank++)
             {
                 var c = candidates[rank];

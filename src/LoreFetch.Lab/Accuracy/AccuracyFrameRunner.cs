@@ -1,17 +1,22 @@
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Scanning;
 
 namespace LoreFetch.Lab.Accuracy;
 
-/// Runs ONE captured frame through the exact three calls the shipping scan
-/// pipeline makes -- `ICardDetector.Detect` -&gt; `IRectifier.Rectify` -&gt;
-/// `ICardIdentifier.Identify` -- and classifies every one of the frame's
-/// ground-truth slots. Takes the interfaces, not concrete types, so the
-/// same runner drives both the real path (`ContourCardDetector` /
-/// `PerspectiveRectifier` / `HashCardIdentifier`, against a real
-/// `CameraFrame` loaded from a fixture PNG) and every synthetic/stub test
-/// in this package (`StubCardDetector` / `StubRectifier` /
-/// `StubCardIdentifier`, against an in-memory `CameraFrame`) -- there is no
-/// second, test-only classification path to drift from the real one.
+/// Runs ONE captured frame through the exact calls the shipping scan
+/// pipeline makes -- `ICardDetector.Detect` -&gt;
+/// `DualHypothesisIdentification.Identify` (which itself calls
+/// `IRectifier.Rectify` -&gt; `ICardIdentifier.Identify` for both the
+/// as-detected and border-expanded hypotheses, package DH) -- and
+/// classifies every one of the frame's ground-truth slots. Takes the
+/// interfaces, not concrete types, so the same runner drives both the real
+/// path (`ContourCardDetector` / `PerspectiveRectifier` /
+/// `HashCardIdentifier`, against a real `CameraFrame` loaded from a fixture
+/// PNG) and every synthetic/stub test in this package (`StubCardDetector` /
+/// `StubRectifier` / `StubCardIdentifier`, against an in-memory
+/// `CameraFrame`) -- there is no second, test-only classification path to
+/// drift from the real one, and no second dual-hypothesis decision to drift
+/// from `ScanPipeline`'s own.
 public static class AccuracyFrameRunner
 {
     /// `maxCards` passed to `Detect` is exactly `frame.Layout` -- the
@@ -90,10 +95,9 @@ public static class AccuracyFrameRunner
                 continue;
             }
 
-            var card = rectifier.Rectify(cameraFrame, quad.Value);
-            var candidates = identifier.Identify(card, options.MaxCandidates);
+            var outcome = DualHypothesisIdentification.Identify(cameraFrame, quad.Value, rectifier, identifier, options.MaxCandidates);
 
-            results.Add(Classify(slot, candidates, options.OkDistance, detected.Count));
+            results.Add(Classify(slot, outcome.Candidates, options.OkDistance, detected.Count));
         }
 
         return results;

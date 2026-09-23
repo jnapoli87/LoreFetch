@@ -1619,3 +1619,259 @@ updated to explain why it lives here), `src/LoreFetch.Lab/CropScale/CropScaleExp
 `Tests/StreamB/CropScale/CropScaleRealFrameTests.cs` (`using` updated),
 `src/LoreFetch.Lab/README.md` (new "Diagnostic-only code" section),
 `docs/accuracy.md` (this section).
+
+---
+
+# Accuracy — 15″ corpus, dual-hypothesis (2026-09-22)
+
+Package DH, Windows PC (win-x64, the ship architecture). Ships the ruling
+recorded above ("dual-hypothesis identification ships in v0.1.0") as real
+code: `Core/Scanning/DualHypothesisIdentification.Identify` now sits
+between `ICardDetector` and `IRectifier`/`ICardIdentifier` in both
+`ScanPipeline` and the Lab accuracy harness (`AccuracyFrameRunner`), so the
+numbers below are exactly what the shipped app would produce, not a
+diagnostic approximation of it. `QuadExpansion` (the geometry) moved from
+`LoreFetch.Lab.CropScale` into `Core/Imaging`, carrying its measured
+correction factors as named constants:
+`QuadExpansion.BorderWidthCorrectionFactor` = 1.085,
+`QuadExpansion.BorderHeightCorrectionFactor` = 1.089 (E1a, 40 real
+Scryfall `normal` renders, `stream/b` `4154a6b`).
+
+Measured against the **full local ground truth**
+(`test-images/ground-truth.csv`, 111 rows across 17 frames: batch A's
+`fixtures/15in/9/a_1..a_6.png` plus the 11-frame `integration_corpus/`
+E1a added — `tight_white`, `normal_black_matches_tight_white`, `x_1..x_3`,
+`y_1..y_3`, `z_1..z_3`), gitignored imagery, read by path, never
+committed. Reproducible via `lab accuracy` (production path) and `lab
+expand-experiment --file-prefix ""` (baseline/expanded/dual side by side,
+for the comparison below).
+
+## Per-frame detected vs. expected
+
+| Frame | Layout | Detected | Note |
+|---|---|---|---|
+| a_1 | 9 | 8 | slot 2 (Zidane, light border) NoDetection |
+| a_2 | 9 | 9 | — |
+| a_3 | 9 | 8 | slot 1 NoDetection |
+| a_4 | 9 | 9 | — |
+| a_5 | 9 | 7 | slots 8, 9 NoDetection |
+| a_6 | 9 | 8 | slot 4 NoDetection |
+| tight_white | 9 | 7 | slots 2, 9 NoDetection |
+| normal_black_matches_tight_white | 9 | 8 | slot 6 NoDetection |
+| x_1 | 3 | **0 usable** | 1 raw contour, whole frame `DroppedFrame` — three cards touching in a line merged into ONE contour |
+| x_2 | 3 | **0 usable** | 2 raw contours, whole frame `DroppedFrame` — two of the three touching cards merged into one |
+| x_3 | 3 | 3 | — |
+| y_1 | 1 | 1 | — |
+| y_2 | 1 | 1 | — |
+| y_3 | 1 | 1 | — |
+| z_1 | 9 | 9 | — |
+| z_2 | 9 | 8 | slot 9 NoDetection |
+| z_3 | 9 | 9 | — |
+
+**Known detection limit, unchanged by dual-hypothesis** (recorded here per
+the 2026-09-22 ruling, not newly found): cards touching in a line merge
+into one contour before rectification ever runs, so no identification
+fix — dual-hypothesis included — can recover them. `x_1` recovers **0 of
+3** correctly-individuated cards, `x_2` recovers **1 of 3** (the raw
+2-contour split happens to leave one card separable). README's fix is
+physical: leave a finger-width gap between touching cards. This is a
+detector-geometry limit, not an identification one — dual-hypothesis
+operates only on quads the detector already separated.
+
+## Headline correct@1 (non-land, `rung=normal`), baseline vs. dual
+
+`lab accuracy` (production `DualHypothesisIdentification`, `OkDistance`
+from the committed `data/index/thresholds.json` = 240):
+
+```
+Ground truth: test-images\ground-truth.csv (17 frame(s), 111 slot(s))
+17 of 17 ground-truth frame(s) found on disk -- heights: 15in; rungs: land, normal; mats: dark, light.
+
+Options: OkDistance=240, MaxWrongAt1AtOkDistance=0, MaxCandidates=3
+
+Headline (non-land, rung=normal):
+correct@1=84 (84.0%)  wrong@1=0 (0.0%)  no-match=16 (16.0%) [unresolved=3, no-detection=8, dropped-frame=5]  total=100
+
+Full breakdown, per height x rung (lands and stretch cards included -- informational, not headline):
+  Height Rung      Correct  Wrong  NoMatch  (Unres. NoDetect Dropped)  Total  Correct%
+    15in land            9      0        2        0        1         1     11     81.8%
+    15in normal         84      0       16        3        8         5    100     84.0%
+
+Margin distribution (rank-1 vs. best different OracleId), n=96: min=3, mean=92.0, median=87, max=174.
+
+Gate: PASS -- wrong@1 = 0 (headline: non-land, normal-rung slots), within the bound of 0 at OkDistance=240.
+```
+
+**Baseline (single-hypothesis, i.e. `main` before this package)**, computed
+from the same detection run via `lab expand-experiment --file-prefix ""
+--expand-w 1.085 --expand-h 1.089` (its `baseline` column, which never
+touches the expanded quad): correct@1 = **60/100 (60%)**, confident
+**wrong@1 = 2/100 (2%)**, no-match = 38/100 (38%). The two confident wrong
+matches — the ones the task brief's "currently FAILS on main (wrong@1=2)"
+refers to — are both **Thriving Heath → same-name-but-different-card
+confusion** on the two hardest frames in the corpus:
+
+| Frame | Slot | Card | Baseline distance | Baseline top-1 |
+|---|---|---|---|---|
+| `normal_black_matches_tight_white` | 3 | Thriving Heath | 236 | (wrong card, confident) |
+| `tight_white` | 7 | Thriving Heath | 239 | (wrong card, confident) |
+
+Both are exactly the E1a failure mode (black border merging into an
+adjacent card / a black mat, so the detector's quad lands on the border's
+inner edge) — and both are now **correct under dual** (212 and 206
+respectively; see the per-card table below), so **wrong@1 = 0** and the
+gate **passes**.
+
+**Deltas (baseline → dual, out of the same 100 non-land normal-rung
+slots; detection is identical across both, so NoDetection=8/Dropped=5 are
+unchanged):**
+
+| Bucket | Baseline | Dual | Δ |
+|---|---|---|---|
+| correct@1 | 60 (60.0%) | 84 (84.0%) | **+24 points** |
+| wrong@1 (confident, ≤240) | 2 (2.0%) | 0 (0.0%) | **−2** |
+| no-match (unresolved + no-detection + dropped) | 38 (38.0%) | 16 (16.0%) | **−22** |
+
+**Expanded-only would be a net regression** (`lab expand-experiment`'s own
+`expanded` column, same run): correct@1 = 34/100 (34%), confirming the
+2026-09-22 ruling's finding that both hypotheses are needed together, not
+either alone.
+
+## Per-frame rescue (non-land correct@1, baseline → dual)
+
+```
+a_1:                                baseline 6/8, dual 7/8
+a_2:                                baseline 9/9, dual 9/9
+a_3:                                baseline 6/8, dual 8/8
+a_4:                                baseline 6/9, dual 9/9
+a_5:                                baseline 6/7, dual 6/7
+a_6:                                baseline 5/8, dual 8/8
+tight_white:                        baseline 0/6, dual 6/6
+normal_black_matches_tight_white:   baseline 0/6, dual 6/6
+x_3:                                baseline 3/3, dual 3/3
+y_1/y_2/y_3:                        baseline 1/1, dual 1/1 (each)
+z_1:                                baseline 5/7, dual 7/7
+z_2:                                baseline 4/6, dual 5/6
+z_3:                                baseline 7/7, dual 7/7
+```
+
+`tight_white` and `normal_black_matches_tight_white` — the two frames E1a
+built this package to fix — go from **0/6 to 6/6**, exactly the
+2026-09-22 ruling's own finding, now reproduced on the full corpus rather
+than the 11-frame `integration_corpus` subset it was originally measured
+on.
+
+## Distance ranges: correct vs. wrong/unresolved (dual, non-land)
+
+- **Correct (dual, n=84):** distances range **61 – 286**. Min 61
+  (`z_3` slot 1, Dauntless Survivor); max 286 (`z_3` slot 9, Cleaving
+  Reaper) — high for a correct match, but still below every genuinely
+  wrong candidate's distance in this corpus.
+- **Unresolved (dual, non-land, rank-1 disagrees with ground truth but
+  beyond `OkDistance`, n=3):** `a_1` slot 8 (Cat Warriors → wrong card,
+  252), `a_5` slot 3 (Severance Priest → wrong card, 299), `z_2` slot 5
+  (Seven-Tail Mentor → wrong card, 246). Range **246 – 299**.
+- **No wrong match at distance ≤ 240 under any hypothesis** — confirmed by
+  both `lab accuracy`'s gate (wrong@1=0) and `lab expand-experiment`'s
+  section (c) (`expanded hypothesis: 0`, `dual hypothesis: 0`), across
+  every identified slot in the corpus, not just the headline non-land
+  ones.
+- **The two distributions now overlap** (246–286), which the pre-dual,
+  6-frame-only data in this file's earlier sections did not show ("every
+  correct match lands at ≤208 and every wrong one at ≥272"). That
+  separation does not survive the full 111-slot corpus even under dual —
+  it was an artifact of the smaller batch-A-only sample, not a property
+  `okDistance`=240 can be tuned to restore without cost elsewhere. Nothing
+  here crosses into `Wrong` (≤240 and rank-1 disagrees), which is the
+  bound the gate actually enforces; the overlap is a `Correct`/`Unresolved`
+  boundary-zone observation, not a threshold violation.
+
+## Gate status (`AccuracyHarnessRealCaptureTests`)
+
+**Passes.** Before this package, the gate failed with wrong@1=2 (the two
+`Thriving Heath` confusions above) — the task brief's starting point. After
+switching `AccuracyFrameRunner` to `DualHypothesisIdentification`, both
+resolve to `Correct` and the gate's own run (`dotnet test
+--filter "FullyQualifiedName~AccuracyHarnessRealCaptureTests"`,
+`LOREFETCH_SCRYFALL_CACHE` set) passes: `wrong@1 = 0`, within the bound of
+0 at `OkDistance=240`. No threshold was changed and no test assertion was
+weakened to reach this — the gate logic and `MaxWrongAt1AtOkDistance=0`
+are exactly as B6 committed them; only the identification path underneath
+`AccuracyFrameRunner` changed.
+
+## Performance: 9-card cohort, dual-hypothesis
+
+`Tests/StreamB/HashCardIdentifierPerformanceTests.cs` gained
+`EighteenIdentifyCalls_DualHypothesisNineCardCohort_MeasuredAgainstSoftBudget`
+(18 raw `Identify` calls = 2 hypotheses × 9 cards, same realistic
+48,700-entry/33,600-oracle synthetic index as the existing 9-call test),
+measured on this machine:
+
+| | Total | Per query | Per cohort-card (dual, 2 queries) |
+|---|---|---|---|
+| Single-hypothesis (9 calls) | 28.246 ms | 3.138 ms | — |
+| Dual-hypothesis (18 calls) | 57.789 ms | 3.210 ms | 6.421 ms |
+
+Scales linearly, as expected (both hypotheses query the same identifier
+and index; there is no reason for a non-linear cost, and the measurement
+confirms it: 57.789 ms ≈ 2 × 28.246 ms). Both figures exceed this
+machine's own 50 ms soft budget — consistent with this file's earlier
+note that even the un-doubled baseline is already over budget on this
+hardware (53.0 ms/9-query, Part 4 above) — so both tests soft-skip rather
+than fail, per `HashCardIdentifierPerformanceTests`'s own long-standing
+design (hardware varies; the number is recorded, not gated). Relative to
+CLAUDE.md's own 0.243 ms/query brute-force figure, dual-hypothesis is
+expected to cost roughly 2× per card end to end; this measurement (3.14ms
+→ 3.21 ms per raw query, i.e. near-identical per-query cost, doubled call
+count) is consistent with that.
+
+## Chaos-testing `DualHypothesisIdentification`
+
+Per docs/TESTING.md's "chaos-test every regression test": each of the
+following was temporarily applied to
+`src/LoreFetch.Core/Scanning/DualHypothesisIdentification.cs`, confirmed to
+fail a test **for the right reason**, then reverted (confirmed
+byte-identical afterward):
+
+| Chaos | Test(s) that caught it | Failure |
+|---|---|---|
+| Remove the expanded hypothesis (always skip it) | `DualHypothesisIdentificationTests.Identify_InsetQuad_RecoversTheCorrectArtwork_OnlyWithTheExpandedHypothesis` | Wrong `ArtworkId` returned — the inset-quad case needs the expanded hypothesis to recover the real card. |
+| Always use the expanded hypothesis | `DualHypothesisIdentificationTests.Identify_WellFramedQuad_IdentifiesTheCorrectArtwork`, 3 `AccuracyFrameRunnerTests` cases | Wrong `ArtworkId` / classification (`Correct`→`Unresolved`) — a well-framed quad's own correct as-detected match gets overridden by the deliberately-worse expanded one. |
+| Pick max instead of min | Same as above | Same failures — max-distance selection is the same defect as "always expanded" whenever the expanded hypothesis is worse, which it deliberately is in these fixtures. |
+| Clamp instead of skip an out-of-frame expansion | `DualHypothesisIdentificationTests.Identify_ExpandedQuadWouldLeaveTheFrame_SkipsCleanlyAndFallsBackToAsDetected` | `ExpandedHypothesisSkipped` reads `false` instead of `true` — a clamped (distorted) quad gets identified and compared instead of being cleanly excluded. |
+
+## Known regression found, out of this package's write scope
+
+Doubling `ICardIdentifier.Identify` calls per tile (as-detected + expanded)
+breaks `src/LoreFetch.App/Fakes/DemoCardIdentifier.cs`'s own cycling
+(`_callIndex % 3`, designed for exactly one call per tile) — traced
+exactly: pairing consecutive calls per tile under dual-hypothesis's
+min-distance selection means the cycle's "unresolved" (worst) response is
+never the minimum of its pair, so no tile can ever land in the
+`Unresolved` state through the demo path. Two `Tests/StreamA` tests fail
+deterministically because of this (confirmed in isolation, not flaky):
+`DemoCardIdentifierTests.ThreeCardCohort_ThroughRealScanPipeline_IsConfidentThenLowConfidenceThenUnresolved`
+and
+`A10CohortScreenshotTests.NineCardCohort_CapturedViaSpace_ShowsNineTilesInAtLeastTwoStates_AndSavesScreenshot`.
+`src/LoreFetch.App/**` and `Tests/StreamA/**` are both outside this
+package's write scope, so the fix is not made here — flagged as a
+follow-up task instead (spawned during this session) for whoever owns
+Stream A/App. Every other suite (StreamB, StreamC, StreamD, Integration)
+is green.
+
+Files changed: `src/LoreFetch.Core/Imaging/QuadExpansion.cs` (moved from
+`LoreFetch.Lab.CropScale`, committed correction-factor constants added),
+`src/LoreFetch.Core/Scanning/DualHypothesisIdentification.cs` (new),
+`src/LoreFetch.Core/Scanning/ScanPipeline.cs` (uses the shared function per
+tile, logs the winning hypothesis at Debug), `src/LoreFetch.Lab/Accuracy/AccuracyFrameRunner.cs`
+(uses the shared function), `src/LoreFetch.Lab/IdentifyCommand.cs` (uses
+the shared function), `src/LoreFetch.Lab/CropScale/BorderRatioMeasurement.cs`
+(doc comment updated for the move), `src/LoreFetch.Lab/ExpandExperimentCommand.cs`
+(now resolves `QuadExpansion` from `Core.Imaging`; kept as its own
+variable-factor experimentation tool, unchanged otherwise — still useful
+for exploring factors other than the committed ones),
+`Tests/StreamB/QuadExpansionTests.cs` (moved from `Tests/StreamB/CropScale/`),
+`Tests/StreamB/Accuracy/AccuracyFrameRunnerTests.cs` (updated for the
+doubled `Identify` call count), `Tests/StreamB/HashCardIdentifierPerformanceTests.cs`
+(new 18-call dual-hypothesis measurement), `Tests/Integration/EndToEnd/DualHypothesisIdentificationTests.cs`
+(new), `docs/accuracy.md` (this section).

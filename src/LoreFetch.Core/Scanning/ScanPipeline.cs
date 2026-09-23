@@ -268,13 +268,29 @@ public sealed class ScanPipeline : IScanPipeline
             var readingOrderQuads = QuadOrdering.ReadingOrder(ownedSnapshot.Quads);
 
             var tiles = new List<CohortTile>(readingOrderQuads.Count);
-            foreach (var quad in readingOrderQuads)
+            for (var i = 0; i < readingOrderQuads.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
 
-                var rectified = _rectifier.Rectify(ownedFrame, quad);
-                var candidates = _identifier.Identify(rectified, CandidatesPerTile);
-                tiles.Add(new CohortTile(rectified, candidates, _settings.GoodDistance, _settings.OkDistance));
+                var quad = readingOrderQuads[i];
+
+                // Package DH: identify BOTH the detector's own quad and a
+                // border-expanded variant, keeping whichever hypothesis's
+                // top-1 distance is lower -- see DualHypothesisIdentification's
+                // own doc comment for why (a black border merging into an
+                // adjacent card or a black mat makes the detector land on
+                // the card's INNER edge). The overlay/reading order above
+                // is untouched: this only changes what gets rectified and
+                // identified per tile, never which quads were selected or
+                // how they are ordered.
+                var outcome = DualHypothesisIdentification.Identify(ownedFrame, quad, _rectifier, _identifier, CandidatesPerTile);
+
+                _logger.LogDebug(
+                    "Tile {TileIndex}: dual-hypothesis winner={Winner} (expandedSkipped={ExpandedSkipped}), top1Distance={Top1Distance}.",
+                    i, outcome.Winner, outcome.ExpandedHypothesisSkipped,
+                    outcome.Candidates.Count > 0 ? outcome.Candidates[0].Distance : (int?)null);
+
+                tiles.Add(new CohortTile(outcome.Image, outcome.Candidates, _settings.GoodDistance, _settings.OkDistance));
             }
 
             return new Cohort(Guid.NewGuid(), ownedSnapshot.CapturedAt, _settings.ExpectedCount, reason, tiles);

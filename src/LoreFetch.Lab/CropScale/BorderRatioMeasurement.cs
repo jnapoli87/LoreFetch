@@ -13,8 +13,15 @@ namespace LoreFetch.Lab.CropScale;
 /// package's orchestrator finding describes on `tight_white` and the
 /// matching black-mat frame) to recover the card's TRUE outer edge.
 ///
-/// Diagnostic-only, `LoreFetch.Lab`-scoped -- see `QuadExpansion`'s own doc
-/// comment for why this class of code lives here, not `Core/Imaging`.
+/// Diagnostic-only, `LoreFetch.Lab`-scoped: it exists to MEASURE a
+/// correction factor from arbitrary samples for `lab expand-experiment` to
+/// explore, not to apply one -- `QuadExpansion` itself moved to
+/// `Core/Imaging` (package DH) once its committed constants
+/// (`BorderWidthCorrectionFactor`/`BorderHeightCorrectionFactor`) started
+/// shipping in the product's dual-hypothesis identification path; this
+/// type stays here because re-measuring the ratio from a fresh sample is
+/// still a diagnostic activity, not something the shipped path needs at
+/// runtime.
 public static class BorderRatioMeasurement
 {
     /// A pixel is "still border" while its grayscale value stays at or
