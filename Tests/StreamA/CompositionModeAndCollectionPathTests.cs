@@ -22,33 +22,33 @@ public class CompositionModeAndCollectionPathTests : IDisposable
     private readonly List<string> _toDelete = [];
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
     [InlineData("fakes")]
     [InlineData("FAKES")]
     [InlineData("Fakes")]
-    public void ResolveCompositionMode_UnsetOrFakes_ReturnsFakes(string? envVar)
+    public void ResolveCompositionMode_ExplicitFakes_ReturnsFakes(string? envVar)
     {
         Assert.Equal(CompositionMode.Fakes, AppComposition.ResolveCompositionMode(envVar, _nullLogger));
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
     [InlineData("real")]
     [InlineData("REAL")]
     [InlineData("Real")]
-    public void ResolveCompositionMode_Real_ReturnsReal(string envVar)
+    public void ResolveCompositionMode_UnsetOrReal_ReturnsReal(string? envVar)
     {
         Assert.Equal(CompositionMode.Real, AppComposition.ResolveCompositionMode(envVar, _nullLogger));
     }
 
-    /// The default-stays-Fakes rule from the work package's override: this
-    /// package does not flip the default (I3 does, once the camera is
-    /// wired), so unset must land on Fakes, not Real.
+    /// Package I3's default flip: unset now means Real, not Fakes — the
+    /// camera is wired, so the app should try it by default. `fakes` must be
+    /// passed explicitly to get the old behaviour.
     [Fact]
-    public void ResolveCompositionMode_Unset_DefaultsToFakes_NotReal()
+    public void ResolveCompositionMode_Unset_DefaultsToReal_NotFakes()
     {
-        Assert.Equal(CompositionMode.Fakes, AppComposition.ResolveCompositionMode(null, _nullLogger));
+        Assert.Equal(CompositionMode.Real, AppComposition.ResolveCompositionMode(null, _nullLogger));
     }
 
     /// The "never crash" half of the override: a typo must log, not throw,

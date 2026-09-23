@@ -4,6 +4,7 @@ using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Collection;
 using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
+using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -200,13 +201,25 @@ public class AppCompositionTests
     /// nothing else in the suite reads or writes it, so there is nothing for
     /// a parallel test to race against — and always points it at a fresh
     /// temp path, never the real Documents folder.
+    ///
+    /// Package I2/I3 also sets <c>LOREFETCH_FRAMES_DIR</c> to a generated
+    /// demo-frames folder (<see cref="DemoFrames.CreateFolder"/>) for the
+    /// SAME reason — Real mode's frame source is now the real webcam by
+    /// default, and this suite must never open the camera (it is in active
+    /// use for fixture capture elsewhere). This exercises the "same
+    /// missing/empty-folder handling as Fakes mode" fallback path — the
+    /// index/thresholds and collection store are still the real classes;
+    /// only the frame source is redirected away from hardware.
     [Fact]
     public async Task CreateAsync_RealMode_ComposesCsvCollectionStoreAndBothRealExporters()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"lorefetch-streamA-real-{Guid.NewGuid():N}");
         var collectionPath = Path.Combine(tempDir, "collection.csv");
-        var originalEnvVar = Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION");
+        var originalCollectionEnvVar = Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION");
+        var originalFramesEnvVar = Environment.GetEnvironmentVariable("LOREFETCH_FRAMES_DIR");
         Environment.SetEnvironmentVariable("LOREFETCH_COLLECTION", collectionPath);
+        var framesDir = DemoFrames.CreateFolder();
+        Environment.SetEnvironmentVariable("LOREFETCH_FRAMES_DIR", framesDir);
 
         try
         {
@@ -221,17 +234,36 @@ public class AppCompositionTests
             Assert.Contains(session.Exporters, e => e is NativeCsvExporter);
             Assert.Contains(session.Exporters, e => e is MoxfieldCsvExporter);
 
-            // The pipeline pieces stay exactly as Fakes mode composes them
-            // (the I1 override) — same folder-backed source, same "folder:"
-            // description prefix.
+            // Package I2/I3: Real mode now composes the real detector,
+            // rectifier and hash-index-backed identifier/catalog over
+            // LOREFETCH_FRAMES_DIR's folder — never the camera in this suite.
             Assert.StartsWith("folder:", session.Pipeline.SourceDescription, StringComparison.Ordinal);
             Assert.False(session.RunTask.IsFaulted);
+            Assert.Equal(0, session.Settings.CameraRotationDegrees);
+            Assert.IsType<LoreFetch.Core.Identification.HashCardIdentifier>(session.Catalog);
+
+            // Asserted against a FRESH read of the committed thresholds
+            // file, not a duplicated literal — a hardcoded distance in
+            // AppComposition that happened to equal today's committed
+            // 208/240 would still pass an equality check against those two
+            // numbers; comparing against the file itself is what actually
+            // proves the value came from there (chaos-tested: hardcoding
+            // GoodDistance/OkDistance in AppComposition.CreateRealAsync
+            // instead of loading ThresholdsFile made this assertion fail,
+            // confirmed, then reverted).
+            var thresholds = ThresholdsFile.Load(DataFiles.ThresholdsPath);
+            Assert.Equal(thresholds.GoodDistance, session.Settings.GoodDistance);
+            Assert.Equal(thresholds.OkDistance, session.Settings.OkDistance);
+            Assert.NotEqual(0, session.Settings.GoodDistance);
+            Assert.NotEqual(0, session.Settings.OkDistance);
 
             Assert.True(Directory.Exists(tempDir), "ResolveCollectionPath must create the collection directory.");
         }
         finally
         {
-            Environment.SetEnvironmentVariable("LOREFETCH_COLLECTION", originalEnvVar);
+            Environment.SetEnvironmentVariable("LOREFETCH_COLLECTION", originalCollectionEnvVar);
+            Environment.SetEnvironmentVariable("LOREFETCH_FRAMES_DIR", originalFramesEnvVar);
+            DemoFrames.DeleteFolderBestEffort(framesDir);
             try
             {
                 Directory.Delete(tempDir, recursive: true);
@@ -239,6 +271,43 @@ public class AppCompositionTests
             catch (IOException)
             {
             }
+        }
+    }
+
+    /// Package I2/I3 override: "a shipped app that quietly runs on stub
+    /// identification is worse than one that refuses to start." Renames the
+    /// COPIED index artifact this test host already has (via App.csproj's
+    /// CopyToOutputDirectory item, transitively copied into this project's
+    /// own output — never the committed source file at the repo root:
+    /// nothing here touches <c>data/index/cards.lfidx</c> in the working
+    /// tree), then asserts Real-mode composition throws rather than
+    /// silently falling back to Fakes. Lives in THIS class, alongside the
+    /// other Real-mode composition test, rather than a separate test class,
+    /// so xunit's default per-class collection keeps it running
+    /// sequentially with that sibling test — both touch the same shared,
+    /// on-disk index file, and no other class in this project does.
+    [Fact]
+    public async Task CreateAsync_RealMode_MissingIndex_ThrowsRatherThanFallingBackToFakes()
+    {
+        var indexPath = DataFiles.IndexPath;
+        Assert.True(File.Exists(indexPath), $"Precondition: the test host's own copy of the index must exist at \"{indexPath}\".");
+
+        var backupPath = indexPath + ".chaos-test-backup";
+        File.Move(indexPath, backupPath);
+
+        try
+        {
+            var ex = await Record.ExceptionAsync(() => AppComposition.CreateAsync(
+                CompositionMode.Real,
+                NullLoggerFactory.Instance,
+                TestContext.Current.CancellationToken));
+
+            Assert.NotNull(ex);
+            Assert.IsType<FileNotFoundException>(ex);
+        }
+        finally
+        {
+            File.Move(backupPath, indexPath);
         }
     }
 

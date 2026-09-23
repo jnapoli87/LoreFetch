@@ -160,6 +160,11 @@ public class EndToEndTests
             Assert.Equal(manualEntry.OracleId, row.OracleId);
             Assert.Equal(RowSource.Manual, row.Source);
             Assert.Null(row.BestMatchDistance);
+
+            // CLAUDE.md "Contract change — ArtworkId": a manual pick names a
+            // card, not an art, so ArtworkId must be null here regardless of
+            // implementation set — never a fabricated printing id.
+            Assert.Null(row.ArtworkId);
         }
         finally
         {
@@ -199,6 +204,7 @@ public class EndToEndTests
 
             var originalChosen = tile.Chosen!.Value;
             var originalDistance = tile.ChosenDistance;
+            var originalArtworkId = tile.ChosenArtworkId;
 
             var catalog = set.CreateOracleCatalog();
             var manualEntry = catalog.All[0];
@@ -212,6 +218,11 @@ public class EndToEndTests
             Assert.Equal(originalChosen, tile.Chosen);
             Assert.Equal(originalDistance, tile.ChosenDistance);
 
+            // CLAUDE.md "Artwork granularity": identity must be checked at
+            // the artwork level, not just OracleId — a wrong sibling art of
+            // the same oracle card would still pass the OracleId checks below.
+            Assert.Equal(originalArtworkId, tile.ChosenArtworkId);
+
             var store = set.CreateCollectionStore(NewCollectionStorePath());
             await store.CommitCohortAsync(cohort, ct);
             var rows = await store.ListAsync(ct);
@@ -220,6 +231,7 @@ public class EndToEndTests
             Assert.Equal(originalChosen.OracleId, row.OracleId);
             Assert.Equal(RowSource.Hash, row.Source);
             Assert.Equal(originalDistance, row.BestMatchDistance);
+            Assert.Equal(originalArtworkId, row.ArtworkId);
         }
         finally
         {

@@ -35,17 +35,50 @@ public partial class App : Application
             var logger = loggerFactory.CreateLogger("LoreFetch.App");
             _shutdownCts = new CancellationTokenSource();
 
-            // Package I1: LOREFETCH_MODE selects Fakes (default) or Real.
-            // ResolveCompositionMode never throws — an unrecognised value is
-            // logged as an error and falls back to Fakes — so a typo in an
-            // environment variable is never the reason the app won't start.
+            // Packages I1–I3: LOREFETCH_MODE selects Real (default) or
+            // Fakes. ResolveCompositionMode never throws — an unrecognised
+            // value is logged as an error and falls back to Fakes — so a
+            // typo in an environment variable is never the reason the app
+            // won't start.
             var mode = AppComposition.ResolveCompositionMode(
                 Environment.GetEnvironmentVariable("LOREFETCH_MODE"), logger);
 
-            _session = AppComposition
-                .CreateAsync(mode, loggerFactory, _shutdownCts.Token)
-                .GetAwaiter()
-                .GetResult();
+            try
+            {
+                _session = AppComposition
+                    .CreateAsync(mode, loggerFactory, _shutdownCts.Token)
+                    .GetAwaiter()
+                    .GetResult();
+            }
+            catch (Exception ex) when (mode == CompositionMode.Real)
+            {
+                // Real mode must fail LOUDLY rather than silently fall back
+                // to Fakes (docs/orchestration-plan.md's I2/I3 override) —
+                // a missing or corrupt committed hash index/thresholds file
+                // is exactly this path; AppComposition already logged the
+                // specific path at Critical before this exception reached
+                // here. A camera that simply is not plugged in does NOT
+                // reach this catch: WebcamFrameSourceFactory's own
+                // FrameSourceException is deferred to the pipeline's
+                // SourceFailed event instead (see AppComposition's
+                // RealWebcamFrameSourceFactory), which MainWindow renders as
+                // a banner once it exists, rather than a crash before it does.
+                logger.LogCritical(ex, "Real mode failed to start: {Message}", ex.Message);
+
+                // Deferred via Post, never called synchronously here:
+                // OnFrameworkInitializationCompleted runs BEFORE
+                // StartWithClassicDesktopLifetime's dispatcher loop actually
+                // starts pumping (that happens right after this method
+                // returns), so calling desktop.Shutdown(1) directly here
+                // throws "Cannot perform requested operation because the
+                // Dispatcher shut down" from inside Main once the loop does
+                // start — confirmed by hitting it with a renamed index file.
+                // Posting queues the shutdown for once the loop is actually
+                // running, exactly like MaybeScheduleSmokeExit's own
+                // deferred Shutdown() call below.
+                Dispatcher.UIThread.Post(() => desktop.Shutdown(1));
+                return;
+            }
 
             // The one diagnostic line CONTRACTS.md's Logging section exists
             // for: what was actually negotiated, not what was requested.

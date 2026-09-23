@@ -1,9 +1,12 @@
 using LoreFetch.App.Diagnostics;
 using LoreFetch.App.Fakes;
+using LoreFetch.Capture;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Collection;
 using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
+using LoreFetch.Core.Identification;
+using LoreFetch.Core.Imaging;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging;
@@ -16,19 +19,33 @@ namespace LoreFetch.App;
 /// `AutoCaptureTrigger` this stream owns — so the app runs end-to-end with
 /// no camera, no hash index and no collection store.
 ///
-/// `Real` (package I1) swaps in the real collection store
-/// (`LoreFetch.Core.Collection.CsvCollectionStore`) and both real export
-/// adapters (`LoreFetch.Core.Export.NativeCsvExporter`,
-/// `LoreFetch.Core.Export.MoxfieldCsvExporter`). The frame source, detector,
-/// rectifier, identifier and catalog stay EXACTLY as Fakes mode composes
-/// them for now — packages I2 (hash index, detector, rectifier) and I3
-/// (webcam) replace those pieces without anything about `Real`'s shape
-/// changing, the same way this enum was added ahead of I1 without changing
-/// `AppComposition`'s shape.
+/// `Real` (packages I1–I3) wires every piece for real: the collection store
+/// (`LoreFetch.Core.Collection.CsvCollectionStore`) and both export adapters
+/// (`LoreFetch.Core.Export.NativeCsvExporter`, `LoreFetch.Core.Export.MoxfieldCsvExporter`,
+/// package I1); the detector, rectifier, and a single
+/// `LoreFetch.Core.Identification.HashCardIdentifier` used as BOTH
+/// `ICardIdentifier` and `IOracleCatalog`, loaded from the COMMITTED index
+/// (`DataFiles.IndexPath`), with `ScanSettings.GoodDistance`/`OkDistance` fed
+/// from the committed `ThresholdsFile` (`DataFiles.ThresholdsPath`) rather
+/// than any literal in this file (package I2); and the frame source —
+/// `LoreFetch.Capture.WebcamFrameSourceFactory` by default, or a folder of
+/// images when `LOREFETCH_FRAMES_DIR` is set, so real captured frames can be
+/// replayed through the full real pipeline without a camera (package I3).
+/// `ScanSettings.CameraRotationDegrees` is set to 0 at composition — the
+/// camera is landscape and unrotated (CLAUDE.md "Geometry"); the contract's
+/// own default stays 90 and is unchanged.
+///
+/// A missing or corrupt committed index/thresholds file fails Real mode
+/// LOUDLY (an uncaught, logged exception — see <see cref="CreateRealAsync"/>)
+/// rather than falling back to Fakes: a shipped app that quietly runs on
+/// stub identification is worse than one that refuses to start. A missing
+/// camera at startup is a DIFFERENT case and does not crash — see
+/// <see cref="RealWebcamFrameSourceFactory"/>.
 ///
 /// Selected by `LOREFETCH_MODE` (`fakes` | `real`, case-insensitive; see
-/// <see cref="ResolveCompositionMode"/>). The default STAYS `Fakes` in this
-/// package — I3 flips the default once the camera is wired.
+/// <see cref="ResolveCompositionMode"/>). Package I3 flips the default to
+/// `Real` — unset now means Real, not Fakes; `fakes` must still be passed
+/// explicitly to get the old behaviour.
 public enum CompositionMode
 {
     Fakes,
@@ -219,9 +236,11 @@ public sealed class AppSession : IAsyncDisposable
 /// composition root, but it does not know the wiring"). It only ever calls
 /// the two frozen entry points — `IFrameSourceFactory.CreateAsync` and
 /// `ScanPipelineFactory.Create` — then starts `RunAsync` exactly once.
-/// Global A override: the pipeline pieces (frame source, detector,
-/// rectifier, identifier, catalog) are built against fakes only in both
-/// modes for now; nothing here ever compares a distance (I4).
+/// `Fakes` mode builds every pipeline piece against `Core/Fakes`; `Real`
+/// mode (packages I1–I3) builds every piece for real, over the committed
+/// index and thresholds file — nothing in `Real`'s own path ever names a
+/// distance literal (I4; `DemoThresholds` is the sanctioned Fakes-only
+/// exception).
 public static class AppComposition
 {
     public static Task<AppSession> CreateAsync(CompositionMode mode, ILoggerFactory loggers, CancellationToken ct) =>
@@ -247,18 +266,21 @@ public static class AppComposition
     /// </param>
     /// <param name="logger">Receives an error when the value is neither.</param>
     /// <returns>
-    /// <see cref="CompositionMode.Fakes"/> when unset, empty, or unrecognised
-    /// (logging an error in the unrecognised case); <see cref="CompositionMode.Real"/>
-    /// only for an exact case-insensitive match on <c>"real"</c>. Never throws —
-    /// a typo in an environment variable must not be the reason the app won't
-    /// start, and this package (I1) keeps the default at <c>Fakes</c> regardless
-    /// (I3 flips it once the camera is wired).
+    /// <see cref="CompositionMode.Real"/> when unset or blank — package I3's
+    /// default flip, now that the camera is wired; an explicit <c>"fakes"</c>
+    /// still selects <see cref="CompositionMode.Fakes"/>, and an explicit
+    /// <c>"real"</c> selects <see cref="CompositionMode.Real"/>, both
+    /// case-insensitively. An UNRECOGNISED value still falls back to
+    /// <see cref="CompositionMode.Fakes"/> — the one mode that can never fail
+    /// to start — logging an error, rather than to the new Real default:
+    /// a typo must not be the reason the app tries (and possibly fails) to
+    /// open a camera or load a hash index. Never throws.
     /// </returns>
     internal static CompositionMode ResolveCompositionMode(string? envVar, ILogger logger)
     {
         if (string.IsNullOrWhiteSpace(envVar))
         {
-            return CompositionMode.Fakes;
+            return CompositionMode.Real;
         }
 
         if (string.Equals(envVar, "fakes", StringComparison.OrdinalIgnoreCase))
@@ -313,23 +335,56 @@ public static class AppComposition
     }
 
     /// <summary>
-    /// Package I1: the Real composition path. Per the override in
-    /// docs/orchestration-plan.md, only the collection store and the export
-    /// adapters are real here — the pipeline pieces (frame source, detector,
-    /// rectifier, identifier, catalog) are built EXACTLY the way Fakes mode
-    /// builds them, via the same <see cref="BuildFakesPipelinePieces"/>
-    /// helper, until I2 (hash index, detector, rectifier) and I3 (webcam)
-    /// replace them. That is also why Real mode still uses
-    /// <see cref="DemoThresholds"/> for now: I2 is what loads the genuine
-    /// <c>thresholds.json</c>.
+    /// Packages I1–I3: the full Real composition path. Every piece is real:
+    /// <see cref="ContourCardDetector"/>, <see cref="PerspectiveRectifier"/>,
+    /// one <see cref="HashCardIdentifier"/> loaded from the committed index
+    /// and used as both <see cref="ICardIdentifier"/> and
+    /// <see cref="IOracleCatalog"/>, thresholds loaded from the committed
+    /// <see cref="ThresholdsFile"/>, the real collection store and both real
+    /// export adapters (package I1), and a frame source that is either the
+    /// real webcam or a replayed folder of frames (package I3). NO distance
+    /// literal appears anywhere in this method — see
+    /// <see cref="ThresholdsFile"/>-derived <c>settings.GoodDistance</c>/
+    /// <c>OkDistance</c> below; <see cref="DemoThresholds"/> is Fakes-mode
+    /// only.
+    ///
+    /// A missing or corrupt index/thresholds file is a LOUD failure: this
+    /// method lets <see cref="HashCardIdentifier.Load"/>/
+    /// <see cref="ThresholdsFile.Load"/>'s own exceptions propagate — after
+    /// logging them at <see cref="LogLevel.Critical"/>, naming the path —
+    /// rather than catching and falling back to Fakes (docs/orchestration-plan.md's
+    /// I2/I3 override: "a shipped app that quietly runs on stub identification
+    /// is worse than one that refuses to start"). <see cref="App"/> is what
+    /// turns that exception into a clean, non-zero exit.
     /// </summary>
     private static Task<AppSession> CreateRealAsync(ILoggerFactory loggers, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(loggers);
 
         var logger = loggers.CreateLogger("LoreFetch.App.AppComposition");
-        var settings = CreateSettingsWithDemoThresholds();
-        var pieces = BuildFakesPipelinePieces(settings, logger);
+
+        var identifier = LoadRealIdentifier(loggers, logger);
+        var thresholds = LoadRealThresholds(logger);
+
+        var settings = new ScanSettings
+        {
+            GoodDistance = thresholds.GoodDistance,
+            OkDistance = thresholds.OkDistance,
+        };
+
+        // Geometry re-ruling (CLAUDE.md "Geometry"): the camera stays
+        // landscape and unrotated for every layout. ScanSettings' own
+        // default stays 90 (frozen contract) — this is a value set at
+        // composition, not a change to that default.
+        settings.CameraRotationDegrees = 0;
+        logger.LogInformation("Real mode camera rotation: {RotationDegrees} degrees.", settings.CameraRotationDegrees);
+
+        ICardDetector detector = new ContourCardDetector(loggers.CreateLogger<ContourCardDetector>());
+        IRectifier rectifier = new PerspectiveRectifier();
+        IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
+
+        var (frameSourceFactory, onDisposed) = ChooseRealFrameSourceFactory(
+            Environment.GetEnvironmentVariable("LOREFETCH_FRAMES_DIR"), loggers, logger);
 
         var collectionPath = ResolveCollectionPath(
             Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION"), logger);
@@ -348,18 +403,177 @@ public static class AppComposition
         ];
 
         return ComposeAsync(
-            pieces.FrameSourceFactory,
-            pieces.Detector,
-            pieces.Rectifier,
-            pieces.Identifier,
-            pieces.Trigger,
+            frameSourceFactory,
+            detector,
+            rectifier,
+            identifier,
+            trigger,
             settings,
             loggers,
             ct,
-            catalog: pieces.Catalog,
+            catalog: identifier,
             store: store,
             exporters: exporters,
-            onDisposed: pieces.OnDisposed);
+            onDisposed: onDisposed);
+    }
+
+    /// Loads the committed hash index, used as BOTH <see cref="ICardIdentifier"/>
+    /// and <see cref="IOracleCatalog"/> (one instance, per the I2 override —
+    /// a second load would risk the two seams silently disagreeing about
+    /// which index they read). Logs at <see cref="LogLevel.Critical"/>,
+    /// naming <see cref="DataFiles.IndexPath"/>, before letting the
+    /// underlying exception (<see cref="FileNotFoundException"/> for a
+    /// missing file, <see cref="LoreFetch.Core.Identification.HashIndexFormatException"/>
+    /// for a corrupt one) propagate — never caught into a Fakes fallback.
+    private static HashCardIdentifier LoadRealIdentifier(ILoggerFactory loggers, ILogger logger)
+    {
+        try
+        {
+            return HashCardIdentifier.Load(DataFiles.IndexPath, loggers);
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(
+                ex,
+                "Real mode: failed to load the hash index from \"{Path}\". Refusing to start rather than " +
+                "silently running with stub identification.",
+                DataFiles.IndexPath);
+            throw;
+        }
+    }
+
+    /// Loads the committed thresholds file. Same loud-failure shape as
+    /// <see cref="LoadRealIdentifier"/> — <see cref="ThresholdsFile.Load"/>
+    /// already throws on a missing file, an unsupported format version, or
+    /// a missing/malformed field (its own doc comment: "loud rather than
+    /// lenient"); this only adds the named-path critical log before letting
+    /// that exception propagate.
+    private static ThresholdsFile LoadRealThresholds(ILogger logger)
+    {
+        try
+        {
+            var thresholds = ThresholdsFile.Load(DataFiles.ThresholdsPath);
+            logger.LogInformation(
+                "Loaded thresholds from {Path}: goodDistance={GoodDistance} okDistance={OkDistance}.",
+                DataFiles.ThresholdsPath, thresholds.GoodDistance, thresholds.OkDistance);
+            return thresholds;
+        }
+        catch (Exception ex)
+        {
+            logger.LogCritical(
+                ex,
+                "Real mode: failed to load thresholds from \"{Path}\". Refusing to start rather than " +
+                "silently running with stub identification.",
+                DataFiles.ThresholdsPath);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Package I3's frame-source switch for Real mode. <c>LOREFETCH_FRAMES_DIR</c>,
+    /// when set and valid, replays a folder of images through the REAL
+    /// detector/rectifier/identifier — never opening the camera, which is
+    /// how real captured frames get exercised through the full real
+    /// pipeline without hardware (and how this package's own smoke tests
+    /// and CI reach Real mode at all: the C920 stays free for fixture
+    /// capture). An invalid value (missing directory, or one with no
+    /// decodable image) falls back exactly the way <see cref="ChooseFrameFolder"/>
+    /// already does for Fakes mode — same log line, same generated
+    /// demo-frames fallback — per the I2/I3 override ("same missing/empty-folder
+    /// handling as Fakes mode"); it is unusual to pair "Real" identification
+    /// with placeholder frames, but this is a deliberate, documented
+    /// degrade-in-place rather than a crash.
+    ///
+    /// Unset entirely: the real webcam
+    /// (<see cref="LoreFetch.Capture.WebcamFrameSourceFactory"/>), wrapped in
+    /// <see cref="RealWebcamFrameSourceFactory"/> so "no camera attached"
+    /// fails through the pipeline's existing <c>SourceFailed</c> path
+    /// instead of crashing composition — see that type's own doc comment.
+    /// </summary>
+    private static (IFrameSourceFactory Factory, Action? OnDisposed) ChooseRealFrameSourceFactory(
+        string? envVar, ILoggerFactory loggers, ILogger logger)
+    {
+        if (string.IsNullOrEmpty(envVar))
+        {
+            IFrameSourceFactory webcamFactory = new RealWebcamFrameSourceFactory(
+                new WebcamFrameSourceFactory(loggers), loggers.CreateLogger<RealWebcamFrameSourceFactory>());
+            return (webcamFactory, null);
+        }
+
+        var (folder, isTempFolder) = ChooseFrameFolder(envVar, logger);
+        IFrameSourceFactory folderFactory = new FolderFrameSourceFactory(folder, TimeSpan.FromMilliseconds(250));
+        Action? onDisposed = isTempFolder ? () => DemoFrames.DeleteFolderBestEffort(folder) : null;
+        return (folderFactory, onDisposed);
+    }
+
+    /// <summary>
+    /// Wraps the real <see cref="LoreFetch.Capture.WebcamFrameSourceFactory"/>
+    /// so a <see cref="FrameSourceException"/> at <c>CreateAsync</c> time —
+    /// "nothing usable is found" (that type's own doc comment): no camera
+    /// attached, or none matching the required format — does not crash
+    /// composition before <see cref="MainWindow"/> even exists. That
+    /// exception is instead deferred: this factory returns an
+    /// already-failed <see cref="IFrameSource"/> whose <c>ReadAsync</c>
+    /// throws the SAME exception the moment <see cref="IScanPipeline.RunAsync"/>
+    /// evaluates it — which is textually inside that method's own
+    /// <c>try</c> block (CONTRACTS.md: "SourceFailed is raised ... immediately
+    /// before RunAsync faults"), so the existing mechanism fires exactly as
+    /// it would for a camera that disconnects mid-session, and
+    /// <see cref="MainWindow"/> renders the same banner it already renders
+    /// for that case. <see cref="LoreFetch.Capture.WebcamFrameSourceFactory"/>
+    /// itself is frozen Capture production code this package must not edit
+    /// — this is composition-root-only behaviour.
+    /// </summary>
+    private sealed class RealWebcamFrameSourceFactory : IFrameSourceFactory
+    {
+        private readonly IFrameSourceFactory _inner;
+        private readonly ILogger _logger;
+
+        public RealWebcamFrameSourceFactory(IFrameSourceFactory inner, ILogger logger)
+        {
+            _inner = inner;
+            _logger = logger;
+        }
+
+        public async Task<IFrameSource> CreateAsync(ScanSettings settings, CancellationToken ct)
+        {
+            try
+            {
+                return await _inner.CreateAsync(settings, ct).ConfigureAwait(false);
+            }
+            catch (FrameSourceException ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Real mode: no usable camera found at startup ({Message}). The preview will show this " +
+                    "failure via the normal SourceFailed banner instead of crashing.",
+                    ex.Message);
+                return new AlreadyFailedFrameSource(ex);
+            }
+        }
+    }
+
+    /// An <see cref="IFrameSource"/> that never delivers a frame: its
+    /// <c>ReadAsync</c> throws the captured <see cref="FrameSourceException"/>
+    /// synchronously, the moment it is called — see
+    /// <see cref="RealWebcamFrameSourceFactory"/>'s own doc comment for why
+    /// that specific timing matters.
+    private sealed class AlreadyFailedFrameSource : IFrameSource
+    {
+        private readonly FrameSourceException _exception;
+
+        public AlreadyFailedFrameSource(FrameSourceException exception)
+        {
+            _exception = exception;
+        }
+
+        public string Description => $"camera unavailable: {_exception.Message}";
+
+        public FrameGeometry Geometry => new(1, 1, RotationDegrees: 0);
+
+        public IAsyncEnumerable<CameraFrame> ReadAsync(CancellationToken ct) => throw _exception;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     /// <summary>
@@ -418,12 +632,11 @@ public static class AppComposition
     }
 
     /// <summary>
-    /// Builds the pipeline pieces both <see cref="CompositionMode.Fakes"/>
-    /// and <see cref="CompositionMode.Real"/> compose identically today — the
-    /// frame source, detector, rectifier, identifier and oracle catalog — per
-    /// the I1 override: only the collection store and export adapters differ
-    /// by mode until I2/I3 land. Factored out so neither mode's method has to
-    /// repeat, and risk drifting from, the other's wiring.
+    /// Builds Fakes mode's pipeline pieces — the frame source, detector,
+    /// rectifier, identifier and oracle catalog, all backed by
+    /// <c>Core/Fakes</c>. Package I2/I3 gave <see cref="CompositionMode.Real"/>
+    /// its own, entirely real wiring (see <see cref="CreateRealAsync"/>);
+    /// this helper is Fakes-only now.
     /// </summary>
     private static PipelinePieces BuildFakesPipelinePieces(ScanSettings settings, ILogger logger)
     {
@@ -488,8 +701,9 @@ public static class AppComposition
             Notes: "Not yet tested with a live tool.")),
     ];
 
-    /// The pipeline-facing dependencies both composition modes build
-    /// identically today (see <see cref="BuildFakesPipelinePieces"/>).
+    /// The pipeline-facing dependencies Fakes mode builds (see
+    /// <see cref="BuildFakesPipelinePieces"/>). Real mode builds its own,
+    /// entirely real set inline in <see cref="CreateRealAsync"/>.
     private readonly record struct PipelinePieces(
         IFrameSourceFactory FrameSourceFactory,
         ICardDetector Detector,
