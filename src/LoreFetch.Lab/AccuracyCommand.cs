@@ -57,7 +57,24 @@ public static class AccuracyCommand
 
         var okDistance = ResolveOkDistance(repoRoot!, parsed.OkDistance);
 
-        var groundTruthPath = Path.Combine(repoRoot!, AccuracyCorpusLoader.GroundTruthRelativePath.Replace('/', Path.DirectorySeparatorChar));
+        // `--images-root` overrides ONLY where ground-truth.csv/fixtures are
+        // resolved from -- never the index default (still repoRoot-derived
+        // above) or ResolveOkDistance's thresholds-file lookup (still
+        // repoRoot-derived too). This exists because `test-images/` is
+        // gitignored per-checkout (CLAUDE.md "Never commit card imagery"),
+        // so a linked worktree's own `test-images/` is a separate, possibly
+        // stale copy from the main checkout's -- and `RepoPaths.TryFindRepoRoot`
+        // resolves to whichever checkout the running exe's own bin/ (or cwd)
+        // sits under, which for an exe built in a worktree is always that
+        // worktree, never the main checkout, regardless of the process's
+        // working directory (AppContext.BaseDirectory is tried first). Pass
+        // `--images-root <path-to-a-checkout>` to point this run's corpus
+        // resolution at a DIFFERENT checkout's `test-images/` without
+        // rebuilding or copying imagery anywhere (CLAUDE.md: imagery is
+        // never copied into a worktree).
+        var imagesRoot = parsed.ImagesRoot ?? repoRoot!;
+
+        var groundTruthPath = Path.Combine(imagesRoot, AccuracyCorpusLoader.GroundTruthRelativePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(groundTruthPath))
         {
             Console.WriteLine($"accuracy: no ground-truth corpus yet at \"{groundTruthPath}\" -- nothing to run. " +
@@ -105,7 +122,7 @@ public static class AccuracyCommand
         }
 
         var allFrames = GroundTruthFrame.GroupByFile(resolved);
-        var (found, missing, coverage) = AccuracyCorpusLoader.SplitByPresence(repoRoot!, allFrames);
+        var (found, missing, coverage) = AccuracyCorpusLoader.SplitByPresence(imagesRoot, allFrames);
 
         Console.WriteLine($"Ground truth: {groundTruthPath} ({allFrames.Count} frame(s), {resolved.Count} slot(s))");
         Console.WriteLine(coverage.Summarize());
@@ -132,7 +149,7 @@ public static class AccuracyCommand
         var allResults = new List<SlotAccuracyResult>();
         foreach (var frame in found)
         {
-            var path = AccuracyCorpusLoader.ResolveFixturePath(repoRoot!, frame.File);
+            var path = AccuracyCorpusLoader.ResolveFixturePath(imagesRoot, frame.File);
             using var mat = AccuracyCorpusLoader.LoadFixtureMat(path);
             using var cameraFrame = FrameMat.FromMat(mat);
             allResults.AddRange(AccuracyFrameRunner.Run(frame, cameraFrame, detector, rectifier, identifier, options));
@@ -147,7 +164,7 @@ public static class AccuracyCommand
         return gate.Passed ? 0 : 1;
     }
 
-    private sealed record AccuracyArgs(string? IndexPath, int? OkDistance, int MaxWrong);
+    private sealed record AccuracyArgs(string? IndexPath, int? OkDistance, int MaxWrong, string? ImagesRoot);
 
     /// `--ok-distance` wins when given. Otherwise, the committed
     /// `data/index/thresholds.json`'s own `okDistance` (B6's calibrated
@@ -185,6 +202,7 @@ public static class AccuracyCommand
         string? indexPath = null;
         int? okDistance = null;
         var maxWrong = AccuracyHarnessOptions.Default.MaxWrongAt1AtOkDistance;
+        string? imagesRoot = null;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -208,19 +226,28 @@ public static class AccuracyCommand
                     }
 
                     break;
+                case "--images-root" when i + 1 < args.Length:
+                    imagesRoot = args[++i];
+                    break;
                 default:
                     throw new ArgumentException($"accuracy: unrecognised argument \"{args[i]}\".");
             }
         }
 
-        return new AccuracyArgs(indexPath, okDistance, maxWrong);
+        return new AccuracyArgs(indexPath, okDistance, maxWrong, imagesRoot);
     }
 
     private static void PrintUsage()
     {
         Console.WriteLine("""
             Usage:
-              accuracy [--index <path>] [--ok-distance N] [--max-wrong N]
+              accuracy [--index <path>] [--ok-distance N] [--max-wrong N] [--images-root <checkout>]
+
+            --images-root overrides where test-images/ground-truth.csv and
+            test-images/fixtures/ are resolved from (default: the same
+            checkout the index defaults from). Use it to point a worktree
+            build at a different checkout's test-images/ -- e.g. the main
+            checkout's -- without copying imagery anywhere.
 
             Package B6: runs the accuracy harness against whatever subset of
             test-images/ground-truth.csv + test-images/fixtures/ exists on
