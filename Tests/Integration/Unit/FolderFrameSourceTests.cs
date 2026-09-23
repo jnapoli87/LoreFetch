@@ -57,25 +57,41 @@ public class FolderFrameSourceTests
         }
     }
 
+    /// The source advances on its own timer and drops frames into a
+    /// capacity-1 `DropOldest` channel, so read k is NOT image k mod N: a
+    /// reader that falls one interval behind (a GC pause, a loaded CI runner)
+    /// skips an image. Asserting on exact positions made this test flaky —
+    /// red on macOS CI roughly one run in three, and 1 in 8 locally.
+    ///
+    /// What IS guaranteed under drops: within one pass the image index only
+    /// rises, so an index that goes DOWN between two reads can only mean the
+    /// source wrapped. A source that stops at the last image never produces
+    /// that decrease, whatever gets dropped.
     [Fact]
     public async Task ReadAsync_CyclesBackToTheFirstImage_AfterMoreThanNReads()
     {
         const int imageCount = 3;
+        const int maxReads = 100; // ~1.5 s at 15 ms; a healthy run needs about 4
         var dir = CreateTempImageDirectory(imageCount);
         try
         {
             await using var source = FolderFrameSource.Open(dir, TimeSpan.FromMilliseconds(15));
 
-            var seenTopLeftBlue = new List<byte>();
+            var seen = new List<int>();
+            var wrapped = false;
             var enumerator = source.ReadAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
             try
             {
-                for (var i = 0; i < imageCount + 4; i++)
+                while (seen.Count < maxReads && !(wrapped && seen.Distinct().Count() == imageCount))
                 {
-                    Assert.True(await enumerator.MoveNextAsync());
+                    Assert.True(await enumerator.MoveNextAsync(), "the source stopped yielding instead of cycling");
                     var frame = enumerator.Current;
-                    seenTopLeftBlue.Add(frame.Pixels.Span[0]); // top-left pixel's B channel, distinct per image
+                    var index = ImageIndexOf(frame);
                     frame.Dispose();
+
+                    if (seen.Count > 0 && index < seen[^1])
+                        wrapped = true;
+                    seen.Add(index);
                 }
             }
             finally
@@ -83,10 +99,9 @@ public class FolderFrameSourceTests
                 await enumerator.DisposeAsync();
             }
 
-            // The sequence must have wrapped back to the first image by the
-            // time it has cycled through more than N reads.
-            Assert.Equal(seenTopLeftBlue[0], seenTopLeftBlue[imageCount]);
-            Assert.Equal(seenTopLeftBlue[1], seenTopLeftBlue[imageCount + 1]);
+            var trace = string.Join(",", seen);
+            Assert.True(wrapped, $"no wrap observed in {seen.Count} reads; image indices seen: {trace}");
+            Assert.True(seen.Distinct().Count() == imageCount, $"not every image was served; image indices seen: {trace}");
         }
         finally
         {
@@ -247,6 +262,16 @@ public class FolderFrameSourceTests
         }
 
         return dir;
+    }
+
+    /// Which source image a frame came from, by its top-left pixel's full BGR
+    /// value — no single channel is enough, since red and green both have B=0.
+    private static int ImageIndexOf(CameraFrame frame)
+    {
+        var (b, g, r) = (frame.Pixels.Span[0], frame.Pixels.Span[1], frame.Pixels.Span[2]);
+        var index = Array.FindIndex(Palette, c => c.Val0 == b && c.Val1 == g && c.Val2 == r);
+        Assert.True(index >= 0, $"top-left pixel ({b},{g},{r}) matches no palette colour");
+        return index;
     }
 
     private static void DeleteTempDirectory(string dir)
