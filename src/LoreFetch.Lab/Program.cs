@@ -28,6 +28,7 @@ return await (command switch
     "crop-scale" => CropScaleCommand.RunAsync(rest),
     "retrieval-experiment" => RetrievalExperimentCommand.RunAsync(rest),
     "accuracy" => AccuracyCommand.RunAsync(rest),
+    "expand-experiment" => ExpandExperimentCommand.RunAsync(rest),
     _ => Unknown(command),
 });
 
@@ -120,6 +121,7 @@ static void PrintUsage()
                                    plus the identify pass on the best
                                    cell. See docs/accuracy.md.
           accuracy [--index <path>] [--ok-distance N] [--max-wrong N]
+                   [--images-root <checkout>]
                                    Package B6: runs the accuracy harness
                                    against whatever subset of
                                    test-images/ground-truth.csv +
@@ -128,5 +130,17 @@ static void PrintUsage()
                                    height and per rung, the margin
                                    distribution, and the lands-excluded
                                    count. Never writes thresholds.json.
+                                   --images-root points a worktree build at
+                                   a different checkout's test-images/.
+          expand-experiment [--images-root <dir>] [--index <path>]
+                             [--cache <dir>] [--file-prefix <prefix>]
+                             [--expand-w F] [--expand-h F] [--ok-distance N]
+                             [--border-sample N] [--seed N] [--top N]
+                                   Package E1a: per ground-truth slot,
+                                   compares top-1 distance/correctness at
+                                   factor 1.0 vs. a quad expanded about its
+                                   own centroid (measured from real border
+                                   ratios, or given explicitly) vs. a dual
+                                   (best-of-both) hypothesis.
         """);
 }
