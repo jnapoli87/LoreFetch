@@ -85,8 +85,19 @@ public sealed class DemoCardIdentifier : ICardIdentifier
             var good = _settings.GoodDistance;
             var ok = _settings.OkDistance;
 
+            // Advance the cycle once per TILE, not per call: the pipeline's
+            // DualHypothesisIdentification calls Identify twice per tile (the
+            // as-detected crop, then the border-expanded crop) and keeps the
+            // lower top-1 distance. Per-call cycling hands the two hypotheses
+            // different tiers, so the "unresolved" tier always loses the min
+            // and no demo tile can ever be Unresolved. Pairing the calls gives
+            // both hypotheses the same distance, the tie goes to the
+            // as-detected crop, and each tile keeps its intended state. If the
+            // expanded hypothesis is ever skipped (quad near the frame edge)
+            // the pairing shifts by one, which is still a mix of all three
+            // states: the same cosmetic tolerance as the concurrency note above.
             _callIndex++;
-            var distance = (_callIndex % 3) switch
+            var distance = ((_callIndex / 2) % 3) switch
             {
                 0 => good / 2,          // confident: well inside "good" -> Included, not low-confidence
                 1 => (good + ok) / 2,   // low-confidence: strictly between good and ok -> Included, IsLowConfidence
