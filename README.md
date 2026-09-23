@@ -5,7 +5,30 @@ Turn any webcam into a Magic: The Gathering collection scanner. Fully offline, n
 Cataloging Magic cards shouldn't mean a monthly subscription or holding your phone over one card at a time. LoreFetch turns a webcam into a scanner for players and independent game stores: lay down up to nine cards, and it identifies them offline, for free, and exports your collection to Moxfield.
 
 > [!NOTE]
-> **Status: in progress, v0.1.0 not yet released.** Implementation is under way in four parallel streams; [`docs/orchestration-plan.md`](docs/orchestration-plan.md) records exactly what has landed. The plan has been public from the start because the interesting part is the reasoning, not just the code.
+> **v0.1.0 is released** — see [Download and run](#download-and-run). The whole design record has been public from the first commit, in [`CLAUDE.md`](CLAUDE.md) and [`docs/`](docs/), because the reasoning is the interesting part, not just the code.
+
+## Demo
+
+Video of one full pass — open the app, scan a table of cards, export, import the file into Moxfield — goes here.
+
+<!-- Video slots. Paste the YouTube id into both halves and delete the line above; GitHub
+     renders the thumbnail as a play link:
+
+     [![Webcam scan to Moxfield export](https://img.youtube.com/vi/VIDEO_ID/hqdefault.jpg)](https://youtu.be/VIDEO_ID)
+
+     One entry per video. Keep the link text describing the function being shown, not the
+     video's own title, so the list stays readable as it grows. -->
+
+## Download and run
+
+[**LoreFetch v0.1.0, Windows 10/11 x64**](https://github.com/jnapoli87/LoreFetch/releases/tag/v0.1.0) — one self-contained executable, ~86 MB zipped. No .NET install, no other prerequisites.
+
+1. Download the zip and extract it anywhere.
+2. **Keep `data/index/` beside `LoreFetch.exe`.** That folder is the fingerprint index and its calibrated thresholds; the app resolves both relative to the executable and refuses to start without them, rather than falling back to something that would quietly not identify cards.
+3. Run `LoreFetch.exe`. It is unsigned, so SmartScreen warns on first run — **More info → Run anyway**.
+4. Aim a webcam straight down at the table from about 15″, with a lamp low and off to one side. Never beside the lens.
+
+Two environment variables are worth knowing: `LOREFETCH_COLLECTION` chooses where the collection CSV is written, and `LOREFETCH_FRAMES_DIR` replaces the camera with a folder of images.
 
 ## What it solves
 
@@ -17,13 +40,13 @@ Cataloging Magic cards shouldn't mean a monthly subscription or holding your pho
 | **Wrong matches slipping in.** | Low-confidence matches are highlighted. Click a card to exclude it, or right-click to set it by hand, before anything is saved. |
 | **Getting the collection somewhere useful.** | The collection is a plain CSV you own, and it exports straight to [Moxfield](https://moxfield.com). |
 
-## How it will work
+## How it works
 
 Cards are identified by **perceptual hash**, not OCR. Nothing reads the card name — at a realistic overhead camera height the name is about five pixels tall, which rules text-reading out entirely. Instead each card is rectified, reduced to a 32×32 thumbnail and turned into a 1024-bit fingerprint, then matched by Hamming distance against a prebuilt index.
 
 That approach isn't novel here: it's a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause), a perceptual-hash card matcher proven against real webcam capture. Note that CardSpotter identifies a card the user *clicks on*; LoreFetch additionally has to find the cards, unassisted, which is the harder half.
 
-## Planned scope for v0.1.0
+## What v0.1.0 does
 
 - Modern-frame English cards, single-faced, non-foil
 - One, three, or nine cards per capture, detected automatically, with an auto-capture mode that fires once the cards stop moving
@@ -35,7 +58,7 @@ That approach isn't novel here: it's a port of [CardSpotter](https://github.com/
 ### Known limitations, by design
 
 - **Printings are not distinguished.** Reprints share artwork, so a perceptual hash physically cannot tell a card's set apart. v1 identifies the card, not which printing you own — which also means no price data.
-- **Foils are unreliable.** Glare defeats image hashing without polarised or diffuse lighting.
+- **Foils are not a supported case, though they often work.** Glare defeats image hashing, so lighting decides it: under diffuse, off-axis light foils identified reliably in [hand validation](#hand-validation-on-the-shipped-build), and under bad light they fail. Sleeved cards behave the same way, and want the camera closer.
 - **Basic lands** are identified, but every basic land art resolves to the same name.
 - **Leave a finger-width gap between cards.** Cards touching edge-to-edge in a line (or packed tight in a grid) merge into one contour before detection ever separates them — no identification fix can recover a card the detector never split out. A small gap is the whole remedy.
 - **New sets need a new index.** LoreFetch recognises cards that were on Scryfall when its index was built, and the release notes give that date. To add newer sets, rebuild the index with the Lab tool (`bulk` → `images` → `build-index`; the first run downloads about 5 GB) or download an updated index from the releases page.
@@ -66,6 +89,8 @@ Details and reasoning are in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-
 | [`docs/stream-b-identification.md`](docs/stream-b-identification.md) | Hashing, indexing, card detection, accuracy measurement |
 | [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
 | [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
+| [`docs/accuracy.md`](docs/accuracy.md) | Accuracy measurement: corpora, method, and every recorded run |
+| [`docs/orchestration-plan.md`](docs/orchestration-plan.md) | The build log — every ruling, in order, including the open bugs |
 
 ## Cameras
 
@@ -97,9 +122,9 @@ scripts/lorefetch.sh test
 > `git fetch && git reset --hard origin/main` — **not** `git pull`, which would merge the old
 > history back in. Prefer that over re-cloning, because of the point above.
 
-## Stream A — UI
+## The app
 
-The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a layout selector (1 card / 3 × 1 / 3 × 3) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented in [Stream D](#stream-d--collection--export).
+The app is one window: a live preview with detected-card outlines on the left, a cohort grid on the right, a layout selector (1 card / 3 × 1 / 3 × 3) and an Auto toggle above the preview, and the collection — a sortable table of everything committed so far, with an export picker next to it — docked below. An export whose format hasn't actually been imported into its live target tool is marked with an "unverified" badge; the collection format itself is documented under [Collection and export](#collection-and-export).
 
 Every interaction has a keyboard path, and the happy path never touches the mouse:
 
@@ -119,9 +144,9 @@ Capture only fills the grid — commit is always the separate Enter. That's what
 
 **Non-happy states.** An empty collection shows a placeholder instead of an empty table. If the frame source dies — camera unplugged, a folder that vanished — a banner shows the failure's message text, never a stack trace. If the collection file can't be written (e.g. it's open in Excel), a banner offers Retry and keeps the pending cohort intact so nothing already captured is lost. A missing hash index or thresholds file surfaces the same way, as a plain-text banner rather than a crash.
 
-**Try it without a camera.** In the current build the app runs in Fakes mode — no webcam and no real card identification yet. Set `LOREFETCH_FRAMES_DIR` to a folder of your own images and the preview cycles through them instead of generated placeholder frames. Identification in this mode is a demo: a stand-in identifier cycles each captured tile through confident, low-confidence and Unresolved in turn, so every tile state is reachable — it is not a real card match. The real webcam and the real identifier arrive once the streams are integrated.
+**Try it without a camera.** The real pipeline is the default — `LOREFETCH_MODE` unset means real capture, real detection and real identification. Setting `LOREFETCH_FRAMES_DIR` to a folder of your own images swaps the webcam for that folder while everything downstream stays real, which is the easiest way to test identification without a rig. `LOREFETCH_MODE=fakes` goes further and replaces every piece with a stand-in: generated frames, and a demo identifier that cycles each tile through confident, low-confidence and Unresolved so every tile state is reachable. Fakes mode is a UI harness, not a card matcher — it never reports a real match.
 
-## Stream B — Identification
+## Identification
 
 Identification is a C# port of [CardSpotter](https://github.com/relgin/cardspotter)'s 1024-bit perceptual hash (BSD-3-Clause; credited in [`THIRD-PARTY-NOTICES`](THIRD-PARTY-NOTICES)). Each card is rectified, then reduced through seven steps to a 1024-bit fingerprint and matched by full Hamming distance against every entry in the index — no early-exit, no threshold pruning, so the ranking it returns is always the true nearest neighbours. The two sides of the pipeline are deliberately asymmetric: building the index blurs and downsamples each Scryfall render before hashing it, while a live query enters the shared steps straight from an already-rectified webcam crop, with no blur of its own. That asymmetry is the point — blurring the reference destroys the fine detail a webcam can never reproduce, which is what lets a photo and a print render converge at all. `ICardIdentifier` itself never filters by threshold; match distance instead drives **emphasis, not gating** one layer up, in the scan pipeline, where it becomes a confident match, a low-confidence highlight, or an unresolved tile.
 
@@ -147,20 +172,35 @@ Measured against six real Logitech C920 frames of a tight 3×3 grid, cards place
 
 `goodDistance` and `okDistance` come straight from that corpus: every correct rank-1 match landed at distance 82–208, and in every slot where rank-1 named a different card than the ground truth — six of them — that distance was ≥272; at `okDistance` 240, those land as Unresolved rather than as a wrong answer. (The five no-detection slots never reach `Identify` at all, so they carry no distance to report.) `okDistance` sits at 240, the midpoint of that untouched 209–271 gap; nothing in the corpus says where exactly inside it the line should fall. Separately, the round-trip gate — every Scryfall render retrieving its own artwork at rank 1 through the full query path — passes 200/200, with a measured reference floor of 61 (not ≈0: that floor is the blur-and-downsample cost, and it's expected).
 
-**70.4% ships, not the 90% this stream originally targeted — stated plainly, not rounded up.** It ships because the number that actually matters, `wrong@1`, is 0: nothing in the corpus was ever a *confident* wrong answer, only a correct match or an honest "don't know." The misses show up as Unresolved tiles in the confirmation grid, exactly where the interaction design already sends your eye. A silent miss costs a right-click to set by hand; a confident wrong answer is bad inventory that looks fine until you notice.
+**70.4% ships, not the 90% originally targeted — stated plainly, not rounded up.** It ships because the number that actually matters, `wrong@1`, is 0: nothing in the corpus was ever a *confident* wrong answer, only a correct match or an honest "don't know." The misses show up as Unresolved tiles in the confirmation grid, exactly where the interaction design already sends your eye. A silent miss costs a right-click to set by hand; a confident wrong answer is bad inventory that looks fine until you notice.
 
 > [!NOTE]
 > **70.4% is not reproducible from a fresh clone.** The fixture frames are Wizards of the Coast artwork and can never be committed, and `test-images/ground-truth.csv` — the hand-validated answer key — is kept uncommitted alongside them, since a label file is meaningless without the images it labels. CI runs the accuracy harness against synthetically generated frames instead. To measure your own setup, drop images at `test-images/fixtures/<height>in/<layout>/` plus a matching `test-images/ground-truth.csv` (one row per card slot), and run `lab accuracy` from `src/LoreFetch.Lab`.
 
-Known limits beyond [Known limitations, by design](#known-limitations-by-design): same-art printings are permanently indistinguishable, since a perceptual hash of the artwork can't see a collector number; foils and glare defeat the local-median bit pattern without diffuse or polarised light; a black-bordered card is hardest to *detect* on a dark mat, because the card's own edge stops contrasting against what it's sitting on — the scanner now identifies through that miss when the card is still detected but the quad lands on the border's inner edge (dual-hypothesis identification tries both the detected crop and a border-corrected one, keeping whichever matches better), but a dark mat that swallows the edge entirely still means no quad at all; cards touching edge-to-edge merge into one contour and are never individually detected, gap or no fix (see the finger-width-gap note above); and every number above was measured at one height and one mat — it hasn't yet been swept across the full height/mat matrix the stream's own accuracy notes anticipate.
+### Hand validation on the shipped build
 
-## Stream C — Capture
+The table above is the harness talking: six frames, one height, one mat. The `v0.1.0` build has since been run by hand over a **~50–60 card corpus on a white background at 21″** — a wider spread of real cards than the calibrated set, at a different height from the 15″ everything above was measured at.
+
+**Normal cards — the category the table measures — did uniformly well.** Not one of them was a problem. That's worth reading against the 70.4%: **the table predates dual-hypothesis identification and was never re-measured after it**, and DH is the single change that turned confident wrong matches and noise-band misses into correct ones. So 70.4% is the floor this scanner shipped above, not the rate you should expect from the build in the release.
+
+The rest of the interest was in foils and sleeves.
+
+**Foils identified reliably under good lighting.** That's a softer result than "glare defeats the hash" implies: glare is a lighting problem before it's a foil problem, and with the light diffuse and off-axis, foils behaved like normal cards. Poor lighting still breaks them.
+
+**Sleeved cards are the harder case.** A sleeve adds its own reflective surface, and sleeved cards worked but wanted the camera **closer** than bare ones did. When sleeved cards read badly the two fixes, in order, are better lighting and then de-sleeving — not a lower threshold.
+
+> [!NOTE]
+> **No correct@1 figure is claimed for this pass.** It was a hand check against a real collection, not a `lab accuracy` run against a ground-truth file, so it says the scanner holds up on real cards and says nothing precise about the rate. 21″ is also outside the calibrated height: the expected card width there is about 162 px, against the 227 px the 208/240 thresholds were set on.
+
+Known limits beyond [Known limitations, by design](#known-limitations-by-design): same-art printings are permanently indistinguishable, since a perceptual hash of the artwork can't see a collector number; foils and glare defeat the local-median bit pattern without diffuse or polarised light; a black-bordered card is hardest to *detect* on a dark mat, because the card's own edge stops contrasting against what it's sitting on — the scanner now identifies through that miss when the card is still detected but the quad lands on the border's inner edge (dual-hypothesis identification tries both the detected crop and a border-corrected one, keeping whichever matches better), but a dark mat that swallows the edge entirely still means no quad at all; cards touching edge-to-edge merge into one contour and are never individually detected, gap or no fix (see the finger-width-gap note above); and every number above was measured at one height and one mat — it hasn't yet been swept across the full height/mat matrix [`docs/accuracy.md`](docs/accuracy.md) anticipates.
+
+## Capture
 
 `LoreFetch.Capture` turns the webcam into a stream of `CameraFrame`s via FlashCap. `WebcamFrameSourceFactory` is the entry point; callers receive an `IFrameSource`. The source keeps exactly one frame with `DropOldest` semantics — a slow consumer sees latency, never a backlog — and allocates from `ArrayPool<byte>` so sustained 30 fps produces no garbage. First-frame and mid-stream watchdogs (thresholds in `ScanSettings.FirstFrameTimeoutMs` and `FrameWatchdogMs`) surface device loss: unplug, in-use, and permission-denied all present identically as frames that never arrive.
 
 **The C920 is USB 2.0.** Uncompressed 1080p can only advertise 5 fps on that bus; MJPG at 1080p advertises 30. `WebcamFrameSourceFactory` selects the MJPG 1920×1080 30 fps characteristic from `EnumerateDescriptors()` — what the device actually declares, not a `set()` call that returns `false` and silently falls back. If that format is absent, it throws with the full enumerated list. `IFrameSource.Description` reports the negotiated format, not the requested one.
 
-FlashCap hands the callback raw JPEG bytes for an MJPEG stream — it does not decode. Decode is this stream's job, via `Cv2.ImDecode`, producing BGR24 frames. Those are rotated in-source by `ScanSettings.CameraRotationDegrees` (default 90°, via `Cv2.Rotate`) before reaching the detection pipeline. Per-frame decode time is logged — 30 JPEG decodes per second at 1080p is the first place to look if the preview feels slow.
+FlashCap hands the callback raw JPEG bytes for an MJPEG stream — it does not decode. Decode happens here instead, via `Cv2.ImDecode`, producing BGR24 frames. Those are rotated in-source by `ScanSettings.CameraRotationDegrees` (default 90°, via `Cv2.Rotate`) before reaching the detection pipeline. Per-frame decode time is logged — 30 JPEG decodes per second at 1080p is the first place to look if the preview feels slow.
 
 > [!IMPORTANT]
 > **`win-x64` only.** FlashCap gained an AVFoundation backend in 1.11.0, so `LoreFetch.Capture` builds and nominally runs on macOS — but [issue #182](https://github.com/kekyo/FlashCap/issues/182) reports a native crash on capture start and a BGRA/RGB channel mismatch. A native crash takes down the test host, so the `macos-latest` CI leg compiles but never opens a device. Mac users: builds from source; camera capture is unsupported.
@@ -176,7 +216,7 @@ Hardware-verified on the Windows PC with a Logitech C920 (2026-09-22):
 | Slow consumer | 500 ms/frame for 60 s: +5.7 MB private-bytes growth, capture→consume latency mean 33 ms, max 77 ms |
 | Unplug | `FrameSourceException` raised 2,002 ms after the last frame (`FrameWatchdogMs` = 2000); `DisposeAsync` completed in 23 ms; replugging and reopening worked, first frame in 719 ms |
 
-## Stream D — Collection & export
+## Collection and export
 
 v1 ships two formats: the **native LoreFetch CSV** (source of truth, UTF-8 with BOM so Excel opens it without mangling accented card names) and a **Moxfield** adapter — the one researched tool that provably accepts name-only rows. [Moxfield's importer](https://moxfield.com/help/help-articles/importing-collection) requires only `Name`; we emit `Count` and `Name`, leaving printing columns blank.
 
