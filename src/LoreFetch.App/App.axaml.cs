@@ -45,8 +45,15 @@ public partial class App : Application
 
             try
             {
-                _session = AppComposition
-                    .CreateAsync(mode, loggerFactory, _shutdownCts.Token)
+                // Composed on a thread-pool thread, never inline on the UI
+                // thread: Real mode opens the camera here, and FlashCap's
+                // DirectShow backend is COM. Blocking the STA UI thread on
+                // that open starves the COM message pump it needs, so the
+                // open never completes — the live camera launch hung right
+                // after device enumeration while the Hardware tests (which
+                // run on pool threads) passed.
+                var ct = _shutdownCts.Token;
+                _session = Task.Run(() => AppComposition.CreateAsync(mode, loggerFactory, ct))
                     .GetAwaiter()
                     .GetResult();
             }
