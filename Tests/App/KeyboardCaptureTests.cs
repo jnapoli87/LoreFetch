@@ -34,7 +34,7 @@ public class KeyboardCaptureTests
     // -----------------------------------------------------------------------
 
     private const int Good = 100;
-    private const int Ok   = 200;
+    private const int Ok = 200;
 
     private static RectifiedCard MakeCard() =>
         new([0, 0, 0, 255], stride: 4, PixelLayout.Bgra32, default);

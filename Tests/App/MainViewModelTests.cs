@@ -63,8 +63,8 @@ public class MainViewModelTests
     // -----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(1, true,  false, false)]
-    [InlineData(3, false, true,  false)]
+    [InlineData(1, true, false, false)]
+    [InlineData(3, false, true, false)]
     [InlineData(9, false, false, true)]
     public void IsCountHelpers_ReflectExpectedCount(int count, bool is1, bool is3, bool is9)
     {
