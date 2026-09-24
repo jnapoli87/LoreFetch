@@ -103,6 +103,7 @@ bundled LICENSE/NOTICE file in the local NuGet cache
   Test-only, not shipped in the published app (listed for completeness):
   Avalonia.Headless.XUnit                           12.1.2                MIT
   Microsoft.NET.Test.Sdk                            18.0.0                MIT
+  TngTech.ArchUnitNET                               0.13.4                Apache-2.0
   xunit.v3                                          3.2.2                 Apache-2.0
   xunit.runner.visualstudio                         3.1.5                 Apache-2.0
 
@@ -138,6 +139,10 @@ LICENSE file (bundled file takes precedence where one exists):
   FlashCap, FlashCap.Core ..................... Copyright (c) Kouji Matsui
   CsvHelper .................................... Copyright (c) 2009-2024 Josh Close
   xunit.v3, xunit.runner.visualstudio ......... Copyright (C) .NET Foundation
+  TngTech.ArchUnitNET ......................... TNG Technology Consulting GmbH and
+                                                 contributors (github.com/TNG/ArchUnitNET);
+                                                 the .nuspec has no <copyright> field and
+                                                 names "ArchUnitNET" as author
 
 None of these packages bundle a NOTICE file (Apache-2.0 §4(d)) in their
 nupkg — checked directly for OpenCvSharp4, OpenCvSharp4.runtime.win,

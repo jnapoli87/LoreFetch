@@ -270,4 +270,5 @@ The owner is learning this codebase and works on it at a slow pace. Favour small
 - **One branch per issue**, `fix/<n>-<slug>` or `feat/<n>-<slug>`, off `main`. Never commit directly to `main`.
 - **Every change reaches `main` through a PR** whose description says `Fixes #<n>`. CI must be green on both legs.
 - **Every bug fix carries a regression test**, chaos-tested as above, in the test project of the domain it touches: `Tests/App`, `Tests/Detection`, `Tests/Identification`, `Tests/Lab`, `Tests/Capture`, `Tests/Collection`, or `Tests/Integration` for the seams. See the [domain map](docs/CONTRACTS.md#domain-map).
+- **Dependency direction is enforced by `Tests/Architecture`.** If a rule fails, either the change is wrong or a decision is changing; in the second case update the rule and the doc it cites together, and say why in the PR. Rules are listed in `docs/CONTRACTS.md` under *Dependency rules*.
 - **Plans are scratch.** Plan-mode files stay local and are not committed. Anything in a plan worth keeping becomes an issue, a commit message, or a line in the docs.

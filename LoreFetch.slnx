@@ -9,6 +9,9 @@
   <Folder Name="/Tests/App/">
     <Project Path="Tests/App/LoreFetch.Tests.App.csproj" />
   </Folder>
+  <Folder Name="/Tests/Architecture/">
+    <Project Path="Tests/Architecture/LoreFetch.Tests.Architecture.csproj" />
+  </Folder>
   <Folder Name="/Tests/Capture/">
     <Project Path="Tests/Capture/LoreFetch.Tests.Capture.csproj" />
   </Folder>

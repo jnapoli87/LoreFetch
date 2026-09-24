@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>LoreFetch.Tests.Architecture</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <!-- The core package only: its xUnitV3 adapter would pull in the legacy
+         System.Net.Http / System.Text.RegularExpressions shims. -->
+    <PackageReference Include="TngTech.ArchUnitNET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Every shipped or maintained assembly, so the rules see all of them. -->
+    <ProjectReference Include="..\..\src\LoreFetch.App\LoreFetch.App.csproj" />
+    <ProjectReference Include="..\..\src\LoreFetch.Capture\LoreFetch.Capture.csproj" />
+    <ProjectReference Include="..\..\src\LoreFetch.Core\LoreFetch.Core.csproj" />
+    <ProjectReference Include="..\..\src\LoreFetch.Lab\LoreFetch.Lab.csproj" />
+  </ItemGroup>
+
+</Project>

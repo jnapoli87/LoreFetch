@@ -578,6 +578,24 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 
 `THIRD-PARTY-NOTICES` gains an entry whenever a package lands; the pre-commit hook's advisory list names any that are missing.
 
+## Dependency rules
+
+Enforced by [`Tests/Architecture`](../Tests/Architecture/README.md); a PR that breaks one fails CI. Arrows are "may not depend on".
+
+| Rule | Why (where it is decided) |
+|---|---|
+| `Core/Abstractions` ↛ OpenCvSharp, or anything else in LoreFetch | Frames cross the seam as `byte[]`; the contract types are the bottom of the graph (this file, top) |
+| `Core/Scanning`, `Core/Fakes` ↛ any domain (Detection, Identification, Collection, Export, Trigger, Capture, App, Lab) | The contract surface composes domains through interfaces and must not reach for a real implementation |
+| `Core` ↛ App, Capture, Lab, Avalonia, FlashCap | Core stays portable; the macOS CI leg depends on it (`src/LoreFetch.Core/README.md`) |
+| App ↛ OpenCvSharp, Lab | The UI never writes CV code; the Lab does not ship (`src/LoreFetch.App/README.md`) |
+| App, except `AppComposition` ↛ Detection, Identification, Collection, Export, Capture | Only the composition root knows concrete implementations; the UI holds no per-format knowledge (§ Collection, below) |
+| `Core/Collection`, `Core/Export` ↛ OpenCvSharp, Detection, Identification | "No camera, no UI, no hash, no image processing" (`docs/design/collection.md`) |
+| Detection ↛ Identification, and Identification ↛ Detection | Identification starts from an already-rectified card, however it was produced (CLAUDE.md, hash pipeline) |
+| Real implementations ↛ `Core/Fakes` | Fakes serve demo mode and tests, never as a fallback inside a real implementation |
+| Capture ↛ any `Core` namespace but Abstractions | The camera adapter produces `CameraFrame`s and nothing more |
+| Nothing ↛ `System.Drawing`, `OpenCvSharp.Extensions` | Windows-only; would break the portable build (CLAUDE.md, stack table) |
+
+
 ---
 
 ## Resolved in the architecture review
