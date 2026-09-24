@@ -160,12 +160,17 @@ public class FolderFrameSourceTests
             var source = FolderFrameSource.Open(dir, TimeSpan.FromMilliseconds(5), pool);
 
             // Let the background loop produce (and self-drop) a handful of
-            // frames without anyone ever calling ReadAsync.
-            await Task.Delay(60, TestContext.Current.CancellationToken);
+            // frames without anyone ever calling ReadAsync. Wait for the
+            // rents themselves rather than a fixed delay: the first frame's
+            // decode can take longer than any fixed guess on a cold CI
+            // runner, which made a 60 ms wait flaky on macos-latest. Three
+            // rents with no reader means the capacity-1 channel has already
+            // dropped at least two frames.
+            await WaitUntilAsync(() => pool.RentCount >= 3, TimeSpan.FromSeconds(10),
+                () => $"the producer loop rented only {pool.RentCount} buffers in 10 s");
 
             await source.DisposeAsync();
 
-            Assert.True(pool.RentCount > 0);
             Assert.Equal(pool.RentCount, pool.ReturnCount);
         }
         finally
@@ -272,6 +277,19 @@ public class FolderFrameSourceTests
         var index = Array.FindIndex(Palette, c => c.Val0 == b && c.Val1 == g && c.Val2 == r);
         Assert.True(index >= 0, $"top-left pixel ({b},{g},{r}) matches no palette colour");
         return index;
+    }
+
+    /// Polls `condition` until it holds, failing with `describe()` if it has
+    /// not within `timeout`. For waiting on the source's background loop
+    /// without guessing how long a cold machine takes to get going.
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout, Func<string> describe)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, describe());
+            await Task.Delay(5, TestContext.Current.CancellationToken);
+        }
     }
 
     private static void DeleteTempDirectory(string dir)
