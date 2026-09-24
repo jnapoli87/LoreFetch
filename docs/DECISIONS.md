@@ -110,6 +110,8 @@ Dedup identity is **`OracleId` + condition** → increment quantity; the name is
 
 Modern frame (2015+), English, non-foil, single-faced. **Oracle name only — no printing/set resolution**, which the hash cannot do anyway since reprints share art. Consequently no price column (no printing → no unambiguous price).
 
+**Camera hardware is out of scope.** LoreFetch needs a webcam looking straight down from a known height; how it is held there (a gantry, duct tape) is the user's business, not this repo's. The 3D-printed mount in `docs/history/` was a hackathon rig item and is not planned.
+
 Ladder: **basic lands → normal cards → everything else is stretch.**
 
 ⚠️ **Lands are a smoke test, not a benchmark.** Every Forest art collapses to "Forest", so retrieving the *wrong* Forest still scores correct@1 — accuracy on lands is inflated by a category that structurally cannot fail. Full-art lands also lack a type line where the hash region expects one. **Measure accuracy on normal cards only.**

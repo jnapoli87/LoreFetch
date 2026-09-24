@@ -112,7 +112,7 @@ Using something else? Open an issue with the camera, resolution and OS and it ge
 
 ## Next
 
-Roughly in order: a worth-sleeving flag for bulk sorting · in-app card data updates · foils · set and printing detection from the collector number · double-faced cards · a supported macOS release · the 3D-printed mount.
+Roughly in order: a worth-sleeving flag for bulk sorting · in-app card data updates · foils · set and printing detection from the collector number · double-faced cards · a supported macOS release.
 
 Reasoning in [`docs/history/PLAN.md`](docs/history/PLAN.md#stretch-goals--after-v010).
 
