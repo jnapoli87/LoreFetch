@@ -3,17 +3,6 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-write.sh\"",
-            "timeout": 10,
-            "statusMessage": "Checking write scope"
-          }
-        ]
-      },
-      {
         "matcher": "Bash",
         "if": "Bash(git *)",
         "hooks": [

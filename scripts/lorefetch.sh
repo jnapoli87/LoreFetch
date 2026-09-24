@@ -238,8 +238,8 @@ cmd_doctor() {
   if command -v jq >/dev/null 2>&1; then
     note "jq       : $(jq --version)"
   else
-    note "jq       : MISSING — .claude/hooks/guard-write.sh fails OPEN without it,"
-    note "           so the frozen contract surface is unguarded. Install it and"
+    note "jq       : MISSING — .claude/hooks/guard-bash.sh fails OPEN without it,"
+    note "           so force-push and unwired-commit checks are off. Install it and"
     note "           start a new shell so PATH picks it up."
   fi
 

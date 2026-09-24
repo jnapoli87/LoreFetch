@@ -202,7 +202,7 @@ slugify() {
 }
 
 # Windows-native path for a value handed to a .NET process under Git Bash —
-# same trick guard-write.sh uses the other direction (win_to_unix).
+# the inverse of converting a Windows path to a Git Bash one.
 native_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
