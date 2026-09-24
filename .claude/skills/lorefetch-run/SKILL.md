@@ -15,7 +15,7 @@ scripts/lorefetch.sh run       # build, then launch the app
 scripts/lorefetch.sh           # pull, build, test, run
 ```
 
-`--no-pull`, `--debug`, `--verbose`, `--all-tests`, `--hardware`, `--filter <expr>`, and `-- <args>` to pass arguments to the app. `--help` lists them.
+`--no-pull`, `--debug`, `--verbose`, `--all-tests`, `--hardware`, `--filter <expr>`, `--results <dir>` (TRX and coverage for `scripts/Metrics.cs`, as CI's Windows leg does), and `-- <args>` to pass arguments to the app. `--help` lists them.
 
 ## How to invoke it from the Bash tool — read this before the first call
 

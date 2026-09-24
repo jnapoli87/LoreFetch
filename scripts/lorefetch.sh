@@ -23,6 +23,8 @@
 #   --filter <expr>    override the test filter entirely
 #   --hardware         include Category=Hardware tests (needs the C920)
 #   --all-tests        no category filter at all
+#   --results <dir>    also write TRX results and code coverage to <dir>
+#                      (what scripts/Metrics.cs reads; CI's Windows leg)
 #   -v, --verbose      show full dotnet output instead of the tail
 #
 # POSIX sh on purpose: on Windows this runs under Git Bash, which is already
@@ -45,6 +47,7 @@ VERBOSE=0
 FILTER=""
 INCLUDE_HARDWARE=0
 NO_FILTER=0
+RESULTS_DIR=""
 CMD=""
 APP_ARGS=""
 
@@ -68,6 +71,7 @@ while [ $# -gt 0 ]; do
     --all-tests)   NO_FILTER=1 ;;
     -v|--verbose)  VERBOSE=1 ;;
     --filter)      shift; [ $# -gt 0 ] || die "--filter needs a value"; FILTER=$1 ;;
+    --results)     shift; [ $# -gt 0 ] || die "--results needs a directory"; RESULTS_DIR=$1 ;;
     --)            shift; APP_ARGS="$*"; break ;;
     -h|--help)     sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             die "unknown argument: $1  (try --help)" ;;
@@ -326,6 +330,11 @@ cmd_test() {
     say "Test ($CONFIG, no filter)"
     note "dotnet test $SLN -c $CONFIG --no-build"
     set -- test "$SLN" -c "$CONFIG" --no-build
+  fi
+
+  if [ -n "$RESULTS_DIR" ]; then
+    note "results and coverage -> $RESULTS_DIR"
+    set -- "$@" --logger trx --collect "XPlat Code Coverage" --results-directory "$RESULTS_DIR"
   fi
 
   log=$(mktemp "${TMPDIR:-/tmp}/lorefetch.XXXXXX")

@@ -1,0 +1,17 @@
+<Project>
+
+  <!-- Import the repo-root Directory.Build.props first: MSBuild stops at the
+       nearest one, so this file must pull the root one in itself. -->
+  <Import Project="$(MSBuildThisFileDirectory)../Directory.Build.props" />
+
+  <!-- Every project under Tests/ is a test project. coverlet.collector lets
+       the test run collect "XPlat Code Coverage", which the CI metrics
+       ratchet (scripts/Metrics.cs) reads. It does nothing unless asked. -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

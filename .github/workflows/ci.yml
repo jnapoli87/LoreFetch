@@ -8,6 +8,9 @@ on:
   push:
     branches: [main]
   pull_request:
+    # labeled/unlabeled: the metrics job honours the tests-removed and
+    # coverage-drop labels, so changing a label has to re-run it.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_dispatch:
 
 concurrency:
@@ -74,9 +77,25 @@ jobs:
       # same interpreter hooks/pre-commit and .claude/hooks/*.sh already
       # require.
       # ---------------------------------------------------------------------
+      # The Windows leg also writes TRX results and coverage, which the
+      # metrics job below compares with main. One leg is enough, and it must
+      # be the same leg every time, so the numbers are comparable.
       - name: Test
         shell: bash
-        run: bash scripts/lorefetch.sh test --no-pull
+        run: bash scripts/lorefetch.sh test --no-pull ${{ runner.os == 'Windows' && '--results artifacts/test-results' || '' }}
+
+      - name: Collect metrics
+        if: runner.os == 'Windows'
+        shell: bash
+        run: dotnet run scripts/Metrics.cs -- collect artifacts/test-results artifacts/metrics.json
+
+      - name: Upload metrics
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics
+          path: artifacts/metrics.json
+          retention-days: 90
 
       # Not run here, deliberately:
       #   Accuracy  — a measurement committed as a table, not a pass/fail gate,
@@ -90,3 +109,52 @@ jobs:
       #               LOREFETCH_REQUIRE_REAL=1 on the local win-x64 machine,
       #               NOT as zero skips in CI, which is unreachable by
       #               construction. See docs/TESTING.md and finding V7.
+
+  # The test-count and coverage ratchet (scripts/Metrics.cs). Compares this
+  # PR's metrics with the latest successful push to main. Fails on fewer
+  # tests, fewer tests that ran, or lost coverage in a shipped assembly,
+  # unless the PR carries the tests-removed or coverage-drop label. With no
+  # baseline yet (or one past the 90-day artifact retention) it passes and
+  # says so.
+  metrics:
+    name: metrics
+    needs: build-and-test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Download this run's metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: metrics
+          path: current
+
+      - name: Download main's metrics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main --event push                      --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -n "$run_id" ] && gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name metrics --dir baseline; then
+            echo "Baseline: main run $run_id"
+          else
+            echo "No baseline metrics from main yet."
+          fi
+
+      - name: Compare
+        env:
+          ALLOW_TESTS_REMOVED: ${{ contains(github.event.pull_request.labels.*.name, 'tests-removed') }}
+          ALLOW_COVERAGE_DROP: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-drop') }}
+        run: |
+          set -- compare baseline/metrics.json current/metrics.json --summary "$GITHUB_STEP_SUMMARY"
+          [ "$ALLOW_TESTS_REMOVED" = true ] && set -- "$@" --allow-tests-removed
+          [ "$ALLOW_COVERAGE_DROP" = true ] && set -- "$@" --allow-coverage-drop
+          dotnet run scripts/Metrics.cs -- "$@"

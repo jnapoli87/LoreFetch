@@ -45,6 +45,8 @@ Its corollary matters too: a skip that survives past its checkpoint is a bug, no
 | All unit tests | Hardware verification (can't run in CI) |
 | The fakes end-to-end test | Work in other open PRs |
 | The tests of every domain the PR touches | Tests skipped for a missing artifact |
+| The architecture rules (`Tests/Architecture`) | |
+| `contract-check`, and the `metrics` ratchet (see *CI*) | |
 
 Each domain has its own test project, and the end-to-end suite lives in `Tests/Integration/`, so a failure points at a domain rather than at "the tests". See the [domain map](CONTRACTS.md#domain-map).
 
@@ -122,6 +124,15 @@ Negotiated 1080p30 MJPG proven from the device's own characteristics; flat memor
 `windows-latest` **and** `macos-latest`. The macOS leg is not about shipping macOS — it's what mechanically enforces that `Core` stays free of Windows-only dependencies. If it goes red because someone reached for a Windows API, that's the leg doing its job.
 
 Both legs run Unit + Integration(synthetic) + Integration(end-to-end), and both filter out `Category=Hardware`. The macOS leg additionally filters out `Category=WindowsOnly`, which is how the golden hashes stay on one architecture. Neither runs Accuracy or Hardware.
+
+Two more checks run on every PR, and each has a label that says "I meant it":
+
+| Check | Fails when | Override label |
+|---|---|---|
+| `contract-check` | The PR touches the contract surface (`Core/Abstractions`, `Core/Scanning`, `Core/Fakes`), `Tests/Integration`, `Tests/Architecture`, or any build file | `contract-change` |
+| `metrics` | Against `main`'s latest numbers: a test project has fewer tests; fewer tests *ran* (an existing test became a skip); or line coverage of `LoreFetch.Core`, `.Capture` or `.App` fell by more than 0.5 points | `tests-removed`, `coverage-drop` |
+
+`metrics` is a ratchet, not a target: nothing may go backwards unannounced. It counts tests that *ran* rather than skips, because in CI every real-data test skips, so a new gated test adds a skip without taking anything away. `*PerformanceTests` classes are left out of the ran count, because their soft time budgets skip or run depending on the machine. Lab coverage is reported but never fails a PR. The numbers come from the Windows leg only (`scripts/lorefetch.sh test --results <dir>`, then `scripts/Metrics.cs`), and the table lands in the job summary. Adding or removing a label re-runs CI, which is how an override takes effect.
 
 ---
 
