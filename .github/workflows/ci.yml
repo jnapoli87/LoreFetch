@@ -110,6 +110,24 @@ jobs:
       #               NOT as zero skips in CI, which is unreachable by
       #               construction. See docs/TESTING.md and finding V7.
 
+  # Formatting per .editorconfig: `dotnet format --verify-no-changes`, via the
+  # same entry point as a local `scripts/lorefetch.sh lint`. One Linux leg is
+  # enough; .gitattributes pins LF, so the result does not depend on the OS.
+  # To fix a failure locally: scripts/lorefetch.sh lint --fix.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Lint
+        run: bash scripts/lorefetch.sh lint
+
   # The test-count and coverage ratchet (scripts/Metrics.cs). Compares this
   # PR's metrics with the latest successful push to main. Fails on fewer
   # tests, fewer tests that ran, or lost coverage in a shipped assembly,

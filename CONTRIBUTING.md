@@ -6,7 +6,7 @@
 2. **Branch from `main`:** `fix/<issue>-<slug>` or `feat/<issue>-<slug>`, e.g. `fix/3-flaky-folderframesource-test`.
 3. **Commit** with messages that say why, not just what. A bug fix carries a regression test in the test project of the domain it touches ([domain map](docs/CONTRACTS.md#domain-map)), **chaos-tested**: re-apply the bug, watch the test fail for the right reason, revert.
 4. **Open a PR** whose body starts `Fixes #<issue>`, so merging closes the issue.
-5. **CI must be green:** both build legs, `contract-check`, and `metrics`. Their override labels (`contract-change`, `tests-removed`, `coverage-drop`) are for deliberate changes; say why in the PR. See [`docs/TESTING.md`](docs/TESTING.md#ci).
+5. **CI must be green:** both build legs, `lint`, `contract-check`, and `metrics`. For a `lint` failure, `scripts/lorefetch.sh lint --fix` applies the formatting. Their override labels (`contract-change`, `tests-removed`, `coverage-drop`) are for deliberate changes; say why in the PR. See [`docs/TESTING.md`](docs/TESTING.md#ci).
 6. **Squash-merge.** The branch is deleted automatically.
 
 `main` accepts changes only through PRs.
@@ -22,7 +22,7 @@ The reasoning goes in commit messages and code comments, where it stays with the
 
 ## Build and test
 
-`scripts/lorefetch.sh test` builds and runs the suite exactly as CI does (`--help` lists the options). Tests that need real data skip without it; see [`Tests/Support/README.md`](Tests/Support/README.md).
+`scripts/lorefetch.sh test` builds and runs the suite exactly as CI does, and `scripts/lorefetch.sh lint` checks formatting (`--help` lists the options). Formatting rules live in `.editorconfig`. Tests that need real data skip without it; see [`Tests/Support/README.md`](Tests/Support/README.md).
 
 ## Never commit card imagery
 

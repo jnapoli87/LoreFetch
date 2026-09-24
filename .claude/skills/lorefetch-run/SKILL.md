@@ -11,6 +11,7 @@ description: Pull, build, test or run the LoreFetch app, or report the local env
 scripts/lorefetch.sh doctor    # environment report; changes nothing
 scripts/lorefetch.sh build     # restore + build Release
 scripts/lorefetch.sh test      # build, then test with the right filter
+scripts/lorefetch.sh lint      # formatting check, as CI runs it (--fix applies it)
 scripts/lorefetch.sh run       # build, then launch the app
 scripts/lorefetch.sh           # pull, build, test, run
 ```
