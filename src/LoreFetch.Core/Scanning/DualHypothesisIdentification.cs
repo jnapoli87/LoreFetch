@@ -1,5 +1,4 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Detection;
 
 namespace LoreFetch.Core.Scanning;
 

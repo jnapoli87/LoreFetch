@@ -25,7 +25,7 @@ Core has **no Avalonia/UI dependency and no FlashCap dependency**, and must stay
 
 ## Internals
 
-**Detection — `Detection/`.** `ContourCardDetector` finds card-shaped contours per frame (aspect + area filtered, discard reasons logged) and `PerspectiveRectifier` warps the detected quad to the canonical 488×680 `RectifiedCard`, pinned `INTER_LINEAR` (`warpPerspective` doesn't support `INTER_AREA`). `QuadExpansion` supplies the border-expanded second hypothesis, and `FrameMat` converts a `CameraFrame` to an OpenCV `Mat`.
+**Detection — `Detection/`.** `ContourCardDetector` finds card-shaped contours per frame (aspect + area filtered, discard reasons logged) and `PerspectiveRectifier` warps the detected quad to the canonical 488×680 `RectifiedCard`, pinned `INTER_LINEAR` (`warpPerspective` doesn't support `INTER_AREA`). `FrameMat` converts a `CameraFrame` to an OpenCV `Mat`.
 
 **Identification — `Identification/`.** `ReferenceTransform` and `QueryTransform` hold the reference-only and shared hash steps respectively — each exists exactly once — and `CardHasher` turns a prepared image into the 1024-bit `CardHash`. `HashIndexFile` reads and writes the committed `.lfidx` index, and `HashCardIdentifier` implements `ICardIdentifier` over a loaded index, matching by full Hamming distance with no threshold filtering. Nothing here depends on `Detection/`: identification starts from an already-rectified card.
 

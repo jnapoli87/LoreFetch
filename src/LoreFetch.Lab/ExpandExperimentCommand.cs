@@ -1,6 +1,7 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Identification;
 using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
+using LoreFetch.Core.Scanning;
 using LoreFetch.Lab.Accuracy;
 using LoreFetch.Lab.CropScale;
 using LoreFetch.Lab.Images;

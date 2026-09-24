@@ -1,6 +1,6 @@
 using OpenCvSharp;
 
-namespace LoreFetch.App;
+namespace LoreFetch.Core.Fakes;
 
 /// Generates a small folder of synthetic, non-card placeholder images for
 /// `FolderFrameSourceFactory` — the Fakes-mode frame source this app runs
@@ -11,7 +11,7 @@ namespace LoreFetch.App;
 /// OpenCvSharp — already a `Core` dependency — into a fresh OS temp
 /// directory. Nothing produced here resembles a card, and nothing is ever
 /// written inside the repo.
-internal static class DemoFrames
+public static class DemoFrames
 {
     private static readonly Scalar[] Palette =
     [

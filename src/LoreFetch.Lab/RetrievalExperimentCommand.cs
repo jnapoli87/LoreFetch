@@ -1,6 +1,6 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Identification;
 using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;

@@ -1,6 +1,6 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Identification;
 using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
 using LoreFetch.Lab.Accuracy;
 using LoreFetch.Lab.Synthetic;
 using Microsoft.Extensions.Logging.Abstractions;

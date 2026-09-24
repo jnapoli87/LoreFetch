@@ -1,3 +1,4 @@
+using LoreFetch.Core.Scanning;
 using OpenCvSharp;
 
 namespace LoreFetch.Lab.CropScale;

@@ -1,6 +1,6 @@
 # LoreFetch.Tests.Detection
 
-Unit and real-capture tests for card detection and rectification: `ContourCardDetector` (aspect and area filtering, discard reasons, corner ordering, dedupe, the retrieval mode), `PerspectiveRectifier` (warp to the canonical 488×680 card, pinned `INTER_LINEAR`) and `QuadExpansion`. The Detection domain in the [domain map](../../docs/CONTRACTS.md#domain-map); design record in [`../../docs/design/identification.md`](../../docs/design/identification.md) (§B5).
+Unit and real-capture tests for card detection and rectification: `ContourCardDetector` (aspect and area filtering, discard reasons, corner ordering, dedupe, the retrieval mode) and `PerspectiveRectifier` (warp to the canonical 488×680 card, pinned `INTER_LINEAR`). The Detection domain in the [domain map](../../docs/CONTRACTS.md#domain-map); design record in [`../../docs/design/identification.md`](../../docs/design/identification.md) (§B5).
 
 ## Running
 

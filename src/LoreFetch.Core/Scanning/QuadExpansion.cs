@@ -1,10 +1,10 @@
 using LoreFetch.Core.Abstractions;
 
-namespace LoreFetch.Core.Detection;
+namespace LoreFetch.Core.Scanning;
 
 /// Scales a detected `CardQuad` about its own centroid, along its own
 /// (possibly rotated) width/height axes, independently. Moved into
-/// `Core/Detection` from `LoreFetch.Lab.CropScale` (package DH) because
+/// Core (now `Core/Scanning`) from `LoreFetch.Lab.CropScale` (package DH) because
 /// package E1a's finding is no longer diagnostic-only: on `tight_white` and
 /// the matching black-mat frame, the detector's own accepted quad sits on
 /// the INNER edge of the card's black border -- the border itself is

@@ -1,5 +1,5 @@
-using LoreFetch.Core.Identification;
 using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Lab;
 using LoreFetch.Lab.Accuracy;
