@@ -1,15 +1,18 @@
 # Stream reviews — directions
 
-Step 2 of the review sequence in [`PLAN.md`](PLAN.md#review-sequence--before-any-code): four plan reviewers, one per stream, run in parallel **before any code exists**. The architecture review has already settled boundaries, ownership and the contract surface; each reviewer now goes deep on one stream **without the others' context**.
+> [!IMPORTANT]
+> **Historical — the v0.1 hackathon build record, not current instructions.** It describes a parallel four-stream agent workflow (worktrees, a frozen contract surface, stream ownership) that was retired after v0.1.0. Settled decisions live in [`CLAUDE.md`](../../CLAUDE.md), design in [`docs/design/`](../design/), and current work in GitHub Issues.
+
+Step 2 of the review sequence in [`docs/history/PLAN.md`](PLAN.md#review-sequence--before-any-code): four plan reviewers, one per stream, run in parallel **before any code exists**. The architecture review has already settled boundaries, ownership and the contract surface; each reviewer now goes deep on one stream **without the others' context**.
 
 Isolation is the point. A reviewer who has read the whole plan inherits its assumptions; a reviewer who sees only its own stream and the seam asks whether *this* stream actually works.
 
 | Stream | Doc | Branch |
 |---|---|---|
-| A — UI | [`stream-a-ui.md`](stream-a-ui.md) | `review/stream-a` |
-| B — Identification | [`stream-b-identification.md`](stream-b-identification.md) | `review/stream-b` |
-| C — Capture | [`stream-c-capture.md`](stream-c-capture.md) | `review/stream-c` |
-| D — Collection & export | [`stream-d-export.md`](stream-d-export.md) | `review/stream-d` |
+| A — UI | [`docs/design/app.md`](../design/app.md) | `review/stream-a` |
+| B — Identification | [`docs/design/identification.md`](../design/identification.md) | `review/stream-b` |
+| C — Capture | [`docs/design/capture.md`](../design/capture.md) | `review/stream-c` |
+| D — Collection & export | [`docs/design/collection.md`](../design/collection.md) | `review/stream-d` |
 
 ---
 
@@ -55,7 +58,7 @@ Fill in `<X>` and `<doc>` from the table. Use it verbatim.
 ```text
 You are the Stream <X> plan reviewer for LoreFetch.
 
-Read docs/stream-review-directions.md, section "For each stream reviewer", and follow it exactly. Your stream doc is docs/<doc>.
+Read docs/history/stream-review-directions.md, section "For each stream reviewer", and follow it exactly. Your stream doc is docs/<doc>.
 ```
 
 ---
@@ -67,11 +70,11 @@ You review **one stream's plan**, before any code exists. Your job is to find wh
 ### Read
 
 - Your stream doc — the one named in your launch prompt.
-- [`CONTRACTS.md`](CONTRACTS.md) — the seam your stream builds against.
-- [`../CONTEXT.md`](../CONTEXT.md) — the glossary. Use its terms; avoid the ones it lists under *Avoid*.
+- [`CONTRACTS.md`](../CONTRACTS.md) — the seam your stream builds against.
+- [`../CONTEXT.md`](../../CONTEXT.md) — the glossary. Use its terms; avoid the ones it lists under *Avoid*.
 - `CLAUDE.md` loads automatically. Its settled decisions bind you.
 
-**Don't read** `PLAN.md`, `TESTING.md`, other streams' docs, other review branches, or this repo's git history. They're not secret — they're out of scope, and reading them brings in exactly the cross-stream assumptions this review is meant to avoid.
+**Don't read** `docs/history/PLAN.md`, `TESTING.md`, other streams' docs, other review branches, or this repo's git history. They're not secret — they're out of scope, and reading them brings in exactly the cross-stream assumptions this review is meant to avoid.
 
 ### Do
 

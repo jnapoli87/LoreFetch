@@ -14,7 +14,7 @@ namespace LoreFetch.Lab.CropScale;
 ///
 /// Lives in `LoreFetch.Lab`, not `LoreFetch.Core.Imaging` (package
 /// B5c-cleanup, moved from `Core/Imaging` 2026-09-22): B5c's 3-scale crop
-/// sweep was REJECTED for v1 (orchestration-plan.md "Rulings -- the 90%
+/// sweep was REJECTED for v1 (docs/history/orchestration-plan.md "Rulings -- the 90%
 /// gate and B5c's sweep" -- every real wrong match sits at 272-344,
 /// outside the ~5% crop tolerance this transform's own curve identified,
 /// so crop error is not what is failing real cards). This type is

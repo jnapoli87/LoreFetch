@@ -1,6 +1,6 @@
 # Reconciliation — stream reviews → one contract surface
 
-Step 3 of the review sequence in [`PLAN.md`](PLAN.md#review-sequence--before-any-code). The four stream reviews ran in isolation and raised **20 proposed contract changes and 20 open questions**. This file is the record of what was decided on each, and why.
+Step 3 of the review sequence in [`docs/history/PLAN.md`](history/PLAN.md#review-sequence--before-any-code). The four stream reviews ran in isolation and raised **20 proposed contract changes and 20 open questions**. This file is the record of what was decided on each, and why.
 
 > [!NOTE]
 > **All 20 contract changes were accepted — four of them in a stronger form than proposed — and all 20 open questions ruled on.** The seam changed in three structural ways: the pipeline gained an async, thread-safe `CaptureAsync` and an error event, two fakes were added because stream A's export view was otherwise unbuildable against fakes at all, and the reference/query transforms are now documented as **deliberately asymmetric**, which rewrites *the one gate that matters most*.
@@ -52,7 +52,7 @@ C raised that `IScanPipeline` has no error event, so a dead camera surfaces as a
 
 All three named packages that cannot be added after the freeze, and C additionally needed a logging seam that did not exist on the contract surface at all.
 
-**Decision: one reconciled package table, in [`PLAN.md`](PLAN.md) Stream 0 item 1**, and **`Microsoft.Extensions.Logging.Abstractions` (MIT) is the logging seam** — chosen over a hand-rolled interface because it is the .NET standard, costs one small reference, and needs no adapter for whatever sink gets wired later. Three of stream C's *done-when* criteria are phrased "the log shows…", so without this its only option was `Console.WriteLine`.
+**Decision: one reconciled package table, in [`docs/history/PLAN.md`](history/PLAN.md) Stream 0 item 1**, and **`Microsoft.Extensions.Logging.Abstractions` (MIT) is the logging seam** — chosen over a hand-rolled interface because it is the .NET standard, costs one small reference, and needs no adapter for whatever sink gets wired later. Three of stream C's *done-when* criteria are phrased "the log shows…", so without this its only option was `Console.WriteLine`.
 
 `CLAUDE.md`'s own guidance settles the marginal cases: over-reference rather than under-reference, since an unused `PackageReference` costs nothing and a missing one stalls a fork.
 
@@ -264,7 +264,7 @@ Both are low-stakes and reversible up to the freeze; flag either if you disagree
 |---|---|
 | [`CONTRACTS.md`](CONTRACTS.md) | All 20 accepted contract changes. New: `IFrameSourceFactory`, `FrameSourceException`, `CollectionStoreException`, `ScanPipelineFactory`, `CardCandidate.ArtworkId`, `IScanPipeline.SourceFailed`/`SourceDescription`, `Capture()` → `CaptureAsync`. Seven fakes. Logging section. v1 adapter table. Write-sequence and BOM rules. Six `ScanSettings` additions. |
 | [`../CLAUDE.md`](../CLAUDE.md) | Five stale claims corrected: the asymmetric transform and the rewritten gate; the unsourced 60 fps figure removed; the stale macOS rationale; NTFS/APFS atomicity softened with the same-directory temp-file requirement; `small` → `normal` with re-measured counts. Early rejection struck. New cross-architecture risk. |
-| [`PLAN.md`](PLAN.md) | Review steps 2 and 3 marked done. Stream 0: the reconciled package table, **`net10.0`** with a must-prove-before-freeze gate, seven fakes, pipeline factory, thresholds loader; estimate ~3.5h → ~4h. Round-trip gate criterion restated as a floor. |
+| [`docs/history/PLAN.md`](history/PLAN.md) | Review steps 2 and 3 marked done. Stream 0: the reconciled package table, **`net10.0`** with a must-prove-before-freeze gate, seven fakes, pipeline factory, thresholds loader; estimate ~3.5h → ~4h. Round-trip gate criterion restated as a floor. |
 | `../THIRD-PARTY-NOTICES` | Cited files corrected to `Code/CardData.h`, `Code/CardData.cpp`, `Code/QueryThread.cpp`; the ⚠ VERIFY block replaced with the completed verification. |
 | `stream-{a,b,c,d}-*.md` | Unchanged here — each carries its own reviewer's inline corrections and findings on branch `review/stream-{a,b,c,d}`, still to be merged. |
 

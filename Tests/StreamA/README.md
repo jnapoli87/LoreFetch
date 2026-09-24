@@ -1,6 +1,6 @@
 # LoreFetch.Tests.StreamA
 
-Unit tests for `LoreFetch.App` and `Core/Trigger` — view-model logic, tile-state interaction and the auto-capture trigger's state machine. Owned exclusively by **Stream A** (worktree `stream-a`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries).
+Unit tests for `LoreFetch.App` and `Core/Trigger` — view-model logic, tile-state interaction and the auto-capture trigger's state machine. Owned exclusively by **Stream A** (worktree `stream-a`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map).
 
 ## What it covers
 

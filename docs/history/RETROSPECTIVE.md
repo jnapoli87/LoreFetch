@@ -1,5 +1,8 @@
 # Retrospective — what the build actually produced
 
+> [!IMPORTANT]
+> **Historical — the v0.1 hackathon build record, not current instructions.** It describes a parallel four-stream agent workflow (worktrees, a frozen contract surface, stream ownership) that was retired after v0.1.0. Settled decisions live in [`CLAUDE.md`](../../CLAUDE.md), design in [`docs/design/`](../design/), and current work in GitHub Issues.
+
 > [!NOTE]
 > The contract surface held: 10 interfaces, 558 lines, zero infrastructure leakage, every one backed by both a real implementation and a fake. That is what made four parallel streams possible, and it survived contact with all four. The two places complexity actually accumulated are `AppComposition.cs` (834 lines) and `MainWindow.axaml.cs` (829 lines) — both in the App layer, both fixable without touching the contracts.
 

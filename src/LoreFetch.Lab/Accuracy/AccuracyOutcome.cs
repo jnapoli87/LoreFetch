@@ -4,7 +4,7 @@ namespace LoreFetch.Lab.Accuracy;
 
 /// One slot's classification. `Unresolved`, `NoDetection` and
 /// `DroppedFrame` are ALL "no-match" for the purposes of the required
-/// correct@1/wrong@1/no-match three-bucket 100% sum (orchestration-plan.md
+/// correct@1/wrong@1/no-match three-bucket 100% sum (docs/history/orchestration-plan.md
 /// B6: "the three buckets sum to 100%") -- from the collection's point of
 /// view a slot the harness never got a confident identification for is
 /// indistinguishable from one that got no confident match, either way

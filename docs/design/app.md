@@ -1,13 +1,16 @@
-# Stream A — UI
+# App — design record
 
 **Largest surface, lowest risk.** Builds entirely against fakes and is never blocked by another stream — not at the start, not at the end.
 
-Owns (exclusive write access): `LoreFetch.App/**`, `LoreFetch.Core/Trigger/**`, `Tests/StreamA/**`, the stream A section of `README.md`
-Consumes: `Core/Abstractions` and `Core/Scanning` (both frozen — see [`CONTRACTS.md`](CONTRACTS.md)), the **seven** fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`, `StubCollectionStore`, `StubCollectionExporter`), `ScanPipelineFactory`, and every registered `ICollectionExporter`
-Must not touch: `Core/Identification`, `Core/Imaging`, `Core/Collection`, `Core/Export`, `LoreFetch.Capture`, the fakes, any `.csproj`, `LoreFetch.slnx`
+> [!NOTE]
+> **Design record from v0.1.** Written as the hackathon's Stream A spec. Code comments cite its section IDs (A0, A1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
+>
+> Code: `src/LoreFetch.App`, `src/LoreFetch.Core/Trigger`. Tests: `Tests/StreamA`.
+
+Consumes: `Core/Abstractions` and `Core/Scanning` (see [`CONTRACTS.md`](../CONTRACTS.md)), the **seven** fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`, `StubCollectionStore`, `StubCollectionExporter`), `ScanPipelineFactory`, and every registered `ICollectionExporter`
 
 > [!NOTE]
-> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](../CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](../RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
 >
 > - **All 8 proposed contract changes accepted.** `StubCollectionStore` and `StubCollectionExporter` now exist, so A7/A8 are no longer blocked.
 > - **`Capture()` is now `Task<Cohort?> CaptureAsync(CancellationToken)`** — thread-safe, and awaited off the UI thread. This was upgraded beyond what the review asked for: documenting the old shape would have frozen a race.
@@ -73,7 +76,7 @@ Quads are in frame coordinates, so the overlay needs the frame→control transfo
 `ScanSettings` is a plain mutable class with no `INotifyPropertyChanged`, so bind the selector to a view-model property that writes through to it rather than to the settings object directly. The cross-thread write is benign — the UI thread writes `ExpectedCount` while the pipeline thread reads it, and `int` reads and writes are atomic — but it is a write the pipeline will observe on some later frame, not immediately. This selector is also where an **auto-capture on/off toggle** belongs, once `ScanSettings` has somewhere to put it (*Proposed contract changes*).
 
 ### A4 — Cohort grid
-A tile per `CohortTile`: thumbnail from `RectifiedCard`, proposed oracle name, match distance. Four states per [`CONTRACTS.md`](CONTRACTS.md):
+A tile per `CohortTile`: thumbnail from `RectifiedCard`, proposed oracle name, match distance. Four states per [`CONTRACTS.md`](../CONTRACTS.md):
 
 | State | Appearance |
 |---|---|
@@ -182,7 +185,7 @@ Pipeline failure reaches the UI through the `Task` returned by `RunAsync` — wh
 
 ## Plan review: research targets
 
-For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). Check each against primary sources — official docs, release notes, source code — and record what you found.
+For the pre-build stream review (see [`docs/history/stream-review-directions.md`](../history/stream-review-directions.md)). Check each against primary sources — official docs, release notes, source code — and record what you found.
 
 1. **Avalonia 12.1.2 preview path.** Does `WriteableBitmap.Lock()` + `RowBytes` + `InvalidateVisual()` still work as described in 12.x? Is the "60 fps @ 1080p" ceiling measured on 12, or on 11?
 2. **Keyboard handling.** Confirm the tunnelling-handler approach for Space/Enter in Avalonia 12, and whether a focused `Button`/`TextBox` still swallows them.

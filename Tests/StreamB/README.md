@@ -1,6 +1,6 @@
 # LoreFetch.Tests.StreamB
 
-Unit and synthetic-integration tests for `Core/Identification`, `Core/Imaging` and `LoreFetch.Lab` — the hash port, card detection/rectification, and index-build tooling. Owned exclusively by **Stream B** (worktree `stream-b`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries).
+Unit and synthetic-integration tests for `Core/Identification`, `Core/Imaging` and `LoreFetch.Lab` — the hash port, card detection/rectification, and index-build tooling. Owned exclusively by **Stream B** (worktree `stream-b`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map).
 
 ## What it covers
 

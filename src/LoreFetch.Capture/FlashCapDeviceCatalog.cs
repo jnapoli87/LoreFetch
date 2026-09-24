@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace LoreFetch.Capture;
 
-/// The FlashCap-facing shim. Per docs/stream-c-capture.md's "Done when":
+/// The FlashCap-facing shim. Per docs/design/capture.md's "Done when":
 /// "the FlashCap-facing shim is the only code that cannot be tested...
 /// keep it as close to nothing as possible." `FlashCap.CaptureDeviceDescriptor`
 /// cannot be constructed as a test double — its `Identity` accessor is
@@ -29,7 +29,7 @@ internal static class FlashCapDeviceCatalog
     /// Enumerates every backend FlashCap exposes on this platform — on
     /// Windows, DirectShow, Video for Windows and Media Foundation,
     /// concatenated with no selector, so one physical camera can appear up
-    /// to three times (stream-c-capture.md C1) — and logs each one's
+    /// to three times (docs/design/capture.md C1) — and logs each one's
     /// backend and full characteristic list at Information, permanently:
     /// C1 calls this "the fastest way to explain any capture problem
     /// later, on any user's machine."

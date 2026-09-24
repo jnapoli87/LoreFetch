@@ -6,7 +6,7 @@ namespace LoreFetch.Core.Trigger;
 /// accept the cohort"): fires once the exact expected count has been held
 /// stable for `ScanSettings.SettleMilliseconds`, then refuses to fire again
 /// until "the scene breaks" — any snapshot whose quad count differs from
-/// `expectedCount`, zero included (docs/stream-a-ui.md A0). Without that
+/// `expectedCount`, zero included (docs/design/app.md A0). Without that
 /// re-arm rule a static tableau would re-fire every settle window forever.
 ///
 /// "Stable" is measured against a fixed ANCHOR snapshot — the quads at the
@@ -68,7 +68,7 @@ public sealed class AutoCaptureTrigger : IAutoCaptureTrigger
     {
         ArgumentNullException.ThrowIfNull(quads);
 
-        // "The scene breaks" — defined in docs/stream-a-ui.md A0 as any
+        // "The scene breaks" — defined in docs/design/app.md A0 as any
         // count mismatch, zero included. Breaking always re-arms and always
         // restarts the settle window; there is nothing "stable" to measure
         // across a count change.
@@ -132,7 +132,7 @@ public sealed class AutoCaptureTrigger : IAutoCaptureTrigger
     /// NOT by list index. `ICardDetector` orders by descending area, and two
     /// cards of near-identical area can swap places between frames; matching
     /// by index would read that swap as movement and reset the settle timer
-    /// forever (docs/stream-a-ui.md A0). Both lists are already known to be
+    /// forever (docs/design/app.md A0). Both lists are already known to be
     /// the same length: both equal `expectedCount` at the call site.
     ///
     /// Greedy nearest-available matching rather than a globally optimal
@@ -145,7 +145,7 @@ public sealed class AutoCaptureTrigger : IAutoCaptureTrigger
     /// four corner-to-corner displacements between the matched anchor quad
     /// and the current one — not the centroid distance used for matching.
     /// A card rotated in place about its own centre moves every corner while
-    /// its centroid barely shifts, and docs/stream-a-ui.md A0 is explicit
+    /// its centroid barely shifts, and docs/design/app.md A0 is explicit
     /// that ε is measured by "compar[ing] corner positions". `CardQuad`
     /// corners are always ordered TL/TR/BR/BL (Detection.cs), so once two
     /// quads are matched their corners correspond index-for-index without

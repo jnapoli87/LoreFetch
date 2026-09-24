@@ -4,7 +4,7 @@ using OpenCvSharp;
 
 namespace LoreFetch.Lab.Synthetic;
 
-/// The three mat contrasts docs/stream-b-identification.md Risk 3 names:
+/// The three mat contrasts docs/design/identification.md Risk 3 names:
 /// "Detection depends on finding the card's edge, and modern cards are
 /// black-bordered, so a dark mat is the worst case." `Dark` is that worst
 /// case; `Light`/`Mid` are the other two points the risk asks to be
@@ -35,7 +35,7 @@ public sealed record BareMatOptions
 }
 
 /// Package B7's bare-mat generator: "mat texture with no card, across the
-/// light/mid/dark contrasts of Risk 3" -- stream-b-identification.md B7's
+/// light/mid/dark contrasts of Risk 3" -- docs/design/identification.md B7's
 /// own justification is that nothing else in the suite can produce this
 /// fixture IN CI (a committed real photograph would be card imagery even
 /// with no card in frame, if it were ever a real capture of the user's

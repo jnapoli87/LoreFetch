@@ -14,7 +14,7 @@ namespace LoreFetch.Tests.StreamC.Hardware;
 /// Kept in its own class, separately traited `[Trait("Interactive","Unplug")]`
 /// on top of `[Trait("Category","Hardware")]`, so a normal
 /// `Category=Hardware` hardware run does not sit blocked waiting for a
-/// human to physically unplug a camera — see docs/stream-c-capture.md C5
+/// human to physically unplug a camera — see docs/design/capture.md C5
 /// and this stream's own "Done when": "Unplugging the camera mid-run
 /// produces a clean error." The other four hardware tests are runnable
 /// unattended (memory, latency, negotiation, reopen); this one genuinely

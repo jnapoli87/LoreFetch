@@ -341,7 +341,7 @@ public class HashCardIdentifierTests
     // ---- Orientation ------------------------------------------------
 
     /// A card laid on the mat 180 degrees round rectifies to a valid quad
-    /// (stream-b-identification.md "B5", "Card orientation is unhandled"),
+    /// (docs/design/identification.md "B5", "Card orientation is unhandled"),
     /// so a query built from an upside-down capture must still retrieve the
     /// index entry that was built from the SAME card the right way up.
     [Fact]

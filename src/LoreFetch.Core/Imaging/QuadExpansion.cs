@@ -50,7 +50,7 @@ public static class QuadExpansion
     /// recovers the card's true outer edge. Measured over 40 real Scryfall
     /// `normal` renders (`BorderRatioMeasurement`, package E1a, non-land
     /// sample, seed 20260922, `stream/b` `4154a6b`) -- see
-    /// `docs/orchestration-plan.md`'s 2026-09-22 "dual-hypothesis
+    /// `docs/history/orchestration-plan.md`'s 2026-09-22 "dual-hypothesis
     /// identification ships in v0.1.0" ruling for the full evidence
     /// (baseline 22/38, expanded-only 17/38, dual 37/38 non-land correct@1
     /// on the 15in integration corpus). This is the value

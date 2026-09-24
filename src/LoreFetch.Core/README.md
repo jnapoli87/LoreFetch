@@ -1,6 +1,6 @@
 # LoreFetch.Core
 
-The shared domain layer: the frozen contract surface, the scan pipeline that composes it, the seven fakes, and every stream's domain logic that isn't UI, capture I/O or a maintainer tool. No single stream owns this project as a whole — ownership is per subfolder, below.
+The shared domain layer: the contract surface, the scan pipeline that composes it, the seven fakes, and every domain's logic that isn't UI, capture I/O or a maintainer tool. It holds several domains, one per subfolder, below.
 
 ## Dependency rules
 
@@ -8,21 +8,21 @@ Core has **no Avalonia/UI dependency and no FlashCap dependency**, and must stay
 
 ## Folder map
 
-| Folder | Contents | Owner |
+| Folder | Contents | Domain |
 |---|---|---|
-| `Abstractions/` | Frozen contract types and interfaces (frames, detection, identification, cohorts, settings) | Stream 0, frozen |
-| `Scanning/` | `IScanPipeline` and the pipeline that composes source → detector → rectifier → identifier → trigger | Stream 0, frozen |
-| `Fakes/` | The seven stub/fake implementations that unblock stream A | Stream 0, frozen |
-| `Identification/` | Hash port and index lookup | Stream B |
-| `Imaging/` | Card detection and rectification | Stream B |
-| `Collection/` | CSV collection store (not yet on `main`) | Stream D |
-| `Export/` | Export adapters (not yet on `main`) | Stream D |
-| `Trigger/` | `IAutoCaptureTrigger` implementation | Stream A |
+| `Abstractions/` | Contract types and interfaces (frames, detection, identification, cohorts, settings) | Contract surface |
+| `Scanning/` | `IScanPipeline` and the pipeline that composes source → detector → rectifier → identifier → trigger | Contract surface |
+| `Fakes/` | The seven stub/fake implementations: demo mode and the fakes leg of the end-to-end suite | Contract surface |
+| `Identification/` | Hash port and index lookup | Identification |
+| `Imaging/` | Card detection and rectification | Detection |
+| `Collection/` | CSV collection store | Collection |
+| `Export/` | Export adapters | Collection |
+| `Trigger/` | `IAutoCaptureTrigger` implementation | App |
 
-## The freeze
+## The contract surface
 
-`Abstractions/`, `Scanning/` and `Fakes/` are the frozen contract surface — see [`../../CLAUDE.md`](../../CLAUDE.md) and [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries). A stream that needs a change there stops and asks; it does not edit unilaterally. `.claude/hooks/guard-write.sh` enforces this from inside a linked worktree.
+`Abstractions/`, `Scanning/` and `Fakes/` are the contract surface: every domain builds against them, so a change there affects all of them at once. Make such changes deliberately and call them out in the PR; see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map).
 
-Internals: documented by each owning stream at its done-when step.
+## Internals
 
-**Stream B — `Identification/` and `Imaging/`.** `Imaging/ContourCardDetector` finds card-shaped contours per frame (aspect + area filtered, discard reasons logged) and `PerspectiveRectifier` warps the detected quad to the canonical 488×680 `RectifiedCard`, pinned `INTER_LINEAR` (`warpPerspective` doesn't support `INTER_AREA`). `Imaging/ReferenceTransform` and `QueryTransform` hold the reference-only and shared hash steps respectively — each exists exactly once — and `CardHasher` turns a prepared image into the 1024-bit `CardHash`. `Identification/HashIndexFile` reads and writes the committed `.lfidx` index, and `HashCardIdentifier` implements `ICardIdentifier` over a loaded index, matching by full Hamming distance with no threshold filtering. See [README §B](../../README.md#stream-b--identification) and [`docs/stream-b-identification.md`](../../docs/stream-b-identification.md) for the numbers behind it.
+**Detection and identification — `Imaging/` and `Identification/`.** `Imaging/ContourCardDetector` finds card-shaped contours per frame (aspect + area filtered, discard reasons logged) and `PerspectiveRectifier` warps the detected quad to the canonical 488×680 `RectifiedCard`, pinned `INTER_LINEAR` (`warpPerspective` doesn't support `INTER_AREA`). `Imaging/ReferenceTransform` and `QueryTransform` hold the reference-only and shared hash steps respectively — each exists exactly once — and `CardHasher` turns a prepared image into the 1024-bit `CardHash`. `Identification/HashIndexFile` reads and writes the committed `.lfidx` index, and `HashCardIdentifier` implements `ICardIdentifier` over a loaded index, matching by full Hamming distance with no threshold filtering. See [README: How it works](../../README.md#how-it-works) and [`docs/design/identification.md`](../../docs/design/identification.md) for the numbers behind it.

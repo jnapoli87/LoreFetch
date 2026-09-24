@@ -18,7 +18,7 @@ namespace LoreFetch.Tests.Integration.EndToEnd;
 /// the real classes, constructed over the COMMITTED index
 /// (<c>data/index/cards.lfidx</c>) exactly the way
 /// <see cref="LoreFetch.App.AppComposition"/> composes Real mode (docs/
-/// orchestration-plan.md §4, the I2/I3 override). The store and both
+/// docs/history/orchestration-plan.md §4, the I2/I3 override). The store and both
 /// exporters stay as package I1 wired them.
 ///
 /// The one thing this set cannot do literally is honour an arbitrary
@@ -284,7 +284,7 @@ public sealed class RealImplementationSet : IImplementationSet
     }
 
     /// A simple flow layout for `cardCount` cards, generous enough to avoid
-    /// the tight-gap contour-merging risk orchestration-plan.md calls out
+    /// the tight-gap contour-merging risk docs/history/orchestration-plan.md calls out
     /// for a real packed 3x3 (this suite only ever asks for 7, and only
     /// needs THOSE 7 reliably detected, not a maximally-realistic mat) —
     /// rows of up to 4, spread across the vertical middle 60% of the frame,

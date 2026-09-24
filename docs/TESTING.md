@@ -1,6 +1,6 @@
 # Testing strategy
 
-Spans all four streams, so it belongs to the spine rather than to any one of them. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
+Spans every domain. Written for the v0.1 build, so its timeline talks about streams and "Stream 0" (the key is at the top of [`CONTRACTS.md`](CONTRACTS.md)); the five levels and what each must assert still stand. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
 
 ---
 
@@ -37,16 +37,16 @@ Not "zero skips in CI", which is unreachable by construction: the real-implement
 
 Its corollary matters too: a skip that survives past its checkpoint is a bug, not a convenience. Flipping that switch at the integration checkpoint is what stops skips becoming permanent and the suite silently stopping testing anything real.
 
-### What blocks a stream merging into `main`
+### What blocks a PR merging into `main`
 
 | Must be green | Must not block |
 |---|---|
 | Build, both CI legs | Accuracy tables (measurement, not pass/fail) |
 | All unit tests | Hardware verification (can't run in CI) |
-| The fakes end-to-end test | Other streams' unfinished work |
-| That stream's own tests | Tests skipped for a missing artifact |
+| The fakes end-to-end test | Work in other open PRs |
+| The tests of every domain the PR touches | Tests skipped for a missing artifact |
 
-Streams own disjoint directories — including `Tests/StreamA|B|C|D/`, with the end-to-end suite in `Tests/Integration/` owned by Stream 0 — so their tests can't interfere with each other — which is what makes "green at every merge" achievable with four concurrent streams.
+Each domain has its own test project, and the end-to-end suite lives in `Tests/Integration/`, so a failure points at a domain rather than at "the tests". See the [domain map](CONTRACTS.md#domain-map).
 
 ## The five levels
 

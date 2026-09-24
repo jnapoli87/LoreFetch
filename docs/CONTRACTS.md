@@ -1,6 +1,9 @@
 # Contracts
 
-These are the seams that let four streams run in parallel. **Frozen after the foundation pass.** If a stream needs a change here, it stops and asks — it does not edit this surface unilaterally, because every unilateral change is a four-way merge conflict.
+These are the seams between LoreFetch's domains. They were written so four parallel streams could build v0.1 without colliding, and they are still what keeps each domain replaceable on its own. A change here affects every domain at once, so make it deliberately and call it out in the PR.
+
+> [!NOTE]
+> The rationale below dates from the v0.1 build and names the streams that built each domain: **stream A** = App (UI and auto-capture trigger), **stream B** = detection and identification (plus the Lab tooling), **stream C** = Capture, **stream D** = Collection and export. **Stream 0** was the serial foundation pass that created this surface and the fakes. See [Domain map](#domain-map).
 
 The contract surface is two directories: **`LoreFetch.Core/Abstractions`** (types and interfaces) and **`LoreFetch.Core/Scanning`** (the scan pipeline that composes them). **No OpenCvSharp types appear in any contract** — that's deliberate, so the UI stream never writes CV code, and so the identification stream can swap its internals freely. (`Core` itself does reference OpenCvSharp, because `Core/Imaging` and `FolderFrameSource` need it; the rule is about the seam, not the dependency graph.)
 
@@ -346,7 +349,7 @@ public static class ScanPipelineFactory
 
 **Composition:** the App is the composition root, but it does not know the wiring — it calls `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`, both frozen in Stream 0's code, and calls `RunAsync` once at startup. **Stream 0 also loads stream B's thresholds file into `ScanSettings`**, so stream A never implements a file format that stream B defines; stream A only renders the failure when the file is missing.
 
-**Tile order: `Cohort.Tiles` is in reading order, not detection order.** `ICardDetector` orders quads by descending area, and that ordering is untouched — it is what selects which N quads survive when more than N are detected. Reading order is layered on top, applied to the survivors only, inside `TryCaptureFromRetained`, strictly AFTER that selection and BEFORE any `CohortTile` is built — so it can only ever reshuffle who already made the cut, never change who did. The pure function is `QuadOrdering.ReadingOrder` (`Core/Scanning`): centroid and height per quad, sort by centroid Y, start a new row when a centroid's Y differs from the current row's mean Y by more than half the MEDIAN quad height (the median, not the mean, so one oddly detected or partially occluded quad can't drag the threshold around — see the ruling in `docs/orchestration-plan.md`), sort each row by centroid X, concatenate rows top to bottom. Coordinates are the same post-rotation frame coordinates `ICardDetector` and the live preview already use. Half the median height comfortably absorbs the ~10 px gaps and few-degree skew a freehand-placed 3x3 produces (cards run ~483 px tall at the locked mount height) while staying narrow enough that two genuinely different rows never merge. `Cohort`'s tiles, their rectified images and commit order all follow from this — a `CohortTile` still does not carry its source quad, so this is the only place the physical layout is recoverable from a `Cohort` at all.
+**Tile order: `Cohort.Tiles` is in reading order, not detection order.** `ICardDetector` orders quads by descending area, and that ordering is untouched — it is what selects which N quads survive when more than N are detected. Reading order is layered on top, applied to the survivors only, inside `TryCaptureFromRetained`, strictly AFTER that selection and BEFORE any `CohortTile` is built — so it can only ever reshuffle who already made the cut, never change who did. The pure function is `QuadOrdering.ReadingOrder` (`Core/Scanning`): centroid and height per quad, sort by centroid Y, start a new row when a centroid's Y differs from the current row's mean Y by more than half the MEDIAN quad height (the median, not the mean, so one oddly detected or partially occluded quad can't drag the threshold around — see the ruling in `docs/history/orchestration-plan.md`), sort each row by centroid X, concatenate rows top to bottom. Coordinates are the same post-rotation frame coordinates `ICardDetector` and the live preview already use. Half the median height comfortably absorbs the ~10 px gaps and few-degree skew a freehand-placed 3x3 produces (cards run ~483 px tall at the locked mount height) while staying narrow enough that two genuinely different rows never merge. `Cohort`'s tiles, their rectified images and commit order all follow from this — a `CohortTile` still does not carry its source quad, so this is the only place the physical layout is recoverable from a `Cohort` at all.
 
 **Detection rate:** every frame the source yields, on the pipeline's thread. The preview throttle (~15 fps) is the UI's concern, applied inside its handler.
 
@@ -559,20 +562,20 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 
 ---
 
-## Stream boundaries
+## Domain map
 
-| Stream | Owns (exclusive write access) | Consumes | Must not touch |
+| Domain | Code | Tests | Consumes from the contract surface |
 |---|---|---|---|
-| **A — UI** | `LoreFetch.App/**`, `Core/Trigger/**`, `Tests/StreamA/**` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the seven fakes | `Core/Identification`, `Core/Imaging`, `Core/Collection`, `Core/Export`, `Capture` |
-| **B — Identification** | `Core/Identification/**`, `Core/Imaging/**`, `LoreFetch.Lab/**`, `Tests/StreamB/**` | Abstractions + the fixture corpus | `App`, `Capture`, `Core/Trigger`, `Core/Collection`, `Core/Export` |
-| **C — Capture** | `LoreFetch.Capture/**`, `Tests/StreamC/**` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` | `App`, everything else in `Core` |
-| **D — Collection & export** | `Core/Collection/**`, `Core/Export/**`, `Tests/StreamD/**` | Abstractions — specifically `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, `CollectionStoreException` | `App`, `Capture`, `Core/Identification`, `Core/Imaging`, `Core/Trigger` |
+| **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/StreamA` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
+| **Detection and identification** | `Core/Imaging`, `Core/Identification` | `Tests/StreamB` | Abstractions; implements `ICardDetector`, `IRectifier`, `ICardIdentifier`, `IOracleCatalog` |
+| **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/StreamB` | Abstractions, detection and identification, the local fixture corpus |
+| **Capture** | `src/LoreFetch.Capture` | `Tests/StreamC` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |
+| **Collection and export** | `Core/Collection`, `Core/Export` | `Tests/StreamD` | `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, `OracleEntry`, `TileState`, `RowSource`, `CollectionStoreException` |
+| **Contract surface** | `Core/Abstractions`, `Core/Scanning`, `Core/Fakes` | `Tests/Integration` | — |
 
-**Shared and frozen (hook-enforced):** `Core/Abstractions/**`, `Core/Scanning/**`, every `.csproj`, and `LoreFetch.slnx`. The foundation pass creates all projects with **all** package references already in place, so no stream ever edits a project file — that's the main merge-conflict source removed by construction.
+`Tests/Integration` holds the end-to-end suite, parameterised over the fakes and the real implementations, plus the contract surface's own unit tests. It is the one suite that would catch a broken seam, so a PR that weakens it should say why.
 
-**Owned by Stream 0, not edited by streams:** the fakes, `Tests/Integration/**` (the end-to-end suite; real implementations are injected at integration, not before).
-
-**Shared by section:** `README.md` — Stream 0 writes one headed section per stream, and each stream edits only its own. `THIRD-PARTY-NOTICES` — entries are added at integration only; the pre-commit hook's advisory list tolerates the lag.
+`THIRD-PARTY-NOTICES` gains an entry whenever a package lands; the pre-commit hook's advisory list names any that are missing.
 
 ---
 

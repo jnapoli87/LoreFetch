@@ -151,7 +151,7 @@ public class AccuracyHarnessSyntheticTests
         }
     }
 
-    /// Task 2 (orchestration-plan.md) end to end through the REAL detector:
+    /// Task 2 (docs/history/orchestration-plan.md) end to end through the REAL detector:
     /// a 3x3 frame with a card PHYSICALLY missing from one cell (not just a
     /// ground-truth mismatch) -- the closest synthetic reproduction of the
     /// real corpus's own dominant failure mode (most `a_corpus` frames find

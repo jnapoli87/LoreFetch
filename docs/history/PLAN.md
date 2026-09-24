@@ -1,6 +1,9 @@
 # LoreFetch — 24h build plan
 
-The spine: sequencing, streams, integration, endgame. **Decisions live in [`../CLAUDE.md`](../CLAUDE.md)** and are not restated here — one source of truth per fact.
+> [!IMPORTANT]
+> **Historical — the v0.1 hackathon build record, not current instructions.** It describes a parallel four-stream agent workflow (worktrees, a frozen contract surface, stream ownership) that was retired after v0.1.0. Settled decisions live in [`CLAUDE.md`](../../CLAUDE.md), design in [`docs/design/`](../design/), and current work in GitHub Issues.
+
+The spine: sequencing, streams, integration, endgame. **Decisions live in [`../CLAUDE.md`](../../CLAUDE.md)** and are not restated here — one source of truth per fact.
 
 ---
 
@@ -8,18 +11,18 @@ The spine: sequencing, streams, integration, endgame. **Decisions live in [`../C
 
 | Document | Job | Who reviews it |
 |---|---|---|
-| [`../CLAUDE.md`](../CLAUDE.md) | Every settled decision, and why each rejected path stays rejected. Auto-loads for any session in this repo. | everyone, first |
-| [`../CONTEXT.md`](../CONTEXT.md) | The domain glossary — one word per concept | everyone |
-| [`CONTRACTS.md`](CONTRACTS.md) | The frozen seam that makes parallel streams possible | architecture review, then reconciliation |
+| [`../CLAUDE.md`](../../CLAUDE.md) | Every settled decision, and why each rejected path stays rejected. Auto-loads for any session in this repo. | everyone, first |
+| [`../CONTEXT.md`](../../CONTEXT.md) | The domain glossary — one word per concept | everyone |
+| [`CONTRACTS.md`](../CONTRACTS.md) | The frozen seam that makes parallel streams possible | architecture review, then reconciliation |
 | **this file** | Sequencing, Stream 0, integration, endgame, cross-stream risks | architecture review |
-| [`stream-a-ui.md`](stream-a-ui.md) | Avalonia app, built against fakes | stream A reviewer |
-| [`stream-b-identification.md`](stream-b-identification.md) | Hash port, index, detection, accuracy | stream B reviewer ← *the risky one* |
-| [`stream-c-capture.md`](stream-c-capture.md) | FlashCap → `IFrameSource` | stream C reviewer |
-| [`stream-d-export.md`](stream-d-export.md) | Collection store, native format, third-party adapters | stream D reviewer |
-| [`TESTING.md`](TESTING.md) | Five test levels and what each must assert | architecture review |
-| [`stream-review-directions.md`](stream-review-directions.md) | How the four stream reviews are launched, run and handed back | the orchestrating session |
-| [`RECONCILIATION.md`](RECONCILIATION.md) | Every ruling on the four reviews' 20 contract changes and 20 open questions | reconciliation |
-| [`orchestration-plan.md`](orchestration-plan.md) | Validation findings, the gated master checklist, and Sonnet-sized work packages for every stream | the orchestrating agent |
+| [`docs/design/app.md`](../design/app.md) | Avalonia app, built against fakes | stream A reviewer |
+| [`docs/design/identification.md`](../design/identification.md) | Hash port, index, detection, accuracy | stream B reviewer ← *the risky one* |
+| [`docs/design/capture.md`](../design/capture.md) | FlashCap → `IFrameSource` | stream C reviewer |
+| [`docs/design/collection.md`](../design/collection.md) | Collection store, native format, third-party adapters | stream D reviewer |
+| [`TESTING.md`](../TESTING.md) | Five test levels and what each must assert | architecture review |
+| [`docs/history/stream-review-directions.md`](stream-review-directions.md) | How the four stream reviews are launched, run and handed back | the orchestrating session |
+| [`RECONCILIATION.md`](../RECONCILIATION.md) | Every ruling on the four reviews' 20 contract changes and 20 open questions | reconciliation |
+| [`docs/history/orchestration-plan.md`](orchestration-plan.md) | Validation findings, the gated master checklist, and Sonnet-sized work packages for every stream | the orchestrating agent |
 
 Each stream doc is deliberately **self-contained enough to review in isolation** — it names what it owns, what it consumes, its done-when, its fallbacks, a *"what a reviewer should scrutinise"* section for code review, and a *"Plan review: research targets"* section for the pre-build review.
 
@@ -30,8 +33,8 @@ Each stream doc is deliberately **self-contained enough to review in isolation**
 Stream reviewers may propose contract changes, and Stream 0 freezes the contracts, so the reviews land **before** Stream 0 writes code:
 
 1. **Architecture review** — one full-context session. Settles boundaries, ownership and the contract surface, so each stream reviewer inherits a correct seam instead of reviewing a moving target. *Done 2026-09-21; merged to `main`.*
-2. **Four stream reviews, in parallel** — each in its own worktree forked from `main`, reading only its stream doc, `CONTRACTS.md` and `CONTEXT.md` (plus `CLAUDE.md`, which auto-loads). Isolation is the point: no cross-stream context muddying the research. See [`stream-review-directions.md`](stream-review-directions.md). *Done 2026-09-21; branches `review/stream-a|b|c|d`.*
-3. **Reconciliation** — one full-context session reads all four "Proposed contract changes" sections *against each other* and applies the accepted ones to `CONTRACTS.md` once. Skipping this means four proposals get applied on their own terms. *Done 2026-09-21 — 20 contract changes and 20 open questions ruled on; decision record in [`RECONCILIATION.md`](RECONCILIATION.md).*
+2. **Four stream reviews, in parallel** — each in its own worktree forked from `main`, reading only its stream doc, `CONTRACTS.md` and `CONTEXT.md` (plus `CLAUDE.md`, which auto-loads). Isolation is the point: no cross-stream context muddying the research. See [`docs/history/stream-review-directions.md`](stream-review-directions.md). *Done 2026-09-21; branches `review/stream-a|b|c|d`.*
+3. **Reconciliation** — one full-context session reads all four "Proposed contract changes" sections *against each other* and applies the accepted ones to `CONTRACTS.md` once. Skipping this means four proposals get applied on their own terms. *Done 2026-09-21 — 20 contract changes and 20 open questions ruled on; decision record in [`RECONCILIATION.md`](../RECONCILIATION.md).*
 4. **Stream 0** builds and freezes.
 5. **Streams A–D fork.**
 
@@ -41,7 +44,7 @@ Stream reviewers may propose contract changes, and Stream 0 freezes the contract
 
 The original plan (recovered from Obsidian; its memory pointed at a deleted file) built everything on **OCR of the card name**, which cannot work at overhead camera distance — the name is ~5 px tall at 20″ against a ~10 px floor. It was discarded wholesale.
 
-The replacement is a **ported perceptual hash** — CardSpotter, BSD-3-Clause, the algorithm Wizards' own SpellTable actually ships, verified by inspecting its production WASM bundle. It works at that distance because it never reads text. Full reasoning, including why embeddings were rejected, is in [`../CLAUDE.md`](../CLAUDE.md).
+The replacement is a **ported perceptual hash** — CardSpotter, BSD-3-Clause, the algorithm Wizards' own SpellTable actually ships, verified by inspecting its production WASM bundle. It works at that distance because it never reads text. Full reasoning, including why embeddings were rejected, is in [`../CLAUDE.md`](../../CLAUDE.md).
 
 **Setup:** code on the Apple Silicon Mac; the Windows PC sits beside it with the C920, a PVC overhead gantry, a 3D printer and a difficulty-laddered card collection. Push → pull → build → run is a fast local loop with hardware in reach.
 
@@ -86,11 +89,11 @@ Remaining — **~4h**, up from the original ~2h: the architecture review moved t
    **`net10.0`** — the longer-lived LTS; `net8.0` leaves support in Nov 2026, and "wider compatibility" is a non-argument here because a self-contained single-file publish bundles the runtime, so the user's machine never sees the TFM.
 
    > ⚠ **Prove it before freezing.** Avalonia 12.1.2's nuspec targets `net8.0` **and `net10.0`**, so the most constraining pin is fine; the rest ship `netstandard2.0`/`net8.0`, which `net10.0` consumes normally. That makes this ordinary restore risk rather than a known incompatibility — but it is still unproven, so **this item is not done until every project restores and builds clean on `net10.0`**. If any pin fails, fall back to `net8.0` **here**. After the fork `.csproj` files are hook-enforced frozen, which makes this the last cheap moment to find out.
-2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](CONTRACTS.md), then **frozen**.
+2. **`Core/Abstractions`** — everything in [`CONTRACTS.md`](../CONTRACTS.md), then **frozen**.
 3. **`Core/Scanning`** — the scan pipeline: detection loop, capture from the latest snapshot's frame, threshold application, trigger calls. Then **frozen**.
 4. **The seven fakes** — `FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier` (configurable distances so the UI can reach all four `TileState` values), `StubOracleCatalog` (**~33k entries, configurable** — a few hundred cannot reproduce the type-ahead's only performance problem), plus **`StubCollectionStore` and `StubCollectionExporter`**, added in reconciliation. Stream A's collection view, empty state and export picker are all built against `ICollectionStore` and `ICollectionExporter`, which belong to stream D — without those two the claim that "stream A never needs anything real from B, C or D" was simply false. These are what make stream A independent forever, and `FolderFrameSource` is the demo path too, not just a test double.
    - Also here: **`ScanPipelineFactory`** and the **thresholds-file loader**. Composition is Stream 0's, so stream A calls one function rather than learning the wiring, and never implements a file format stream B defines.
-5. **The end-to-end integration suite, green from the end of Stream 0.** Written here in `Tests/Integration/`, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, frame ownership, exclude/discard/clear semantics, commit idempotency, CSV shape. Its frames are **generated at test setup** into a temp folder (plain fills with a drawn rectangle — the stub detector ignores content), so no raster is ever committed. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](TESTING.md).
+5. **The end-to-end integration suite, green from the end of Stream 0.** Written here in `Tests/Integration/`, against the fakes, parameterised so real implementations swap in later and skip until their artifacts exist. It tests wiring rather than correctness — contract composition, frame ownership, exclude/discard/clear semantics, commit idempotency, CSV shape. Its frames are **generated at test setup** into a temp folder (plain fills with a drawn rectangle — the stub detector ignores content), so no raster is ever committed. Across four worktrees this is the highest-value guard available: it fails the moment someone breaks a contract. See [`TESTING.md`](../TESTING.md).
 6. **CI** — `windows-latest` **and** `macos-latest`. The macOS leg mechanically enforces that `Core` stays free of Windows-only dependencies.
 7. **Shared-write scaffolding** — `Tests/StreamA|B|C|D/` folders, and a **README skeleton** (title, description, GPLv3 note, WotC Fan Content disclaimer) with **one headed section per stream**. Each stream edits only its own folder and its own section, so parallel edits merge cleanly.
 8. **Fixture capture** — real C920 frames at several heights (8″/10″/12″/14″/20″), rotated, in 1/3/9 layouts, across the difficulty ladder, with ground truth in a sidecar CSV. **Needs no code** — the Windows Camera app or a throwaway script is fine, which is why it doesn't wait on stream C. **Print the adjustable camera mount first**; it's how heights are reached repeatably.
@@ -113,12 +116,12 @@ Sized, not clock-boxed. **It is fine for one to finish long before another** —
 
 | Stream | Owns (exclusive write) | Size | Needs hardware? | Risk |
 |---|---|---|---|---|
-| [**A — UI**](stream-a-ui.md) | `App/**`, `Core/Trigger/**` | ~10h | no | low |
-| [**B — Identification**](stream-b-identification.md) | `Core/Identification/**`, `Core/Imaging/**`, `Lab/**` | ~10h | no (fixtures only) | **highest** |
-| [**C — Capture**](stream-c-capture.md) | `Capture/**` | ~4h | **yes** | medium |
-| [**D — Collection & export**](stream-d-export.md) | `Core/Collection/**`, `Core/Export/**` | ~4h | no | low |
+| [**A — UI**](../design/app.md) | `App/**`, `Core/Trigger/**` | ~10h | no | low |
+| [**B — Identification**](../design/identification.md) | `Core/Identification/**`, `Core/Imaging/**`, `Lab/**` | ~10h | no (fixtures only) | **highest** |
+| [**C — Capture**](../design/capture.md) | `Capture/**` | ~4h | **yes** | medium |
+| [**D — Collection & export**](../design/collection.md) | `Core/Collection/**`, `Core/Export/**` | ~4h | no | low |
 
-Each stream also owns `Tests/Stream<X>/**` and its own README section. Full table, including what each consumes and must not touch: [`CONTRACTS.md`](CONTRACTS.md#stream-boundaries).
+Each stream also owns `Tests/Stream<X>/**` and its own README section. Full table, including what each consumes and must not touch: [`CONTRACTS.md`](../CONTRACTS.md#domain-map).
 
 **Shared and frozen:** `Core/Abstractions/**`, `Core/Scanning/**`, every `.csproj`, `LoreFetch.slnx`.
 
@@ -137,7 +140,7 @@ This is where the bugs live, and they will be **lifetime and threading bugs**, n
 1. **Frame retention across the pipeline callback.** `FrameProcessed` hands the UI a frame that is valid only for the callback. If the preview kept a reference instead of copying, it reads a recycled pooled buffer — fine in dev, torn frames under load. (The old `RectifiedCard`-lifetime hazard is gone by construction: rectified cards are unpooled.)
 2. **Frame buffer handoff across the capture thread boundary.** Pooled buffers make ownership explicit; verify one owner, one `Dispose`, from `WebcamFrameSource` through the pipeline.
 3. **Real thresholds replace placeholders.** `GoodDistance` / `OkDistance` come from stream B's committed thresholds file. Grep for any hardcoded distance anywhere outside `Core/Scanning`.
-4. **Flip the skip gate.** The end-to-end suite already exists and has been green since the end of Stream 0 against the fakes ([`TESTING.md`](TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
+4. **Flip the skip gate.** The end-to-end suite already exists and has been green since the end of Stream 0 against the fakes ([`TESTING.md`](../TESTING.md)); its real-implementation cases have been *skipping* with reasons. Integration is the point where a skipped test becomes a **failing** test, so skips can't quietly become permanent.
 
 **Done when `LOREFETCH_REQUIRE_REAL=1 dotnet test` reports zero skips on the local `win-x64` machine**, with the index, the Scryfall cache and the fixture corpus all present. That's the whole definition — the end-to-end suite runs against real implementations throughout, with nothing gated out.
 
@@ -275,10 +278,10 @@ Stream-specific risks live in each stream doc. These span the whole build:
 
 ## Verification
 
-Per-stream criteria are in the stream docs; test levels in [`TESTING.md`](TESTING.md). The cross-cutting bar:
+Per-stream criteria are in the stream docs; test levels in [`TESTING.md`](../TESTING.md). The cross-cutting bar:
 
 - `dotnet test` green on Mac **and** `windows-latest` CI.
-- Stream B's round-trip gate passes: a Scryfall render retrieves **its own artwork** through the full query path at or below the recorded distance floor (not ≈ 0 — the two sides are asymmetric by design; see [`RECONCILIATION.md`](RECONCILIATION.md)), and the committed golden hashes match on the **Windows** leg. They are traited `WindowsOnly` and filtered out on `macos-latest`, because `INTER_AREA` is not bit-exact on ARM64 and the index is built on `win-x64`.
+- Stream B's round-trip gate passes: a Scryfall render retrieves **its own artwork** through the full query path at or below the recorded distance floor (not ≈ 0 — the two sides are asymmetric by design; see [`RECONCILIATION.md`](../RECONCILIATION.md)), and the committed golden hashes match on the **Windows** leg. They are traited `WindowsOnly` and filtered out on `macos-latest`, because `INTER_AREA` is not bit-exact on ARM64 and the index is built on `win-x64`.
 - The accuracy × height table is committed, measured on **normal cards** (not lands), with both thresholds and the distance-margin data behind them.
 - **`wrong@1` ≈ 0.** Failures must be no-match, not confident-wrong — a silent miss is recoverable, a confident wrong answer is permanent bad inventory.
 - The whole loop is achievable keyboard-only: space → enter → space → enter, no mouse.

@@ -168,7 +168,7 @@ public class MoxfieldCsvExporterTests
     }
 
     // ---------------------------------------------------------------
-    // Escaping vectors — all five required by docs/stream-d-export.md §D3
+    // Escaping vectors — all five required by docs/design/collection.md §D3
     // ---------------------------------------------------------------
 
     [Fact]
@@ -194,7 +194,7 @@ public class MoxfieldCsvExporterTests
         // A writer that quotes only when it sees a comma emits this name bare,
         // and a conforming RFC 4180 reader then interprets the leading " as
         // the start of a quoted field and mis-reads the row. This is the
-        // worst-case vector from docs/stream-d-export.md §D2.
+        // worst-case vector from docs/design/collection.md §D2.
         const string oracleName = "\"Rumors of My Death . . .\"";
         var lines = await ExportLinesAsync([TestSupport.Row(oracleName: oracleName)]);
 

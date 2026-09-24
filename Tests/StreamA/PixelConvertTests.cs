@@ -9,7 +9,7 @@ namespace LoreFetch.Tests.StreamA;
 /// `WriteableBitmap` expects. Both cases use a padded SOURCE stride and a
 /// padded DESTINATION row (the destination is only ever guaranteed
 /// `RowBytes >= Width * 4`, per `ILockedFramebuffer` — see
-/// docs/stream-a-ui.md A1), and assert three things together: pixel values
+/// docs/design/app.md A1), and assert three things together: pixel values
 /// land at the right offsets, the destination's own padding bytes are never
 /// touched, and the output alpha byte is always 255.
 public class PixelConvertTests

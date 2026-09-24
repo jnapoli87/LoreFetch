@@ -5,7 +5,7 @@ using Xunit;
 namespace LoreFetch.Tests.StreamB;
 
 /// Package B7's own "Done when" criterion: "detection returns 0 on a bare
-/// mat" at each of the light/mid/dark contrasts docs/stream-b-identification.md
+/// mat" at each of the light/mid/dark contrasts docs/design/identification.md
 /// Risk 3 names -- run against `BareMatGenerator`'s PRODUCTION output (not
 /// `DetectorTestFrames.EmptyMat`, which is `Tests/StreamB`-only fixture code
 /// that `LoreFetch.Lab` cannot reference; this is the test that exercises

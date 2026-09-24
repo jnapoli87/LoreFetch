@@ -28,7 +28,7 @@ internal static class CaptureDescriptorFormatting
 
     /// One descriptor per line — id, name, and its full characteristic
     /// list — used in the "no matching format" diagnosis. This is the
-    /// "enumerated list" stream-c-capture.md's C2 requires every such
+    /// "enumerated list" docs/design/capture.md's C2 requires every such
     /// exception to carry, so a user can see not just that nothing matched
     /// but exactly what the device offered instead.
     internal static string FormatList(IReadOnlyList<CaptureDescriptor> descriptors) =>

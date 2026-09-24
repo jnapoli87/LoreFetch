@@ -72,7 +72,7 @@ public sealed record AccuracyBreakdownRow(double HeightIn, string Rung, Accuracy
 /// the exclusion is "enforced in code rather than remembered", and a
 /// `rung == "land"` string check would be exactly the remembered version
 /// this flag exists to replace) AND restricted to `rung == "normal"`,
-/// matching stream-b-identification.md's own "Done when": "&gt;=90%
+/// matching docs/design/identification.md's own "Done when": "&gt;=90%
 /// correct@1 on the real normal-card fixtures". `Breakdown` still reports
 /// EVERY row (lands and stretch included) for visibility -- CLAUDE.md:
 /// "Capture [lands], run them as a smoke test... exclude them from the

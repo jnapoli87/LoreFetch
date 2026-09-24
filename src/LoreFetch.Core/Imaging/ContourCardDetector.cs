@@ -168,7 +168,7 @@ public sealed record ContourDetectorOptions
 /// selectable) -> `approxPolyDP` to 4 points -> corner ordering -> aspect +
 /// minimum-area + border filters -> nested/duplicate dedupe -> top N by
 /// area. See CLAUDE.md "Card detection" and "Geometry", and
-/// docs/stream-b-identification.md §B5, for the algorithm and the
+/// docs/design/identification.md §B5, for the algorithm and the
 /// per-step rationale. Every discard reason is logged at Debug AND
 /// returned structurally from `DetectWithDiagnostics` -- see
 /// `RejectedContour`.

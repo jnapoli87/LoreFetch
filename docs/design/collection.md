@@ -1,13 +1,16 @@
-# Stream D — Collection & export
+# Collection & export — design record
 
 **Short, fully isolated, and the stream that owns the user's data.** It stores the collection and projects it into other tools' shapes. No camera, no UI, no hash, no image processing.
 
-Owns (exclusive write access): `LoreFetch.Core/Collection/**`, `LoreFetch.Core/Export/**`, `Tests/StreamD/**`, the stream D section of `README.md`
-Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, **`CollectionStoreException`** (frozen — see [`CONTRACTS.md`](CONTRACTS.md))
-Implements: `ICollectionStore`, and every `ICollectionExporter`
-Must not touch: `LoreFetch.App`, `Core/Identification`, `Core/Imaging`, `Core/Trigger`, `Core/Scanning`, `LoreFetch.Capture`, the fakes, any `.csproj`, `LoreFetch.slnx`
 > [!NOTE]
-> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+> **Design record from v0.1.** Written as the hackathon's Stream D spec. Code comments cite its section IDs (D0, D1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
+>
+> Code: `src/LoreFetch.Core/Collection`, `src/LoreFetch.Core/Export`. Tests: `Tests/StreamD`.
+
+Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, **`CollectionStoreException`** (see [`CONTRACTS.md`](../CONTRACTS.md))
+Implements: `ICollectionStore`, and every `ICollectionExporter`
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](../CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](../RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
 >
 > - **All 4 proposed contract changes accepted.** The three missing types are on the *Consumes* line above.
 > - **v1 ships the native SOT plus ONE adapter: Moxfield.** The user's call — one export beyond the SOT is enough. Deckbox is *not* in v1; document ManaBox, Archidekt, Deckbox and Dragon Shield in the README as unsupported-by-design.
@@ -207,7 +210,7 @@ So the realistic stretch list is **Deckbox and nothing else** until someone has 
 
 ## Plan review: research targets
 
-For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). Check each against primary sources — each tool's own import documentation, not blog posts — and record what you found, citing the source.
+For the pre-build stream review (see [`docs/history/stream-review-directions.md`](../history/stream-review-directions.md)). Check each against primary sources — each tool's own import documentation, not blog posts — and record what you found, citing the source.
 
 1. **Moxfield and ManaBox import specs.** Exact headers, column order, required vs optional columns, quoting rules. Does each accept **name-only** rows (no set, no collector number)?
 2. **Blank condition.** What does each tool do on import when the condition column is empty — default to NM, reject the row, or reject the file?

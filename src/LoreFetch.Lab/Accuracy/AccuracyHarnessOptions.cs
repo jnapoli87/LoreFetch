@@ -12,7 +12,7 @@ public sealed record AccuracyHarnessOptions
     /// threshold": "between good and ok is a low-confidence match").
     ///
     /// Default 270 -- CardSpotter upstream's own `myOkMatchScore` default
-    /// (stream-b-identification.md "Verified", target 1: `QueryThread.cpp
+    /// (docs/design/identification.md "Verified", target 1: `QueryThread.cpp
     /// :152-153`, `myOkMatchScore(270)`). This is NOT a value calibrated
     /// against LoreFetch's own margin data -- there is no real-corpus
     /// margin data yet (H3 gates B6) -- it is a documented, cited prior

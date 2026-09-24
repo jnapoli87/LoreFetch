@@ -112,13 +112,13 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 /// Builds a camera-like `CameraFrame` from a source card render (a Scryfall
 /// `normal` image on disk for real use; a procedural "card-like" Mat in CI,
 /// per orchestration finding V13 -- neither this type nor its tests care
-/// which). Package B7 (docs/stream-b-identification.md).
+/// which). Package B7 (docs/design/identification.md).
 ///
 /// **This type produces a SCENE, never a hash and never a `RectifiedCard`.**
 /// That is not a style choice -- it is the whole structural guard the
 /// package brief calls for ("the generator must not become a third
 /// transform" / "must not be a third transform", CLAUDE.md +
-/// stream-b-identification.md B7): the only public output is a
+/// docs/design/identification.md B7): the only public output is a
 /// `CameraFrame` containing a mat background with a keystoned, blurred,
 /// noised, JPEG-compressed card composited into it at some position this
 /// type never reveals. There is no overload that hands back a rectified

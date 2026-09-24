@@ -311,7 +311,7 @@ public class KeyboardCaptureTests
     // -----------------------------------------------------------------------
     // AutoCaptured marshaling: background-thread raise → Tiles populated on
     // the UI thread without throwing. This is reviewer scrutiny point 7 from
-    // stream-a-ui.md: "AutoCaptured is raised on the pipeline's background
+    // docs/design/app.md: "AutoCaptured is raised on the pipeline's background
     // thread — marshal before touching a control".
     // -----------------------------------------------------------------------
 
@@ -344,9 +344,9 @@ public class KeyboardCaptureTests
     // -----------------------------------------------------------------------
     // No IsDefault button in the visual tree.
     // A Button with IsDefault=True registers on the input root and fires on
-    // Enter regardless of focus (stream-a-ui.md §A6), which would intercept
+    // Enter regardless of focus (docs/design/app.md §A6), which would intercept
     // Enter before the tunnel handler and commit with every Enter press —
-    // including inside the type-ahead box (stream-a-ui.md §A6 ⚠).
+    // including inside the type-ahead box (docs/design/app.md §A6 ⚠).
     // -----------------------------------------------------------------------
 
     [AvaloniaFact]

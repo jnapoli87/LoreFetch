@@ -137,7 +137,7 @@ public class RoundTripGateTests
                 $"rank1 -> {f.Rank1ArtworkId ?? "(none)"} at distance {f.Rank1Distance}");
 
             Assert.Fail(
-                $"STOP-AND-ASK (CLAUDE.md / orchestration-plan.md B2): rank-1 ArtworkId match rate " +
+                $"STOP-AND-ASK (CLAUDE.md / docs/history/orchestration-plan.md B2): rank-1 ArtworkId match rate " +
                 $"{stats.Rank1Rate:P2} ({stats.CorrectCount}/{stats.AvailableCount}) is below the " +
                 $"{MinAcceptableRank1Rate:P0} floor. This is a project-level gate -- the user decides what " +
                 $"happens next, not this test. Failures:\n{string.Join('\n', failureLines)}");

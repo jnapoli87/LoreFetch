@@ -19,7 +19,7 @@ namespace LoreFetch.Core.Identification;
 /// (see `QueryTransform`'s own doc comment). The one thing this type adds on
 /// top of that path is orientation: a card laid on the mat 180 degrees round
 /// rectifies to a perfectly valid quad (`TL`/`TR`/`BR`/`BL` are geometric, not
-/// semantic -- stream-b-identification.md "B5", "Card orientation is
+/// semantic -- docs/design/identification.md "B5", "Card orientation is
 /// unhandled"), so every query is hashed both upright and rotated 180
 /// degrees, and the better of the two distances wins. The flip runs on the
 /// full-card grayscale `QueryTransform.Prepare` produces, BEFORE
@@ -173,7 +173,7 @@ public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
     /// leave the region crop pointed at the old top of the card instead of
     /// following the card's rotation. `Cv2.Flip(..., FlipMode.XY)` flips
     /// both axes, matching upstream's `cv::flip(card, card, -1)`
-    /// (stream-b-identification.md "B5").
+    /// (docs/design/identification.md "B5").
     private static void HashBothOrientations(RectifiedCard card, Span<ulong> uprightWords, Span<ulong> flippedWords)
     {
         using var gray = QueryTransform.Prepare(card);

@@ -16,6 +16,6 @@ test-images/
 
 Fixtures are `.png`, not `.jpg`: the Stream C hardware harness saves a lossless PNG of the decoded BGR frame, and the camera's own MJPG artifacts are already baked into those pixels, so re-encoding to JPEG would stack a second lossy generation on top for nothing.
 
-Tests that need these files **skip with a reason** when they are absent, so CI stays green; see `docs/orchestration-plan.md` (V7).
+Tests that need these files **skip with a reason** when they are absent, so CI stays green; see `docs/history/orchestration-plan.md` (V7).
 
 Check that a file really is ignored with `git check-ignore -v test-images/<path>`.

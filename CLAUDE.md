@@ -2,27 +2,22 @@
 
 Turn any webcam into a Magic: The Gathering collection scanner. Fully offline, no subscription, no phone.
 
-Private personal project, **GPLv3**, unrelated to any employer or day job. Built in a 24-hour hackathon window.
+Private personal project, **GPLv3**, unrelated to any employer or day job. v0.1.0 was built in a 24-hour hackathon by four parallel agent streams; that build record is kept in [`docs/history/`](docs/history/) and at tag `v0.1.0`. From here on it is developed slowly and deliberately, one GitHub issue at a time. See *Working on LoreFetch* at the end of this file.
 
-**This file holds the settled decisions.** Sequencing lives elsewhere:
+**This file holds the settled decisions.** Detail lives elsewhere:
 
 | Document | Job |
 |---|---|
-| [`CONTEXT.md`](CONTEXT.md) | The domain glossary — use its terms, avoid the ones it lists under *Avoid* |
-| [`docs/PLAN.md`](docs/PLAN.md) | The spine: review sequence, Stream 0, the four streams, integration, endgame |
-| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The frozen seam that makes parallel streams possible, and who owns what |
-| [`docs/stream-a-ui.md`](docs/stream-a-ui.md) | Avalonia app and auto-capture trigger, built against fakes |
-| [`docs/stream-b-identification.md`](docs/stream-b-identification.md) | Hash port, index, detection, accuracy ← *the risky one* |
-| [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | FlashCap → `IFrameSource` |
-| [`docs/stream-d-export.md`](docs/stream-d-export.md) | Collection store, native format, third-party adapters |
+| [`CONTEXT.md`](CONTEXT.md) | The domain glossary: use its terms, and avoid the ones it lists under *Avoid* |
+| [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The seam between domains (interfaces, types, the scan pipeline) and the domain map |
+| [`docs/design/app.md`](docs/design/app.md) | Design record: Avalonia app and auto-capture trigger |
+| [`docs/design/identification.md`](docs/design/identification.md) | Design record: detection, hash port, index, accuracy (*the risky one*) |
+| [`docs/design/capture.md`](docs/design/capture.md) | Design record: FlashCap → `IFrameSource` |
+| [`docs/design/collection.md`](docs/design/collection.md) | Design record: collection store, native format, third-party adapters |
 | [`docs/TESTING.md`](docs/TESTING.md) | Five test levels and what each must assert |
-| [`docs/stream-review-directions.md`](docs/stream-review-directions.md) | How the pre-build stream reviews run |
-| [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) | Every stream-review ruling and why — the record behind the current contract surface |
-| [`docs/orchestration-plan.md`](docs/orchestration-plan.md) | **Execution control:** validation findings, the gated master checklist (G0 → Stream 0 → fork → A–D → integration → endgame), and Sonnet-sized work packages for the orchestrating agent |
-
-Work happens in **four parallel git worktrees** after a serial ~3.5h foundation pass. `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, the `Directory.*` files and `global.json` are **frozen** once the streams fork — if a stream needs a contract change it *stops and asks*, because every unilateral edit there is a four-way merge conflict.
-
-⚠ **That freeze is mechanically enforced, which makes it a sequencing constraint.** `.claude/hooks/guard-write.sh` refuses those edits from inside a linked worktree, so a missing package reference or an incomplete contract **cannot be fixed from a stream** — fork with a gap and all four streams stall until someone returns to `main`. Finish and review the contracts and project files *before* creating any worktree, and over-reference packages rather than under-reference: an unused `PackageReference` costs nothing.
+| [`docs/RECONCILIATION.md`](docs/RECONCILIATION.md) | Every pre-build contract ruling and why: the record behind the current contract surface |
+| [`docs/accuracy.md`](docs/accuracy.md) | Accuracy measurements and the lab log behind them |
+| [`docs/history/`](docs/history/) | **Historical, not instructions:** the v0.1 build plan, the orchestrator's gated checklist and build log, and the retrospective |
 
 ---
 
@@ -188,7 +183,7 @@ Repo-local, **no global config touched** (the global default on these machines i
 
 ⚠️ **Do not rewrite that identity regex as `^(|[0-9]+\+)…`.** BSD grep on macOS rejects an empty alternative with *"empty (sub)expression"* and then matches nothing — which silently converts the guard into "refuse every commit." That bug was in the first version and only surfaced because the hook was tested rather than eyeballed. **An untested guard is not a guard.**
 
-`gh` CLI auth is per-host, not per-repo, and on these machines it is bound to a separate work account — so create repos in the browser, not via `gh`.
+`gh` CLI auth is per-host, not per-repo — it is machine-wide, not bound to this repo. On the Windows PC it is logged in as `jnapoli87` (verified 2026-09-24), so `gh` is fine for this repo there. On any other machine, run `gh auth status` before a `gh` write; publishing via `gh` is still subject to the review-before-push rule.
 
 ---
 
@@ -216,14 +211,6 @@ Two ways this still fails silently, both guarded rather than assumed:
 
 ## Working notes
 
-### Everything lives in this repository
-
-**No project state is stored outside it** — not in `~/.claude/plans/`, not in directory-keyed memory, not in a scratchpad. This is a hard rule, not a preference.
-
-The original plan was lost exactly that way: its memory pointed at `~/.claude/plans/snug-forging-salamander.md`, that file no longer existed, and recovering the plan took a filesystem-wide search that eventually turned up a copy in Obsidian. Directory-keyed memory also silently stops loading the moment a project is renamed or moved, which is precisely what happened here.
-
-So: every decision, plan, contract and test strategy is a tracked file in `docs/` or this file. If it matters and it isn't in git, it doesn't exist.
-
 ### Card imagery is enforced in two layers, not just documented
 
 The artwork is Wizards of the Coast IP regardless of who photographed it, so neither Scryfall renders nor our own captures may be committed. Once artwork is in history it is there permanently, short of a rewrite — so this is enforced twice:
@@ -235,17 +222,15 @@ Only **derived** data is committed: the ~8.2 MiB hash index and the accuracy tab
 
 ### Claude Code hooks — the rules that were previously only discipline
 
-`.claude/settings.json` (committed, so it applies in every worktree) wires two `PreToolUse` guards in `.claude/hooks/`:
+`.claude/settings.json` (committed, so it applies in every clone) wires one `PreToolUse` guard, `.claude/hooks/guard-bash.sh`, on `git` and `gh` commands:
 
 | Guard | Rule | Behaviour |
 |---|---|---|
-| `guard-write.sh` | Project state stays in the repo | **Denies** writes outside the repo. Claude's scratchpad and `/tmp` are exempt — temp files are legitimate, they just are not project state. |
-| `guard-write.sh` | Frozen contract surface | **Denies** edits to `Core/Abstractions/**`, `Core/Scanning/**`, `Core/Fakes/**`, `Tests/Integration/**`, `*.csproj`, `*.slnx`, `Directory.Build.props`, `Directory.Packages.props` and `global.json` when **the target file** sits inside a linked worktree, so Stream 0 can still author them on `main`. Detected via `--git-dir` ≠ `--git-common-dir`, resolved from the **target's own directory** — never from `$PWD`, because the Agent tool launches every subagent from the main checkout, so a cwd-based test would let a stream implementer write straight into `.claude/worktrees/stream-x/…/Core/Abstractions`. |
 | `guard-bash.sh` | Guards must be wired before committing | **Denies** `git … commit` when `core.hooksPath` is not `hooks`, naming `scripts/lorefetch.sh setup` as the fix. This is the one guard that can still speak when the *git* hook is switched off — see *Two things that bite a fresh clone* below. It lives here rather than in `hooks/pre-commit` for exactly that reason, and in a wired checkout it costs one `git config` read and never fires. |
 | `guard-bash.sh` | No force-push | **Denies** `--force`, `-f`, `--force-with-lease` on any `git … push`. The repo is public; rewriting history is unrecoverable for anyone who cloned it, and history is the audit trail for authorship and the imagery rule. |
 | `guard-bash.sh` | Publishing needs prior review | **Warns** (does not block) on plain `git push`, `gh pr create`, `gh repo create`, `gh release create`. Deliberately a tripwire rather than a wall — explicit go-aheads do happen, and a block would make pushing impossible. |
 
-Both were tested by piping synthetic payloads (16 cases, later 33). Two defects surfaced, and the second is the more instructive.
+It was tested by piping synthetic payloads (16 cases, later 33). Two defects surfaced, and the second is the more instructive.
 
 First: the force-push pattern originally matched only flag *names* between `git` and `push`, so a `-C <path>` form slipped through — a flag *value* broke it. **Detecting** the push is therefore deliberately loose now, which is the safe direction, because a loose match only ever adds the warning.
 
@@ -253,11 +238,9 @@ Second, found 2026-09-21 by hitting it on a routine push: **the deny was loose t
 
 **The general lesson, which cost a blocked push to learn:** a guard that is loose in the *right* direction is safety; a guard loose in *both* directions is a guess. Note which way each half of a compound condition fails.
 
-⚠ **The guard reads the command text, so it cannot tell a command from a string that merely contains one.** Authoring docs *about* force-pushing through a Bash heredoc trips it — the examples in this very paragraph do. Write that kind of content with the Write/Edit tools, which `guard-write.sh` covers and which never inspect prose for commands. Not a defect: distinguishing quoted text from shell syntax in a regex is a rabbit hole, and every approximation weakens the deny.
+⚠ **The guard reads the command text, so it cannot tell a command from a string that merely contains one.** Authoring docs *about* force-pushing through a Bash heredoc trips it — the examples in this very paragraph do. Write that kind of content with the Write/Edit tools, which never inspect prose for commands. Not a defect: distinguishing quoted text from shell syntax in a regex is a rabbit hole, and every approximation weakens the deny.
 
-**The cwd hole was the third defect, and the worst of the three** (orchestration finding V3). The linked-worktree test read `$PWD`, so the guard only fired when the *session* happened to sit in a worktree — which is how it was first tested, and why it looked sound. Every subagent is launched from the main checkout, so all four stream implementers would have had the frozen surface fully writable. Re-testing with the target and the cwd varied **independently** surfaced it, along with the inverse: a session in a worktree was refused edits to `main`'s own contract files. Both directions are now decided by the target path. 33 synthetic payloads, 13 of which the pre-fix hook gets wrong.
-
-**`guard-write.sh` on the Windows PC** needed two further fixes, both found by testing there rather than on the Mac. The repo root was hardcoded to the Mac path, so once `jq` was on `PATH` every write on Windows would have been denied as "outside the repo" — it is now derived from `git rev-parse --git-common-dir`, with `cygpath` normalising `C:\…` paths. And git 2.28 on the PC predates `--path-format=absolute`, which it echoes back as a literal line; that made the main checkout look like a linked worktree and froze the very surface Stream 0 must author. Both directories are now resolved by the shell. **Without `jq` on `PATH` the hook fails open** — winget installs it outside `PATH` until a new session starts.
+**Without `jq` on `PATH` the hook fails open.** On Windows, winget installs it outside `PATH` until a new session starts; `scripts/lorefetch.sh doctor` reports it.
 
 **After changing these, run `/hooks` or restart the session** — the settings watcher only watches directories that already had a settings file at session start, so a newly created `.claude/settings.json` is not live until then.
 
@@ -265,7 +248,7 @@ Second, found 2026-09-21 by hitting it on a routine push: **the deny was loose t
 
 **1. A fresh clone has NO guards, and nothing about it looks wrong.** `hooks/pre-commit` is tracked, so the file arrives — but **`core.hooksPath` is config, and config does not clone.** With `user.email` also unset, git falls back to the global identity, which on these machines is a work address. So a clone commits under the wrong identity, into a **public** repo, with the hook that exists to refuse precisely that not running at all. Verified on a real clone, 2026-09-21; it is not theoretical.
 
-`PLAN.md` says the hook is tracked "so it survives a fresh clone" — the *file* survives, the *wiring* does not, and that gap is the whole bug.
+`docs/history/PLAN.md` says the hook is tracked "so it survives a fresh clone" — the *file* survives, the *wiring* does not, and that gap is the whole bug.
 
 Enforced in two places rather than documented in one, because the failure is silent:
 - **`scripts/lorefetch.sh setup`** wires identity, `core.hooksPath` and the SSH key pin, repo-locally, touching nothing global. **`doctor` exits non-zero** while the guards are not live, so it is a check rather than a report.
@@ -275,7 +258,16 @@ Enforced in two places rather than documented in one, because the failure is sil
 
 ### Other standing rules
 
-- **The README is written incrementally**, one section per stream as each earns it — not as a lump at the end.
-- **Nothing lands on GitHub without review first.** Draft, show the content, wait for explicit approval, *then* push. Local commits on a branch are fine; anything that becomes visible to other people is not.
-- **The contract surface is frozen** once the streams fork: `Core/Abstractions`, `Core/Scanning`, `Core/Fakes`, `Tests/Integration`, every `.csproj`, the `.slnx`, `Directory.Build.props`, `Directory.Packages.props` and `global.json`. If a stream needs a change there it stops and asks — a unilateral edit is a four-way merge conflict, and a stream editing `Tests/Integration` can weaken the one suite that would have caught it.
+- **The README changes in the same PR as the behaviour it describes**, not as a catch-up pass later.
+- **Nothing lands on GitHub without review first.** Draft, show the content, wait for explicit approval, *then* push. That covers pushes, PRs, issues, labels, releases and repo settings. Local commits on a branch are fine; anything that becomes visible to other people is not.
 - **Chaos-test every regression test:** re-apply the bug, run only the new test, confirm it fails *for the right reason*, then revert. A test that merely passes may be vacuous. See `docs/TESTING.md`.
+
+## Working on LoreFetch
+
+The owner is learning this codebase and works on it at a slow pace. Favour small, explained changes over sweeping ones, and say *why* in commit messages and PR descriptions. The reasoning is the part worth keeping.
+
+- **GitHub Issues are the work queue.** Claude drafts an issue's text and files it with `gh` only after the owner approves it. Decisions that come out of an issue land in the repo (this file, `docs/CONTRACTS.md`, a design doc); the issue links to them.
+- **One branch per issue**, `fix/<n>-<slug>` or `feat/<n>-<slug>`, off `main`. Never commit directly to `main`.
+- **Every change reaches `main` through a PR** whose description says `Fixes #<n>`. CI must be green on both legs.
+- **Every bug fix carries a regression test**, chaos-tested as above.
+- **Plans are scratch.** Plan-mode files stay local and are not committed. Anything in a plan worth keeping becomes an issue, a commit message, or a line in the docs.

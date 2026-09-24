@@ -8,12 +8,12 @@ namespace LoreFetch.Capture;
 /// preferred id, returns a plain `Selection` or throws
 /// `FrameSourceException` — nothing in this file references FlashCap,
 /// which is what makes selection and diagnosis unit-testable without a
-/// camera (docs/stream-c-capture.md "Done when": "Split the stream in
+/// camera (docs/design/capture.md "Done when": "Split the stream in
 /// two... everything else... behind an internal stage").
 ///
 /// Never silently falls back to a lower mode: every path either returns an
 /// exact match for 1920x1080 JPEG at >= 30 fps, or throws with the full
-/// enumerated list in the message (stream-c-capture.md C2).
+/// enumerated list in the message (docs/design/capture.md C2).
 internal static class CaptureDeviceSelector
 {
     internal const int RequiredWidth = 1920;
@@ -52,7 +52,7 @@ internal static class CaptureDeviceSelector
             // access has been denied by a Windows privacy/permission
             // setting, and FlashCap cannot tell those two apart — an
             // absent device and a denied one both enumerate to nothing
-            // (stream-c-capture.md C1: "Zero descriptors is its own
+            // (docs/design/capture.md C1: "Zero descriptors is its own
             // diagnosis... not an empty list").
             throw new FrameSourceException(
                 "No capture devices were enumerated at all. This means either no camera is connected, or " +

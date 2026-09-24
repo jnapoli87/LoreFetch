@@ -1,12 +1,16 @@
-# Stream C — Camera capture
+# Capture — design record
 
 **Smallest stream, and the only one that needs hardware.** Its whole job is to turn a C920 into `CameraFrame`s that satisfy `IFrameSource`.
 
 ⚠ The original **~100–150 lines** estimate was written before this review found that FlashCap hands over undecoded JPEG and reports device loss only by falling silent. With a decode stage (C2a), a first-frame timeout and a frame watchdog (C5), it is realistically **250–350 lines** plus tests. Still the smallest stream — but not a single-sitting one.
 
-Owns (exclusive write access): `LoreFetch.Capture/**`, `Tests/StreamC/**`, the stream C section of `README.md`
 > [!NOTE]
-> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+> **Design record from v0.1.** Written as the hackathon's Stream C spec. Code comments cite its section IDs (C0, C1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
+>
+> Code: `src/LoreFetch.Capture`. Tests: `Tests/StreamC`.
+
+> [!NOTE]
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](../CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](../RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
 >
 > - **All 6 proposed contract changes accepted.** The `.csproj` package set is pinned in Stream 0 — FlashCap 1.12.0, OpenCvSharp4 + both runtimes — so the MJPEG decode stage has what it needs.
 > - **The logging seam is `Microsoft.Extensions.Logging.Abstractions`**, injected as `ILoggerFactory`. The "the log shows…" criteria are now satisfiable.
@@ -17,8 +21,7 @@ Owns (exclusive write access): `LoreFetch.Capture/**`, `Tests/StreamC/**`, the s
 > - **OpenCvSharp is an allowed dependency of this project.** No OpenCvSharp type crosses the seam.
 > - macOS status unchanged (`win-x64` only, no device-opening test on the macOS leg) — but `CLAUDE.md`'s stale reason was corrected. Rotation cost dropped as a planned risk.
 
-Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), including `ScanSettings`, **`IFrameSourceFactory`**, **`FrameSourceException`**, `ILoggerFactory`, and the public `CameraFrame` constructor that takes a pooled buffer
-Must not touch: `LoreFetch.App`, anything else in `LoreFetch.Core`, any `.csproj`, `LoreFetch.slnx`
+Consumes: `Core/Abstractions` (see [`CONTRACTS.md`](../CONTRACTS.md)), including `ScanSettings`, **`IFrameSourceFactory`**, **`FrameSourceException`**, `ILoggerFactory`, and the public `CameraFrame` constructor that takes a pooled buffer
 
 Its only consumer is the scan pipeline, which reads exactly one `IFrameSource`.
 
@@ -164,7 +167,7 @@ Draw it that way deliberately, because **FlashCap cannot be faked from outside i
 
 ## Plan review: research targets
 
-For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). Check each against primary sources — FlashCap's repository and docs, Logitech's specs — and record what you found.
+For the pre-build stream review (see [`docs/history/stream-review-directions.md`](../history/stream-review-directions.md)). Check each against primary sources — FlashCap's repository and docs, Logitech's specs — and record what you found.
 
 1. **FlashCap 1.12.0 API.** Do `CaptureDevices().EnumerateDescriptors()`, `PixelFormats.JPEG` and the characteristic list exist as this doc describes? What does FlashCap hand the callback for an MJPEG stream — raw JPEG bytes, or decoded pixels?
 2. **Who decodes MJPEG to BGR, with what?** If FlashCap hands over JPEG, this stream must decode — with which library, and is it already among the packages Stream 0 will pin? Nothing can be added after the fork.

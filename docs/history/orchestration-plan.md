@@ -1,6 +1,9 @@
 # Orchestration plan
 
-The execution control document for the build. It tells the orchestrating agent what to do, in what order, and when it may proceed. **Decisions live in [`../CLAUDE.md`](../CLAUDE.md), contracts in [`CONTRACTS.md`](CONTRACTS.md), and stream detail in the stream docs.** This file sequences and slices that material. It does not restate it, except where a Sonnet implementer would otherwise act on stale text.
+> [!IMPORTANT]
+> **Historical — the v0.1 hackathon build record, not current instructions.** It describes a parallel four-stream agent workflow (worktrees, a frozen contract surface, stream ownership) that was retired after v0.1.0. Settled decisions live in [`CLAUDE.md`](../../CLAUDE.md), design in [`docs/design/`](../design/), and current work in GitHub Issues.
+
+The execution control document for the build. It tells the orchestrating agent what to do, in what order, and when it may proceed. **Decisions live in [`../CLAUDE.md`](../../CLAUDE.md), contracts in [`CONTRACTS.md`](../CONTRACTS.md), and stream detail in the stream docs.** This file sequences and slices that material. It does not restate it, except where a Sonnet implementer would otherwise act on stale text.
 
 > **User decisions recorded here (2026-09-21):**
 > - The golden-hash test runs on **Windows only**. The macOS leg filters it out by trait, because `INTER_AREA` is not bit-exact on ARM64. This supersedes "both CI legs" wherever it appears. *Propagated by G0.5.*
@@ -31,7 +34,7 @@ Four consequences that are not just bookkeeping:
 
 ### Contract change — `ArtworkId` to the collection file, ruled 2026-09-21 before the fork
 
-A proposal raised after Stream 0's contract work: identification already produces the matched art's Scryfall printing id (`CardCandidate.ArtworkId`, also stored per entry in `cards.lfidx`) and then **discards it at the tile**, so the collection file — the stated source of truth that "carries everything we have at commit time" — never sees it. Accepted with two amendments. Full ruling and reasoning in [`RECONCILIATION.md`](RECONCILIATION.md).
+A proposal raised after Stream 0's contract work: identification already produces the matched art's Scryfall printing id (`CardCandidate.ArtworkId`, also stored per entry in `cards.lfidx`) and then **discards it at the tile**, so the collection file — the stated source of truth that "carries everything we have at commit time" — never sees it. Accepted with two amendments. Full ruling and reasoning in [`RECONCILIATION.md`](../RECONCILIATION.md).
 
 **Applied on `main` before any worktree existed**, which is the only moment it is cheap: after the fork it stalls four streams, and every row scanned in the meantime has lost its art irrecoverably — rescanning the physical card is the only way back.
 
@@ -146,7 +149,7 @@ These came from checking the merged plan against itself, the environment on this
 | V3 | **`guard-write.sh` decides "linked worktree" from the session's working directory, not from the target file.** A subagent started from `main` (which is how the Agent tool launches them) can write into `.claude/worktrees/stream-x/…/Core/Abstractions` unchallenged. The Windows scratchpad (`/c/Users/*/AppData/Local/Temp/claude/*`) is also not exempt, and neither are the CPM files, `Core/Fakes/` or `Tests/Integration/`. | G0.6 |
 | V4 | **Drop `OpenCvSharp5.AvaloniaExtensions`.** Its latest release (5.0.0.20260905) depends on **`OpenCvSharp5`** and on Avalonia **12.1.1**. That is a second, different-major OpenCvSharp binding next to `OpenCvSharp4` 4.13. It is not needed either: frames cross the seam as `byte[]`, and the App blits them into its own `WriteableBitmap`. Its version was also left unpinned ("—"). | **Fixed 2026-09-21** in CLAUDE.md's stack table and PLAN's package table. S0.1 does not reference it. |
 | V5 | **The test stack is unpinned.** `Avalonia.Headless.XUnit` 12.1.2 depends on `xunit.v3.extensibility.core` 3.2.2, so the suite must use **xunit v3** (TESTING.md's `Assert.Skip` is also a v3 API). Pin `xunit.v3`, `xunit.runner.visualstudio` 3.x and `Microsoft.NET.Test.Sdk`. Also add `Microsoft.Extensions.Logging` plus a sink (`.Console`), or stream C's "the log shows…" criteria are never visible. "current" is not a pin: pin `CsvHelper` and `M.E.Logging.Abstractions` exactly. | The xunit v3 half was **fixed 2026-09-21** in PLAN's package table and CLAUDE.md. S0.1 still pins exact versions and adds the logging sink. |
-| V6 | **TESTING.md is stale on hashing.** It says to assert "properties, not golden byte values" and lists scale invariance. Stream B requires committed golden hashes and says scale is a *bound*, not an invariant. The user has also ruled that goldens run on **Windows only** (INTER_AREA is not bit-exact on ARM64, and `macos-latest` is ARM64). | G0.5 propagates to CLAUDE.md, TESTING.md, stream-b and PLAN.md |
+| V6 | **TESTING.md is stale on hashing.** It says to assert "properties, not golden byte values" and lists scale invariance. Stream B requires committed golden hashes and says scale is a *bound*, not an invariant. The user has also ruled that goldens run on **Windows only** (INTER_AREA is not bit-exact on ARM64, and `macos-latest` is ARM64). | G0.5 propagates to CLAUDE.md, TESTING.md, stream-b and docs/history/PLAN.md |
 | V7 | **"Integration is done when the skip count reaches zero" cannot be met in CI.** The real-implementation cases need the index, Scryfall renders and fixtures, and imagery can never be committed. **Redefined:** zero artifact-gated skips on the orchestrator's **local win-x64 run** with `LOREFETCH_REQUIRE_REAL=1`, which turns every such skip into a failure. CI skips are allowed and must each state a reason. | S0.6a, I6 |
 | V8 | **Stream 0 cannot write `[real]` integration cases.** They reference types that will not exist until B, C and D land, and code that does not compile cannot be skipped. **Resolved:** the suite is parameterised over an `IImplementationSet` provider. `Fakes` exists from S0. `Real` is a stub that skips with a reason until integration fills it in. The concrete type names are fixed now (§4) so wiring them is mechanical. | S0.6a, I1–I3 |
 | V9 | **No fake trigger exists**, but the fakes suite must exercise `AutoCaptured`, and the real trigger belongs to stream A. | S0.6a adds a test-local `ScriptedTrigger` in `Tests/Integration` |
@@ -186,7 +189,7 @@ G0 preconditions ─► S0 (serial, main) ─► ⛩G1 fork ─┬─ A  (A0…A
   - Drop `OpenCvSharp5.AvaloniaExtensions` from PLAN's package table and CLAUDE's stack table (V4).
   - Add the test and logging packages (V5).
   - Correct TESTING.md's hash-invariant paragraph (V6).
-  - Propagate "golden hashes on Windows only; the macOS leg filters them out by trait" to CLAUDE.md, TESTING.md, stream-b and PLAN.md (V6).
+  - Propagate "golden hashes on Windows only; the macOS leg filters them out by trait" to CLAUDE.md, TESTING.md, stream-b and docs/history/PLAN.md (V6).
   - Rewrite TESTING's and PLAN's skip-zero definition per V7.
   - Mark RECONCILIATION's "branches not merged" as done.
 
@@ -841,7 +844,7 @@ The `EXTERNAL` baseline row is worth keeping: **the count-mismatch guard worked 
 
 ### B8 done-when review — scorecard, 2026-09-22 🧭
 
-Against `docs/stream-b-identification.md` §*Done when*:
+Against `docs/design/identification.md` §*Done when*:
 
 | # | Item | Status |
 |---|---|---|
@@ -947,7 +950,7 @@ At 20″ every layout fits, portrait included (+5.18″ worst case, card 170×23
 
 **Fixtures are `.png`, not `.jpg`** (ruled 2026-09-22). The Stream C hardware harness saves a lossless PNG of the decoded BGR frame, and the camera's own MJPG artifacts are already baked into those pixels — re-encoding to JPEG to satisfy `test-images/README.md`'s stated extension would stack a second lossy generation on top for nothing.
 
-**Follow-ups owed on `main`, not yet done:** `CLAUDE.md` §Geometry still states the ~9.75″ lock, the "1920 axis along the table's depth" requirement and the 38% warning; `docs/PLAN.md` may repeat them; and `test-images/README.md` still says `.jpg`. All three need correcting to match this ruling.
+**Follow-ups owed on `main`, not yet done:** `CLAUDE.md` §Geometry still states the ~9.75″ lock, the "1920 axis along the table's depth" requirement and the 38% warning; `docs/history/PLAN.md` may repeat them; and `test-images/README.md` still says `.jpg`. All three need correcting to match this ruling.
 
 ### Human track H (parallel, may start at G0)
 - [x] **H1** 👤 Print the adjustable camera mount. Lock the height at about 9.75″ with the 1920 axis along the table's depth. — *done 2026-09-22. Mount printed and adjustable to any height in range. **Superseded in part by the geometry re-ruling below:** the height is not locked at 9.75″ and the camera is not rotated. Operating height **12″**, sweep **12″ and 20″**, camera **landscape, unrotated**.*

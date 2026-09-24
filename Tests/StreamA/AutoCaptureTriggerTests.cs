@@ -6,7 +6,7 @@ namespace LoreFetch.Tests.StreamA;
 
 /// Unit tests for `AutoCaptureTrigger` — docs/TESTING.md calls it "the
 /// highest-value unit target in the project" and lists the required cases;
-/// this file also covers docs/stream-a-ui.md A0's nearest-centroid matching
+/// this file also covers docs/design/app.md A0's nearest-centroid matching
 /// requirement, since that is the one detail a naive port gets wrong, plus
 /// two review findings: settle is measured against a fixed anchor snapshot
 /// rather than the previous frame (otherwise slow drift under ε per frame
@@ -116,7 +116,7 @@ public class AutoCaptureTriggerTests
         Assert.True(trigger.Evaluate(quads, expectedCount: 1, At(1_200)));
     }
 
-    /// The override that actually governs this trigger (docs/stream-a-ui.md
+    /// The override that actually governs this trigger (docs/design/app.md
     /// A0, and the task brief for this package): "the scene breaks" means
     /// count != expected — movement alone resets the settle TIMER but must
     /// NOT re-arm an already-fired trigger, because there was no count

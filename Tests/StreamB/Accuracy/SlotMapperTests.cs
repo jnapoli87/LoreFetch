@@ -6,7 +6,7 @@ namespace LoreFetch.Tests.StreamB.Accuracy;
 
 /// The H3 note block's two 🔴 requirements, pinned directly: row-major
 /// centroid sort (requirement A), and count-mismatch never pairing by
-/// position (requirement B) -- orchestration-plan.md calls the second one
+/// position (requirement B) -- docs/history/orchestration-plan.md calls the second one
 /// "the single highest-value test in the package."
 ///
 /// Deliberately pure geometry: no `CameraFrame`, no OpenCV, no detector --
@@ -330,7 +330,7 @@ public class SlotMapperTests
     }
 }
 
-/// `TryInferGrid` -- package B6's Task 2 (orchestration-plan.md): replaces
+/// `TryInferGrid` -- package B6's Task 2 (docs/history/orchestration-plan.md): replaces
 /// whole-frame dropping on a count mismatch with per-CELL grid inference,
 /// so a 3x3 frame missing one card still classifies its other 8 (measured
 /// on the real corpus: most frames find 8 of 9 -- see docs/accuracy.md).

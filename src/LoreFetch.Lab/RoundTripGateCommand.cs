@@ -24,7 +24,7 @@ public static class RoundTripGateCommand
     public const int DefaultLandSampleSize = 20;
     public const int DefaultNonLandSampleSize = 180;
     public const int DefaultSeed = 20260922;
-    public const double DefaultMinRank1Rate = 0.99; // CLAUDE.md / orchestration-plan.md B2: "stop and ask" below this
+    public const double DefaultMinRank1Rate = 0.99; // CLAUDE.md / docs/history/orchestration-plan.md B2: "stop and ask" below this
 
     public static Task<int> RunAsync(string[] args) => Task.FromResult(Run(args));
 

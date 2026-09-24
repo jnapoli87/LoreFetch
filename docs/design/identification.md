@@ -1,14 +1,17 @@
-# Stream B — Identification
+# Detection & identification — design record
 
 **The engine, and the only stream that can invalidate the project.** Everything else is plumbing around whatever this stream proves.
 
-Owns (exclusive write access): `LoreFetch.Core/Identification/**`, `LoreFetch.Core/Imaging/**`, `LoreFetch.Lab/**`, `Tests/StreamB/**`, the stream B section of `README.md`, and the committed hash index + thresholds file
-Consumes: `Core/Abstractions` (frozen — see [`CONTRACTS.md`](CONTRACTS.md)), the local fixture corpus
+> [!NOTE]
+> **Design record from v0.1.** Written as the hackathon's Stream B spec. Code comments cite its section IDs (B0, B1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
+>
+> Code: `src/LoreFetch.Core/Imaging`, `src/LoreFetch.Core/Identification`, `src/LoreFetch.Lab`. Tests: `Tests/StreamB`.
+
+Consumes: `Core/Abstractions` (see [`CONTRACTS.md`](../CONTRACTS.md)), the local fixture corpus
 Implements: `ICardDetector`, `IRectifier`, `ICardIdentifier`, `IOracleCatalog`
-Must not touch: `LoreFetch.App`, `LoreFetch.Capture`, `Core/Trigger`, `Core/Collection`, `Core/Export`, `Core/Scanning`, the fakes, any `.csproj`, `LoreFetch.slnx`
 
 > [!NOTE]
-> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
+> **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](../CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](../RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:
 >
 > - **Both proposed contract changes accepted.** `CardCandidate` gained `string? ArtworkId`, so the round-trip gate asserts artwork identity through the public seam rather than via the concrete type. `Identify`'s `maxCandidates` now means nearest **distinct `OracleId`**.
 > - **The asymmetry is confirmed and `CLAUDE.md` moved, not this doc.** Steps 2–3 are reference-side only; steps 4–6 are shared and must be bit-identical.
@@ -208,7 +211,7 @@ Two notes on using it:
 
 ## Plan review: research targets
 
-For the pre-build stream review (see [`stream-review-directions.md`](stream-review-directions.md)). This is the stream where research matters most — check each against primary sources and record what you found.
+For the pre-build stream review (see [`docs/history/stream-review-directions.md`](../history/stream-review-directions.md)). This is the stream where research matters most — check each against primary sources and record what you found.
 
 1. **The seven steps against CardSpotter's actual source** (`github.com/relgin/cardspotter`). Blur kernel and σ, the 96 px width, `INTER_AREA`, the `0.85·width` region, the 32×32 resize, median-per-cell, per-cell distances, early rejection. Every mismatch between this doc and the source is a finding.
 2. **Index size arithmetic.** This doc says ~67k × 1024 bits ≈ 8.6 MB; `CLAUDE.md` gives 53,482 unique artworks. Which count does `unique_artwork` actually return, and what does the index weigh?

@@ -2,7 +2,7 @@ using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.Lab.Accuracy;
 
-/// The two requirements orchestration-plan.md's H3 note block flags as
+/// The two requirements docs/history/orchestration-plan.md's H3 note block flags as
 /// "most likely to produce a silently wrong result" for B6, both enforced
 /// structurally here rather than left to caller discipline:
 ///

@@ -7,7 +7,7 @@ namespace LoreFetch.Capture;
 
 /// FlashCap → `IFrameSource`. The concrete type stream A's composition
 /// root constructs at integration
-/// (docs/orchestration-plan.md §4: fixed name
+/// (docs/history/orchestration-plan.md §4: fixed name
 /// `LoreFetch.Capture.WebcamFrameSourceFactory`, constructed with
 /// `(ILoggerFactory)`).
 ///
@@ -68,7 +68,7 @@ public sealed class WebcamFrameSourceFactory : IFrameSourceFactory
             // CapturedAt is taken once, here, on handler entry — not from
             // PixelBuffer.Timestamp, which is a TimeSpan on the device's
             // own clock rather than a wall-clock DateTimeOffset
-            // (stream-c-capture.md C6).
+            // (docs/design/capture.md C6).
             var capturedAt = DateTimeOffset.UtcNow;
 
             // One Interlocked flag and one Stopwatch read, ahead of any
@@ -85,7 +85,7 @@ public sealed class WebcamFrameSourceFactory : IFrameSourceFactory
             try
             {
                 // ReferImage() is a zero-copy ArraySegment valid only for
-                // the duration of this callback (stream-c-capture.md
+                // the duration of this callback (docs/design/capture.md
                 // C2a) — Push copies it into a pooled buffer immediately,
                 // so nothing here retains FlashCap's own buffer.
                 // ArraySegment<byte> converts implicitly to ReadOnlySpan<byte>.
@@ -184,7 +184,7 @@ public sealed class WebcamFrameSourceFactory : IFrameSourceFactory
 
     /// Built from the negotiated characteristic — never from the requested
     /// constants — so the UI status line reflects reality rather than
-    /// intent (stream-c-capture.md C2, and this stream's own "Done when":
+    /// intent (docs/design/capture.md C2, and this stream's own "Done when":
     /// "Is `Description` the negotiated format or the requested one?").
     /// `internal` (not `private`) so it is directly unit-testable without
     /// opening a device: pass any `CaptureDescriptor`/`CaptureCharacteristic`

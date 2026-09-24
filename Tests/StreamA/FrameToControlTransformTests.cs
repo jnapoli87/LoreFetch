@@ -32,7 +32,7 @@ public class FrameToControlTransformTests
     public void Compute_RotatedPortraitFrameInLandscapeControl_MapsCornersExactly()
     {
         // A 1080x1920 (portrait, post-rotation) frame in a 1600x900
-        // landscape control — the case docs/stream-a-ui.md A3 calls out by
+        // landscape control — the case docs/design/app.md A3 calls out by
         // name. Height binds: min(1600/1080, 900/1920) = min(1.4814..., 0.46875).
         var transform = FrameToControlTransform.Compute(frameWidth: 1080, frameHeight: 1920, controlWidth: 1600, controlHeight: 900);
 

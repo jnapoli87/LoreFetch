@@ -1,6 +1,6 @@
 # LoreFetch.Tests.StreamC
 
-Unit tests for `LoreFetch.Capture` — the FlashCap → `IFrameSource` adapter. Owned exclusively by **Stream C** (worktree `stream-c`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries).
+Unit tests for `LoreFetch.Capture` — the FlashCap → `IFrameSource` adapter. Owned exclusively by **Stream C** (worktree `stream-c`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map).
 
 ## What it covers
 

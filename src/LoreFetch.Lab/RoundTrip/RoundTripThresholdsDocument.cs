@@ -163,7 +163,7 @@ public sealed record RoundTripThresholdsDocument
               "INTER_AREA is not bit-exact across x86-64/ARM64 (OpenCV #24163 confirmed, #22477 closed won't-fix; " +
               "CLAUDE.md \"The one gate that matters most\", Real risk #2), and that includes the QUERY side's own " +
               "32x32 resize -- so referenceFloor and the margin statistics below must be RE-MEASURED on win-x64 " +
-              "(orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds.";
+              "(docs/history/orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds.";
 
         return provenance + " " +
             "goodDistance/okDistance are NOT YET SET -- that is B6's job, calibrated from the real fixture corpus " +

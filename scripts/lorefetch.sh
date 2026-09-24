@@ -109,9 +109,8 @@ default_filter() {
 # --------------------------------------------------------------------------
 # Discover the solution and the app project.
 #
-# Deliberately discovered rather than hardcoded: this script is written before
-# S0.1 creates the solution, and it has to be honest about that instead of
-# failing with a confusing MSBuild error.
+# Discovered rather than hardcoded, so a checkout without them gets a plain
+# message instead of a confusing MSBuild error.
 # --------------------------------------------------------------------------
 find_solution() {
   for f in "$REPO"/*.slnx "$REPO"/*.sln; do
@@ -245,7 +244,7 @@ cmd_doctor() {
 
   say "Solution"
   if sln=$(find_solution); then note "solution : $sln"; else
-    note "solution : none yet (S0.1 has not run)"; fi
+    note "solution : none found"; fi
   if app=$(find_app); then note "app      : $app"; else
     note "app      : none yet"; fi
 
@@ -288,9 +287,8 @@ require_solution() {
   if ! SLN=$(find_solution); then
     say "Nothing to build yet"
     note "No .slnx or .sln in $REPO."
-    note "Stream 0 package S0.1 creates the solution; until it lands there is"
-    note "nothing here to build, and that is the expected state rather than a"
-    note "broken checkout. 'scripts/lorefetch.sh doctor' still works."
+    note "This checkout has no solution file, so there is nothing to build."
+    note "'scripts/lorefetch.sh doctor' still works."
     exit 0
   fi
 }
@@ -378,8 +376,8 @@ cmd_test() {
 
   if [ -n "$empty" ]; then
     printf '\n'
-    note "NOTE: these test projects matched no tests. Expected while a stream is"
-    note "unstarted; suspicious once it is done."
+    note "NOTE: these test projects matched no tests. Expected only while a new"
+    note "project is empty; otherwise check the filter and the test adapter."
     printf '%s\n' "$empty" | sed 's/^/      /'
   fi
 
@@ -390,7 +388,7 @@ cmd_run() {
   require_solution
   if ! APP=$(find_app); then
     say "No app to run yet"
-    note "No executable project under $REPO/src. S0.1 creates LoreFetch.App."
+    note "No executable project under $REPO/src."
     exit 0
   fi
   say "Run ($CONFIG)"

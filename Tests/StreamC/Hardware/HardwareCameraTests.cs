@@ -8,7 +8,7 @@ using Xunit;
 namespace LoreFetch.Tests.StreamC.Hardware;
 
 /// C4-prep: the hardware test harness the orchestrator runs on the real
-/// C920 (docs/stream-c-capture.md's "Done when" items that need a camera:
+/// C920 (docs/design/capture.md's "Done when" items that need a camera:
 /// negotiated 1080p30 MJPG, flat memory over a sustained run, a slow
 /// consumer producing latency rather than growth). Every test here opens
 /// the real device through the PUBLIC `WebcamFrameSourceFactory` — nothing
@@ -123,7 +123,7 @@ public sealed class HardwareCameraTests : IDisposable
 
         // JpegFrameDecoder rolls its own per-frame decode times up into an
         // Information-level summary every DecodeSummaryIntervalFrames (150)
-        // frames (stream-c-capture.md C6) — surface the most recent one
+        // frames (docs/design/capture.md C6) — surface the most recent one
         // this run actually logged, if any 150-frame window completed.
         var decodeSummaryLine = _logging.Lines.LastOrDefault(l => l.Contains("Capture: decoded", StringComparison.Ordinal));
         _output.WriteLine(decodeSummaryLine is not null

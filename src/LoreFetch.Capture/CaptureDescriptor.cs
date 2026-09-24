@@ -4,7 +4,7 @@ namespace LoreFetch.Capture;
 /// `DeviceTypes`, kept as a separate type so every file that reads a
 /// `CaptureDescriptor` (selection, diagnosis, id formatting, and their
 /// tests) has no reference to the FlashCap assembly at all
-/// (docs/stream-c-capture.md "Done when": "the FlashCap-facing shim is the
+/// (docs/design/capture.md "Done when": "the FlashCap-facing shim is the
 /// only code that cannot be tested").
 ///
 /// `Other` folds in AVFoundation and V4L2, which this stream never
@@ -29,7 +29,7 @@ internal enum CaptureBackend
 /// `FramesPerSecond` is already resolved to `double` at the point this
 /// record is built. FlashCap's own `Fraction` has an implicit `double`
 /// conversion, applied once during enumeration
-/// (docs/stream-c-capture.md C2: compare `(double)c.FramesPerSecond >=
+/// (docs/design/capture.md C2: compare `(double)c.FramesPerSecond >=
 /// 30.0`, never `== 30` — that does not even compile against a `Fraction`,
 /// and would be brittle against a `30000/1001`-style advertisement like
 /// 29.97 fps).

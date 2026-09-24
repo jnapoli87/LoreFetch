@@ -6,7 +6,7 @@ namespace LoreFetch.Tests.StreamC;
 
 /// Exercises `CaptureDeviceSelector` entirely over plain `CaptureDescriptor`
 /// data — no FlashCap device, no FlashCap type anywhere in this file. This
-/// is the split docs/stream-c-capture.md's "Done when" calls for: "the
+/// is the split docs/design/capture.md's "Done when" calls for: "the
 /// FlashCap-facing shim is the only code that cannot be tested."
 public class CaptureDeviceSelectorTests
 {
@@ -33,7 +33,7 @@ public class CaptureDeviceSelectorTests
     // 30000/1001 is the classic NTSC-style "29.97 fps" advertisement. The
     // rule is >= 30.0 exactly, so this must be rejected even though it
     // would display as "30fps" if naively rounded — the whole reason
-    // stream-c-capture.md insists on `(double)c.FramesPerSecond >= 30.0`
+    // docs/design/capture.md insists on `(double)c.FramesPerSecond >= 30.0`
     // rather than `== 30`.
     [Fact]
     public void SelectDevice_2997Fps_IsRejected_NoMatchingCharacteristic()

@@ -352,7 +352,7 @@ public static class AppComposition
     /// method lets <see cref="HashCardIdentifier.Load"/>/
     /// <see cref="ThresholdsFile.Load"/>'s own exceptions propagate — after
     /// logging them at <see cref="LogLevel.Critical"/>, naming the path —
-    /// rather than catching and falling back to Fakes (docs/orchestration-plan.md's
+    /// rather than catching and falling back to Fakes (docs/history/orchestration-plan.md's
     /// I2/I3 override: "a shipped app that quietly runs on stub identification
     /// is worse than one that refuses to start"). <see cref="App"/> is what
     /// turns that exception into a clean, non-zero exit.
@@ -669,7 +669,7 @@ public static class AppComposition
         // A6: oracle catalog for the "Set card manually…" type-ahead. The
         // StubOracleCatalog defaults to ~33,000 entries (the size where
         // AutoCompleteBox's uncapped defaults become a real problem) — see
-        // plan-finding V16 and stream-a-ui.md §A5.
+        // plan-finding V16 and docs/design/app.md §A5.
         IOracleCatalog catalog = new StubOracleCatalog();
 
         // Best-effort cleanup of the temp folder DemoFrames created, run

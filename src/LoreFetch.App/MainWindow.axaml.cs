@@ -26,7 +26,7 @@ namespace LoreFetch.App;
 public partial class MainWindow : Window
 {
     /// ~15 fps: plenty for the eye, and comfortably inside every measured
-    /// WriteableBitmap-behind-Image ceiling (docs/stream-a-ui.md A1,
+    /// WriteableBitmap-behind-Image ceiling (docs/design/app.md A1,
     /// "Corrected" — nothing here claims a number was ever measured beyond
     /// what's cited there, and 15 is well inside it). This only gates how
     /// OFTEN a render is requested — TopLevel.RequestAnimationFrame is
@@ -65,7 +65,7 @@ public partial class MainWindow : Window
 
     // Reused conversion output, shaped to the CURRENT bitmap's
     // Lock().RowBytes * Height. Reallocated alongside `_bitmap`, and also if
-    // RowBytes itself ever changes for the same size — docs/stream-a-ui.md
+    // RowBytes itself ever changes for the same size — docs/design/app.md
     // notes RowBytes comes from SKImageInfo.RowBytes on the Skia backend and
     // is unpadded there, but nothing here assumes that holds everywhere.
     private byte[]? _convertedBuffer;
@@ -156,7 +156,7 @@ public partial class MainWindow : Window
 
         // A7: window-level tunnel handler for Space/Enter/Escape. Must use
         // RoutingStrategies.Tunnel explicitly — AddHandler's default is
-        // Direct|Bubble, which would miss the tunnel pass (stream-a-ui.md
+        // Direct|Bubble, which would miss the tunnel pass (docs/design/app.md
         // §A6, keyboard-handling warning). The tunnel handler runs
         // root→target before the bubble pass, so it sees the key first.
         // Do NOT add KeyBindings for these keys — KeyboardDevice walks
@@ -367,7 +367,7 @@ public partial class MainWindow : Window
     /// Skia backend caches an SKImage snapshot that only the lock's Dispose
     /// invalidates, so invalidating before disposing (or holding the lock
     /// across InvalidateVisual) renders the FIRST frame forever
-    /// (docs/stream-a-ui.md A1).
+    /// (docs/design/app.md A1).
     private void OnRenderFrame(TimeSpan _)
     {
         Interlocked.Exchange(ref _renderScheduled, 0);
@@ -503,11 +503,11 @@ public partial class MainWindow : Window
     // A7: Keyboard map and auto-capture wiring
     //
     // All three keys are handled at the window level via a tunnel handler —
-    // see stream-a-ui.md §A6 for the reasoning (tunnel beats bubble, tunnel
+    // see docs/design/app.md §A6 for the reasoning (tunnel beats bubble, tunnel
     // handler beats KeyBindings). The focus bail is the critical correctness
     // check: without it, Space in the type-ahead TextBox is consumed by the
     // global handler, and "Black Lotus" becomes untypeable (WM_CHAR / AvnView
-    // trap described in stream-a-ui.md §A6).
+    // trap described in docs/design/app.md §A6).
     // -----------------------------------------------------------------------
 
     /// <summary>

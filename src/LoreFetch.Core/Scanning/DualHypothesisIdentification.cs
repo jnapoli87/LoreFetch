@@ -15,7 +15,7 @@ public enum IdentificationHypothesis
     Expanded,
 }
 
-/// Package DH: dual-hypothesis identification. `docs/orchestration-plan.md`'s
+/// Package DH: dual-hypothesis identification. `docs/history/orchestration-plan.md`'s
 /// 2026-09-22 "dual-hypothesis identification ships in v0.1.0" ruling is the
 /// evidence this exists to act on -- E1a found that on a tight grid
 /// (`tight_white`) and on a black mat, adjacent black borders merge or a

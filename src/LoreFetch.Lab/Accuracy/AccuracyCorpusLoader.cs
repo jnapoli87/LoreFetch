@@ -6,7 +6,7 @@ namespace LoreFetch.Lab.Accuracy;
 /// What fraction of the ground truth this run actually had fixture files
 /// for, and which (height, layout, rung, mat) combinations that subset
 /// covers -- printed alongside every report so a partial-corpus run can
-/// never be read as the full result (stream-b-identification.md
+/// never be read as the full result (docs/design/identification.md
 /// Fallbacks: the same point made about a 5k index -- "label any such
 /// table with its index size" -- applies just as much to a partial
 /// fixture corpus).

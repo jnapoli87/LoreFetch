@@ -106,7 +106,7 @@ public class AccuracyFrameRunnerTests
         Assert.All(results, r => Assert.Null(r.Rank1Distance));
     }
 
-    /// Task 2 (orchestration-plan.md): the headline case grid inference
+    /// Task 2 (docs/history/orchestration-plan.md): the headline case grid inference
     /// exists for. A 3x3 (layout 9) frame where the detector finds only 8
     /// of 9 -- exactly the real corpus's own most common outcome (see
     /// docs/accuracy.md) -- must classify the other 8 slots normally

@@ -6,7 +6,7 @@ namespace LoreFetch.Tests.StreamB;
 
 /// Step 4 takes only the top `width * 0.85` of the card -- title, art and
 /// type line -- and nothing below it may influence the hash. This is the
-/// region a full-art land breaks (Risk 5 / stream-b-identification.md
+/// region a full-art land breaks (Risk 5 / docs/design/identification.md
 /// "reviewer should scrutinise"), so it earns its own coverage rather than
 /// riding along inside a bigger test.
 public class CardHasherRegionTests

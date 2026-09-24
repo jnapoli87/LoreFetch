@@ -27,7 +27,7 @@ namespace LoreFetch.Core.Collection;
 /// actually matters here. CsvHelper throws on a *missing* expected header
 /// by default, but silently ignores an *unknown, extra* one — there is no
 /// configuration flag that changes that — so "fail loudly on an unknown
-/// column" is hand-written code either way (docs/stream-d-export.md §D1,
+/// column" is hand-written code either way (docs/design/collection.md §D1,
 /// point 4).</item>
 /// <item>Writing RFC 4180 is four rules (quote on comma/quote/CR/LF, double
 /// an embedded quote, never trim, quote-only-if-comma is wrong). A
@@ -95,7 +95,7 @@ public static class NativeCsvCodec
     /// is the file a user opens directly in Excel, which mangles non-ASCII
     /// card names without one. The BOM only lands if <paramref name="destination"/>
     /// is at position 0 at first flush (StreamWriter's own rule — see
-    /// docs/stream-d-export.md §D1, mechanic 2); a fresh temp file
+    /// docs/design/collection.md §D1, mechanic 2); a fresh temp file
     /// satisfies that, an append would silently drop it. Does not close or
     /// dispose <paramref name="destination"/> — the caller owns it (the
     /// same <c>leaveOpen</c> requirement CONTRACTS.md places on every
@@ -434,7 +434,7 @@ public static class NativeCsvCodec
     /// field</b> — the override this codec was built against, and the
     /// opposite of <c>Microsoft.VisualBasic.FileIO.TextFieldParser</c>'s
     /// documented <c>BeginQuotesRegex</c> behaviour
-    /// (docs/stream-d-export.md §D1). A field only opens a quoted region
+    /// (docs/design/collection.md §D1). A field only opens a quoted region
     /// when the very first character read for that field is <c>"</c> —
     /// tracked below via <c>field.Length == 0</c>. If anything (even one
     /// space) was already appended, a later <c>"</c> is ordinary content:

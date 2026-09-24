@@ -14,7 +14,7 @@ public sealed record ArtworkCascadeResult(
 }
 
 /// The `bulk` command's filter cascade, in the exact order fixed by
-/// `CLAUDE.md`/`docs/stream-b-identification.md` §B4. A pure function over
+/// `CLAUDE.md`/`docs/design/identification.md` §B4. A pure function over
 /// already-parsed records, deliberately -- so this can be unit-tested
 /// against a small committed JSONL sample without any network access, and
 /// so `Program`'s console printing is the only part of `bulk` that isn't

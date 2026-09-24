@@ -190,7 +190,7 @@ public class FrameWatchdogTests
                 }
             }).WaitAsync(TestTimeout, TestContext.Current.CancellationToken);
 
-            // The three causes stream-c-capture.md's C5 says FlashCap
+            // The three causes docs/design/capture.md's C5 says FlashCap
             // cannot tell apart: unplugged, in use by another application,
             // and a denied permission/privacy setting.
             Assert.Contains("unplugged", exception.Message, StringComparison.OrdinalIgnoreCase);

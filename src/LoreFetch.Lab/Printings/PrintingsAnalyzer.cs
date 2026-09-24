@@ -10,7 +10,7 @@ public sealed record PrintingsAnalysisResult(
 
 /// The `printings` command's grouping/fraction logic -- the open question
 /// deferred from the `ArtworkId` ruling (2026-09-21, see
-/// docs/orchestration-plan.md item B4a): what fraction of in-scope
+/// docs/history/orchestration-plan.md item B4a): what fraction of in-scope
 /// artworks (illustration_ids) have exactly one in-scope printing? Where
 /// the art is unambiguous, the art match *is* the printing.
 ///

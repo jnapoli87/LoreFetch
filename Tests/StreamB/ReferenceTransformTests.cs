@@ -5,7 +5,7 @@ using Xunit;
 namespace LoreFetch.Tests.StreamB;
 
 /// B1's invariants, restated as bounds rather than equalities -- per
-/// CLAUDE.md and stream-b-identification.md, none of these are exact
+/// CLAUDE.md and docs/design/identification.md, none of these are exact
 /// invariants of a lossy, order-statistic-based hash. Each bound below was
 /// set from a value measured against these exact generators (see the
 /// comment on each test) and then rounded up with headroom, not picked

@@ -1,6 +1,6 @@
 # LoreFetch.Tests.StreamD
 
-Unit tests for `Core/Collection` and `Core/Export` — the CSV collection store and export adapters (native and Moxfield). Owned exclusively by **Stream D** (worktree `stream-d`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries).
+Unit tests for `Core/Collection` and `Core/Export` — the CSV collection store and export adapters (native and Moxfield). Owned exclusively by **Stream D** (worktree `stream-d`) — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map).
 
 ## What it covers
 

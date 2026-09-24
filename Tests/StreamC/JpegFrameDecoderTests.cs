@@ -38,7 +38,7 @@ public class JpegFrameDecoderTests
         Assert.NotNull(frame);
 
         // 90/270 swap the axes; 0/180 don't — this is the "1920x1080
-        // becomes 1080x1920" claim from stream-c-capture.md's C3, checked
+        // becomes 1080x1920" claim from docs/design/capture.md's C3, checked
         // against a non-square fixture so a transpose bug can't hide
         // behind equal width and height.
         var (expectedWidth, expectedHeight) = rotationDegrees is 90 or 270

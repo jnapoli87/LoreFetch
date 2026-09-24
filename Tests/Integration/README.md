@@ -1,6 +1,6 @@
 # LoreFetch.Tests.Integration
 
-The end-to-end suite: `IFrameSource` → detect → rectify → identify → cohort → commit → CSV, parameterised over an implementation set (`[fakes]` from the end of Stream 0, `[real]` once each artifact exists). Also holds Stream 0's own unit tests (`Unit/`) — `CohortTile`, `ScanPipeline`, `ThresholdsFile` and the fakes' own behaviour — since Stream 0 owns exactly one test project. Owned by **Stream 0**: frozen, not edited by the streams (see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries) and [`../../docs/orchestration-plan.md`](../../docs/orchestration-plan.md), V18).
+The end-to-end suite: `IFrameSource` → detect → rectify → identify → cohort → commit → CSV, parameterised over an implementation set (`[fakes]` always, `[real]` when the hash index and Scryfall cache are present). Also holds the contract surface's own unit tests (`Unit/`) — `CohortTile`, `ScanPipeline`, `ThresholdsFile` and the fakes' own behaviour — since the contract surface has no other test project. This is the one suite that would catch a broken seam, so a PR that weakens it should say why (see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#domain-map); why it is one project: [`../../docs/history/orchestration-plan.md`](../../docs/history/orchestration-plan.md), V18).
 
 ## What it covers
 

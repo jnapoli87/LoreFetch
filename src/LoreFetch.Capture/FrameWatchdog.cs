@@ -3,7 +3,7 @@ using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.Capture;
 
-/// Turns silence into a `FrameSourceException`. Per docs/stream-c-capture.md
+/// Turns silence into a `FrameSourceException`. Per docs/design/capture.md
 /// C5: FlashCap has no way to detect a device already in use — issue #15 is
 /// open, labelled "help wanted" and "suspended" — so an unplugged camera, a
 /// device already in use by another application, and a denied camera
@@ -43,7 +43,7 @@ internal sealed class FrameWatchdog
     /// Re-yields every item from `source`, racing each arrival against the
     /// applicable timeout. Throws `FrameSourceException` — never
     /// `TimeoutException` — naming the three candidate causes, because
-    /// nothing at this layer can tell them apart (stream-c-capture.md C5:
+    /// nothing at this layer can tell them apart (docs/design/capture.md C5:
     /// "Unplugged camera, device already in use by another app, permission
     /// denied.").
     ///

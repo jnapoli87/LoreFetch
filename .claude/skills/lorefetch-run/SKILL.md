@@ -45,4 +45,4 @@ A non-zero exit is a real failure; the last 60 lines of output are printed for i
 
 ## Which machine
 
-The orchestrator builds and tests on the **Mac** and pushes. Six things are win-x64 by nature and belong to the **Windows PC**: the index build (B4d), the golden hashes (B1b), the camera run (C4), stream A's done-when run (A10), `LOREFETCH_REQUIRE_REAL=1` (I6) and release (E1–E2). See *Platform switch* in [`docs/orchestration-plan.md`](../../../docs/orchestration-plan.md). Never claim a win-x64 result from a Mac run.
+Both machines build and test. Some work is win-x64 by nature and belongs to the **Windows PC**: building the hash index, regenerating the golden hashes, anything that needs the C920, `LOREFETCH_REQUIRE_REAL=1` runs, and release builds. `INTER_AREA` is not bit-exact on ARM64, so never claim a win-x64 result from a Mac run.

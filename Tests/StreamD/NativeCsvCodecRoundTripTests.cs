@@ -5,7 +5,7 @@ using Xunit;
 
 namespace LoreFetch.Tests.StreamD;
 
-/// The five required vectors from docs/stream-d-export.md §D3, plus one
+/// The five required vectors from docs/design/collection.md §D3, plus one
 /// implementation-level regression vector (embedded CR) not in that table
 /// because no real oracle name needs it — see NativeCsvCodecWriteTests'
 /// matching case. All verified as real oracle names against Scryfall on
@@ -42,7 +42,7 @@ public class NativeCsvCodecRoundTripTests
         // with whitespace and THEN a quote is not a quoted field — the
         // whitespace is content, so the quote that follows is just another
         // character. `Microsoft.VisualBasic.FileIO.TextFieldParser` gets
-        // this wrong (docs/stream-d-export.md §D1); this codec must not.
+        // this wrong (docs/design/collection.md §D1); this codec must not.
         var oracleId = TestSupport.Row().OracleId;
         var text =
             "OracleId,OracleName,Quantity,Condition,LastScannedAt,BestMatchDistance,Source,ArtworkId\r\n" +

@@ -15,7 +15,7 @@ namespace LoreFetch.App;
 /// respected explicitly rather than assumed to be `width * bytesPerPixel` —
 /// the source may be padded by whatever produced it, and the destination
 /// (an `ILockedFramebuffer`) is only ever guaranteed `RowBytes >= Width * 4`
-/// (see docs/stream-a-ui.md A1). Camera frames carry no meaningful alpha
+/// (see docs/design/app.md A1). Camera frames carry no meaningful alpha
 /// channel, so the output alpha byte is always forced to 255 regardless of
 /// what a `Bgra32` source happens to carry there — callers must not rely on
 /// a preserved source alpha.

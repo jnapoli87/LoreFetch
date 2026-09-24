@@ -6,7 +6,7 @@ namespace LoreFetch.Capture;
 
 /// Newest-frame-only handoff from the capture callback thread to whatever
 /// decodes JPEGs into `CameraFrame`s (C1b). This is the piece
-/// docs/stream-c-capture.md's C4 identifies as the part FlashCap's own queue
+/// docs/design/capture.md's C4 identifies as the part FlashCap's own queue
 /// cannot provide: `QueuingProcessor.OnFrameArrived` drops the *newest*
 /// arrival while an older queued frame waits — the exact inverse of what a
 /// slow consumer needs — so newest-frame-only semantics are entirely this
