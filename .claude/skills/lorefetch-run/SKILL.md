@@ -1,6 +1,6 @@
 ---
 name: lorefetch-run
-description: Pull, build, test or run the LoreFetch app, or report the local environment. Use whenever the task is to build the solution, run the test suite, launch the app, or check whether this machine can build it — instead of composing dotnet commands by hand. Also use when a build or test result needs reproducing on the other machine (the Mac builds and pushes; the Windows PC pulls and runs).
+description: Pull, build, test or run the LoreFetch app, or report the local environment. Use whenever the task is to build the solution, run the test suite, launch the app, or check whether this machine can build it — instead of composing dotnet commands by hand. Also use to reproduce a CI result locally.
 ---
 
 # Running LoreFetch
@@ -43,6 +43,6 @@ Never run the bare `scripts/lorefetch.sh` from the tool. It is the entry point f
 
 A non-zero exit is a real failure; the last 60 lines of output are printed for it. On success only the summary lines show — pass `-v` for the full log. Report what the script reported, including a zero-test failure, which is not a flake.
 
-## Which machine
+## Which platform
 
-Both machines build and test. Some work is win-x64 by nature and belongs to the **Windows PC**: building the hash index, regenerating the golden hashes, anything that needs the C920, `LOREFETCH_REQUIRE_REAL=1` runs, and release builds. `INTER_AREA` is not bit-exact on ARM64, so never claim a win-x64 result from a Mac run.
+Development happens on Windows (`win-x64`), which is also the ship target. Some work is `win-x64` by nature: building the hash index, regenerating the golden hashes, anything that needs the C920, `LOREFETCH_REQUIRE_REAL=1` runs, and release builds. The code also builds and tests on macOS, which CI's `macos-latest` leg proves, but `INTER_AREA` is not bit-exact on ARM64, so a result from an ARM64 machine never stands in for a `win-x64` one.

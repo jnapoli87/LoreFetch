@@ -2,9 +2,8 @@
 #
 # LoreFetch — pull, build, test, run.
 #
-# One entry point for both machines. The orchestrator builds and tests on the
-# Mac and pushes; the Windows PC pulls and runs the same commands here, so
-# "works on my machine" is the same machine-independent script either way.
+# One entry point on every machine and in CI, so a local run and a CI run
+# apply the same filter and the same guards.
 #
 #   scripts/lorefetch.sh              # pull, build, test, then run the app
 #   scripts/lorefetch.sh setup        # wire this checkout's guards (do this first
