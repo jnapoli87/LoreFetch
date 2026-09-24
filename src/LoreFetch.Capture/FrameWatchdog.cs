@@ -22,17 +22,10 @@ internal sealed class FrameWatchdog
     private readonly TimeSpan _frameTimeout;
     private readonly TimeProvider _timeProvider;
 
-    /// `timeProvider` defaults to `TimeProvider.System`. Tests inject
-    /// millisecond-scale real timeouts rather than a fake time source —
-    /// this project has no reference to Microsoft.Extensions.TimeProvider.
-    /// Testing (and the frozen `.csproj` surface means one can't be added
-    /// for this package), and a hand-rolled fake capable of driving
-    /// `Task.Delay(TimeSpan, TimeProvider, CancellationToken)` would need
-    /// to reimplement that overload's own timer-firing semantics to be
-    /// trustworthy. Short bounded real waits are simpler and just as
-    /// deterministic in outcome: a 50 ms timeout against a stream that
-    /// never advances always elapses, and a healthy stream paced well
-    /// inside its own timeout always outruns it.
+    /// `timeProvider` defaults to `TimeProvider.System`. Tests pass a
+    /// `FakeTimeProvider` and move time by hand: real millisecond timers
+    /// were flaky on loaded CI runners, where a stalled 10 ms wait could
+    /// outlast a 100 ms timeout.
     internal FrameWatchdog(TimeSpan firstFrameTimeout, TimeSpan frameTimeout, TimeProvider? timeProvider = null)
     {
         _firstFrameTimeout = firstFrameTimeout;

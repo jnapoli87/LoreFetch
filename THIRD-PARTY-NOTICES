@@ -104,6 +104,7 @@ bundled LICENSE/NOTICE file in the local NuGet cache
   Avalonia.Headless.XUnit                           12.1.2                MIT
   coverlet.collector                                10.0.1                MIT
   Microsoft.NET.Test.Sdk                            18.0.0                MIT
+  Microsoft.Extensions.TimeProvider.Testing         10.10.0               MIT
   TngTech.ArchUnitNET                               0.13.4                Apache-2.0
   xunit.v3                                          3.2.2                 Apache-2.0
   xunit.runner.visualstudio                         3.1.5                 Apache-2.0
@@ -141,6 +142,8 @@ LICENSE file (bundled file takes precedence where one exists):
   CsvHelper .................................... Copyright (c) 2009-2024 Josh Close
   xunit.v3, xunit.runner.visualstudio ......... Copyright (C) .NET Foundation
   coverlet.collector .......................... (c) 2018 Toni Solarin-Sodara
+  Microsoft.Extensions.TimeProvider.Testing .. (c) Microsoft Corporation. All rights reserved.
+    (per .nuspec <copyright>; bundles no LICENSE or notices file)
   TngTech.ArchUnitNET ......................... TNG Technology Consulting GmbH and
                                                  contributors (github.com/TNG/ArchUnitNET);
                                                  the .nuspec has no <copyright> field and
