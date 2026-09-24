@@ -5,7 +5,7 @@ namespace LoreFetch.Tests.Lab.Images;
 
 /// `EnsureOutsideRepo` is the guard against ever pointing the image cache
 /// at a path git could see -- the cache holds Scryfall artwork, which
-/// CLAUDE.md forbids committing in any form.
+/// DECISIONS.md forbids committing in any form.
 public class CacheDirectoryGuardTests
 {
     private static readonly string RepoRoot = Path.Combine("C:" + Path.DirectorySeparatorChar, "Repos", "LoreFetch");

@@ -312,7 +312,7 @@ public class ManualSetContextMenuTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests"),
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test"),
  * A10-bugs session, 2026-09-22:
  *
  * RightClick_SetCardManually_FocusSurvivesContextMenuCloseStealingFocusBack

@@ -233,7 +233,7 @@ public sealed class CsvCollectionStore : ICollectionStore
     }
 
     /// <summary>
-    /// The exact sequence CONTRACTS.md and CLAUDE.md §Storage specify, in
+    /// The exact sequence CONTRACTS.md and DECISIONS.md §Storage specify, in
     /// the order that keeps the target present throughout:
     /// </summary>
     /// <list type="number">

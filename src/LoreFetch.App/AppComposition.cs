@@ -32,7 +32,7 @@ namespace LoreFetch.App;
 /// images when `LOREFETCH_FRAMES_DIR` is set, so real captured frames can be
 /// replayed through the full real pipeline without a camera (package I3).
 /// `ScanSettings.CameraRotationDegrees` is set to 0 at composition — the
-/// camera is landscape and unrotated (CLAUDE.md "Geometry"); the contract's
+/// camera is landscape and unrotated (DECISIONS.md "Geometry"); the contract's
 /// own default stays 90 and is unchanged.
 ///
 /// A missing or corrupt committed index/thresholds file fails Real mode
@@ -372,7 +372,7 @@ public static class AppComposition
             OkDistance = thresholds.OkDistance,
         };
 
-        // Geometry re-ruling (CLAUDE.md "Geometry"): the camera stays
+        // Geometry re-ruling (DECISIONS.md "Geometry"): the camera stays
         // landscape and unrotated for every layout. ScanSettings' own
         // default stays 90 (frozen contract) — this is a value set at
         // composition, not a change to that default.

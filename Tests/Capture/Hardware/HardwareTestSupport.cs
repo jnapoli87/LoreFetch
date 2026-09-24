@@ -12,7 +12,7 @@ namespace LoreFetch.Tests.Capture.Hardware;
 /// away).
 ///
 /// The output directory is deliberately never inside the repo — a saved
-/// frame is card-camera imagery, and CLAUDE.md's "never commit card
+/// frame is card-camera imagery, and DECISIONS.md's "never commit card
 /// imagery" rule applies regardless of who took the photo. `LOREFETCH_HW_OUT`
 /// lets a run be redirected (e.g. to keep a specific run's artifacts);
 /// absent that, `%TEMP%\lorefetch-hw` is always outside any git worktree.

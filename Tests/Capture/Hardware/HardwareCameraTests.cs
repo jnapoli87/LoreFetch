@@ -143,7 +143,7 @@ public sealed class HardwareCameraTests : IDisposable
 
     /// Proof that pooling and disposal are correct over a real, extended
     /// run: private bytes must stay flat rather than climbing at the
-    /// ~186 MB/s an unpooled frame stream would produce (CLAUDE.md's C920
+    /// ~186 MB/s an unpooled frame stream would produce (DECISIONS.md's C920
     /// trap table). Duration is configurable because 3 minutes is a
     /// reasonable default but the orchestrator may want longer.
     [Fact]

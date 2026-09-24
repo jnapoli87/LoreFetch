@@ -241,7 +241,7 @@ public class MoxfieldCsvExporterTests
         // "+2 Mace" — leading '+', the Excel formula-injection case.
         // The adapter MUST NOT prefix any sanitisation character ('  or tab)
         // because doing so would corrupt the source of truth for every machine
-        // reader (CLAUDE.md: "never sanitise"). The value must appear verbatim.
+        // reader (DECISIONS.md: "never sanitise"). The value must appear verbatim.
         const string oracleName = "+2 Mace";
         var lines = await ExportLinesAsync([TestSupport.Row(oracleName: oracleName)]);
 

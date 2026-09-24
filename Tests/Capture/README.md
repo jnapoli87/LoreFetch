@@ -54,6 +54,6 @@ Environment variables, all optional:
 | `LOREFETCH_HW_MINUTES` | `3` | Duration of `HardwareCameraTests.SustainedRunKeepsMemoryFlat`. |
 | `LOREFETCH_HW_UNPLUG_WAIT_S` | `120` | How long `UnplugCameraTests` waits for the physical unplug before giving up. |
 
-Output — logs and `last-frame.png` — always goes to `%TEMP%\lorefetch-hw` (or `LOREFETCH_HW_OUT` if set), **never into the repo**: a saved frame is card-camera imagery, and CLAUDE.md's "never commit card imagery" rule applies regardless of who took the photo.
+Output — logs and `last-frame.png` — always goes to `%TEMP%\lorefetch-hw` (or `LOREFETCH_HW_OUT` if set), **never into the repo**: a saved frame is card-camera imagery, and `docs/DECISIONS.md`'s "never commit card imagery" rule applies regardless of who took the photo.
 
 Internals: `HardwareTestSupport.cs` bundles the logging plumbing (an `ILoggerFactory` that fans every line out to `ITestOutputHelper`, a log file, and an in-memory queue a test can grep) and `MoveNextWithHarnessBoundAsync`, the shared helper every per-`MoveNextAsync` read in both hardware test classes goes through — see its doc comment in that file for the defect it exists to prevent (a harness-side timeout shorter than the product's own watchdogs, followed by disposing an enumerator while its `MoveNextAsync` is still pending, which throws `NotSupportedException` and masks whatever the product would otherwise have reported).

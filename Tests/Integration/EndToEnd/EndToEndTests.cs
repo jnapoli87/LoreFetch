@@ -161,7 +161,7 @@ public class EndToEndTests
             Assert.Equal(RowSource.Manual, row.Source);
             Assert.Null(row.BestMatchDistance);
 
-            // CLAUDE.md "Contract change — ArtworkId": a manual pick names a
+            // DECISIONS.md "Contract change — ArtworkId": a manual pick names a
             // card, not an art, so ArtworkId must be null here regardless of
             // implementation set — never a fabricated printing id.
             Assert.Null(row.ArtworkId);
@@ -218,7 +218,7 @@ public class EndToEndTests
             Assert.Equal(originalChosen, tile.Chosen);
             Assert.Equal(originalDistance, tile.ChosenDistance);
 
-            // CLAUDE.md "Artwork granularity": identity must be checked at
+            // DECISIONS.md "Artwork granularity": identity must be checked at
             // the artwork level, not just OracleId — a wrong sibling art of
             // the same oracle card would still pass the OracleId checks below.
             Assert.Equal(originalArtworkId, tile.ChosenArtworkId);

@@ -21,7 +21,7 @@ namespace LoreFetch.Tests.Detection;
 /// exceptions below -- see each one's own comment. Nothing here is a
 /// blanket "at least N of 12" check: weakening the assertion for every
 /// frame to accommodate one hard case would hide a regression in the
-/// other eleven, which is exactly the overfitting CLAUDE.md warns against
+/// other eleven, which is exactly the overfitting DECISIONS.md warns against
 /// ("do not tune parameters until it passes by overfitting" for the
 /// Risk-4 Plains-on-black case specifically).
 ///
@@ -47,7 +47,7 @@ namespace LoreFetch.Tests.Detection;
 public class ContourCardDetectorRealCaptureTests
 {
     /// Atarka's Grandeur, foiled: glare defeats hashing (and, it turns out,
-    /// detection) without polarized or diffuse light. CLAUDE.md Risk 6:
+    /// detection) without polarized or diffuse light. DECISIONS.md Risk 6:
     /// "Foils. ... Out of v1 scope -- document the failure rather than
     /// hiding it." A miss here is informative, not fatal. Re-confirmed
     /// unaffected by the `External`->`List` retrieval-mode switch: still
@@ -92,7 +92,7 @@ public class ContourCardDetectorRealCaptureTests
     /// minimum-area floor by coincidence -- a Risk-3 false-card-detection
     /// case on a cluttered desk, not a Risk-4 mat-contrast case, and not
     /// fixable without tuning a filter specifically against this one
-    /// frame's clutter, which CLAUDE.md instructs against. Recorded here
+    /// frame's clutter, which DECISIONS.md instructs against. Recorded here
     /// as a known excess rather than chased.
     private const string KnownExcessCableClutterOnBlack = "solring_black.png";
 

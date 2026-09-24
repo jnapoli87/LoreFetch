@@ -332,6 +332,6 @@ public class CollectionReloadTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests") —
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test") —
  * filled in after the fix lands; see the A10-fix report.
  */

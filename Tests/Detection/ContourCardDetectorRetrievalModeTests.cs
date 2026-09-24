@@ -9,7 +9,7 @@ namespace LoreFetch.Tests.Detection;
 /// `ContourDetectorOptions.RetrievalMode` knob was added so
 /// `RetrievalModes.List` -- measured against the real `a_corpus` frames via
 /// `LoreFetch.Lab RetrievalExperimentCommand` -- could be compared against
-/// `RetrievalModes.External`, CLAUDE.md's original pin. That investigation
+/// `RetrievalModes.External`, DECISIONS.md's original pin. That investigation
 /// (docs/accuracy.md) found `List` recovers 91% of cards on a light mat
 /// versus 13% for `External`, never worse in any measured cell, so the
 /// shipped default was switched to `List`; `External` remains selectable
@@ -29,7 +29,7 @@ public class ContourCardDetectorRetrievalModeTests
     public void ContourDetectorOptions_Default_RetrievalModeIsList()
     {
         // Switched from RetrievalModes.External to RetrievalModes.List --
-        // a user-approved change to the decision CLAUDE.md originally
+        // a user-approved change to the decision DECISIONS.md originally
         // pinned in "Card detection" -- on the strength of the H1/H2
         // real-3x3-frame measurement in docs/accuracy.md (91% vs. 13%
         // accepted-card rate on a light mat, never worse anywhere

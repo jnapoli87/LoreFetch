@@ -14,7 +14,7 @@ public sealed record ArtworkCascadeResult(
 }
 
 /// The `bulk` command's filter cascade, in the exact order fixed by
-/// `CLAUDE.md`/`docs/design/identification.md` §B4. A pure function over
+/// `DECISIONS.md`/`docs/design/identification.md` §B4. A pure function over
 /// already-parsed records, deliberately -- so this can be unit-tested
 /// against a small committed JSONL sample without any network access, and
 /// so `Program`'s console printing is the only part of `bulk` that isn't
@@ -65,7 +65,7 @@ public static class ArtworkFilterCascade
         // (or, for an Arena-original card, simply can never appear on a
         // physical table) -- either way the hash can never legitimately
         // retrieve one for a scanned card, only produce a confident wrong
-        // answer (CLAUDE.md Risk 5). `Digital` is Scryfall's own flag for
+        // answer (DECISIONS.md Risk 5). `Digital` is Scryfall's own flag for
         // this, not a name-prefix heuristic -- see RawArtwork.Digital.
         var afterDigital = afterSetType.Where(a => !a.Digital).ToList();
         steps.Add(Measure(DigitalOnlyStepName, afterDigital));

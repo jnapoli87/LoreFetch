@@ -51,7 +51,7 @@ public class CollectionTablePolishTests
     [Fact]
     public void CollectionRowItem_LastScannedLocalText_ConvertsUtcToFixedZone_Unambiguous24Hour()
     {
-        // Stored value is UTC, as CLAUDE.md's storage contract requires.
+        // Stored value is UTC, as DECISIONS.md's storage contract requires.
         var storedUtc = new DateTimeOffset(2026, 9, 22, 18, 30, 45, TimeSpan.Zero);
         var row = new CollectionRow(
             "oracle-bolt", "Lightning Bolt", 1, null, storedUtc, 50, RowSource.Hash, null);
@@ -112,7 +112,7 @@ public class CollectionTablePolishTests
     ///   <item>the header row's own background is dark (matching the rest of
     ///     the window), not Fluent's light default.</item>
     /// </list>
-    /// Also produces the PNG screenshot required by CLAUDE.md's UI-screenshot
+    /// Also produces the PNG screenshot required by DECISIONS.md's UI-screenshot
     /// standing practice, and asserts <c>LastScannedAt</c> renders as an
     /// unambiguous local 24-hour timestamp rather than the raw UTC
     /// <c>DateTimeOffset</c> representation.
@@ -282,6 +282,6 @@ public class CollectionTablePolishTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests") —
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test") —
  * filled in after the fix lands; see the A10-fix report.
  */

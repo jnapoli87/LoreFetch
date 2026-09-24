@@ -1,7 +1,7 @@
 // LoreFetch.Lab — index-build tooling entry point.
 //
-// Hand-rolled dispatch on purpose: the .csproj is frozen and cannot take a
-// new command-line-parsing package, and a small switch does not need one.
+// Hand-rolled dispatch on purpose: a small switch does not need a
+// command-line-parsing package.
 // Structured so each command adds one case without touching this shape.
 using LoreFetch.Lab;
 

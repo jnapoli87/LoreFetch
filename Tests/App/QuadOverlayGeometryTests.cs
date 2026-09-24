@@ -256,7 +256,7 @@ public class QuadOverlayGeometryTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests"),
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test"),
  * A10-bugs session, 2026-09-22: re-applied the original bug by reverting
  * DrawQuadOverlay's `var bounds = QuadOverlayCanvas.Bounds;` back to
  * `var bounds = PreviewImage.Bounds;`, ran ONLY these two tests, and both

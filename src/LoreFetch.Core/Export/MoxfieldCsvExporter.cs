@@ -113,7 +113,7 @@ public sealed class MoxfieldCsvExporter : ICollectionExporter
         // never assess. Empty is honest; a guessed field looks authoritative
         // and is wrong.
         //
-        // Oracle names are written verbatim, never sanitised (CLAUDE.md:
+        // Oracle names are written verbatim, never sanitised (DECISIONS.md:
         // "+2 Mace is a real card; don't prefix it"). NativeCsvCodec.QuoteField
         // is the shared RFC 4180 implementation — one quoting path for every
         // format, never two that can drift.

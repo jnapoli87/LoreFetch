@@ -33,7 +33,7 @@ public enum SlotOutcome
 
     /// Rank-1's `OracleId` did NOT match the ground truth, AND its distance
     /// was <= `AccuracyHarnessOptions.OkDistance` -- a CONFIDENT wrong
-    /// answer, the failure mode CLAUDE.md/TESTING.md call out as worse than
+    /// answer, the failure mode DECISIONS.md/TESTING.md call out as worse than
     /// a miss.
     Wrong,
 

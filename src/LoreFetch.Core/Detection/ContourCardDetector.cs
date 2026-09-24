@@ -61,17 +61,17 @@ public sealed record DetectionDiagnostics(
     bool UsedWidenedAspectTolerance);
 
 /// Tunable knobs for `ContourCardDetector`. Every field has a default
-/// grounded in CLAUDE.md's "Card detection" and "Geometry" sections; see
+/// grounded in DECISIONS.md's "Card detection" and "Geometry" sections; see
 /// each field's own comment for the number behind it.
 public sealed record ContourDetectorOptions
 {
-    /// 88/63 mm = 1.3968, CLAUDE.md's "Card detection".
+    /// 88/63 mm = 1.3968, DECISIONS.md's "Card detection".
     public float AspectRatioTarget { get; init; } = 88f / 63f;
 
-    /// CLAUDE.md: "filter on aspect 1:1.397 ... ±15%".
+    /// DECISIONS.md: "filter on aspect 1:1.397 ... ±15%".
     public float AspectTolerance { get; init; } = 0.15f;
 
-    /// CLAUDE.md: "widening to ±25% if detection misses". Applied only as a
+    /// DECISIONS.md: "widening to ±25% if detection misses". Applied only as a
     /// same-frame retry when the strict pass accepts nothing at all -- see
     /// `ContourCardDetector.Detect`'s own comment.
     public float WidenedAspectTolerance { get; init; } = 0.25f;
@@ -80,7 +80,7 @@ public sealed record ContourDetectorOptions
     /// width*height, so the same default scales across resolutions instead
     /// of hard-coding a pixel count for 1920x1080 specifically.
     ///
-    /// Justification (CLAUDE.md "Geometry" + this package's own ad-hoc
+    /// Justification (DECISIONS.md "Geometry" + this package's own ad-hoc
     /// frames): the SMALLEST real card this detector should ever have to
     /// accept is a single card at the tallest camera height the geometry
     /// table's ladder implies is still usable, roughly 20" -- px/inch =
@@ -113,7 +113,7 @@ public sealed record ContourDetectorOptions
     public int MorphCloseKernelSize { get; init; } = 5;
 
     /// `findContours`'s retrieval mode. Default is `RetrievalModes.List`
-    /// -- CLAUDE.md's original pin of `RETR_EXTERNAL` was superseded after
+    /// -- DECISIONS.md's original pin of `RETR_EXTERNAL` was superseded after
     /// the H1/H2 real-frame investigation (docs/accuracy.md, "Accuracy —
     /// real 3x3-grid detection: retrieval mode vs. mat contrast") measured
     /// `RETR_LIST` on six real 3x3-grid capture frames, 54 cards total:
@@ -164,7 +164,7 @@ public sealed record ContourDetectorOptions
 /// own comment for the measured justification; `RETR_EXTERNAL` remains
 /// selectable) -> `approxPolyDP` to 4 points -> corner ordering -> aspect +
 /// minimum-area + border filters -> nested/duplicate dedupe -> top N by
-/// area. See CLAUDE.md "Card detection" and "Geometry", and
+/// area. See DECISIONS.md "Card detection" and "Geometry", and
 /// docs/design/identification.md §B5, for the algorithm and the
 /// per-step rationale. Every discard reason is logged at Debug AND
 /// returned structurally from `DetectWithDiagnostics` -- see
@@ -195,7 +195,7 @@ public sealed record ContourDetectorOptions
 /// is "up" in the frame, so `IRectifier`'s warp (TL -> (0,0), TR ->
 /// (488,0)) always produces a portrait 488x680 card. The remaining 180-
 /// degree ambiguity ("is this card upside down") is a separate, accepted
-/// problem -- CLAUDE.md's "Card orientation is unhandled" -- solved
+/// problem -- DECISIONS.md's "Card orientation is unhandled" -- solved
 /// downstream by hashing both orientations (B3b), not here.
 public sealed class ContourCardDetector : ICardDetector
 {
@@ -224,7 +224,7 @@ public sealed class ContourCardDetector : ICardDetector
     /// Runs the full pipeline once at the strict `AspectTolerance`. If that
     /// pass accepts NOTHING and at least one contour was discarded only for
     /// its aspect ratio, retries the SAME frame at `WidenedAspectTolerance`
-    /// (CLAUDE.md: "widening to ±25% if detection misses") and returns that
+    /// (DECISIONS.md: "widening to ±25% if detection misses") and returns that
     /// pass instead when it finds something. Never widens when the strict
     /// pass already found cards -- widening only ever fires on an
     /// otherwise-empty result, so it can only ever turn "nothing" into

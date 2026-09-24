@@ -5,7 +5,7 @@ using OpenCvSharp;
 namespace LoreFetch.Tests.Support;
 
 /// Deterministic, code-generated test images -- never a file on disk, so
-/// there is no card-imagery risk here (CLAUDE.md "Never commit card
+/// there is no card-imagery risk here (DECISIONS.md "Never commit card
 /// imagery"). These are procedural generators reused across B1's tests and
 /// meant to stay reusable for B1b's golden-hash tests too, so keep their
 /// signatures and RNG seeding stable rather than inlining pixel loops into

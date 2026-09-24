@@ -34,7 +34,7 @@ public static class RetrievalExperimentCommand
 {
     /// Hand-picked from `dump-contours`'s own output against the real
     /// `a_corpus` frames -- one rectangle PER frame, not a single shared
-    /// one, because the nine cards are placed freehand (CLAUDE.md "no
+    /// one, because the nine cards are placed freehand (DECISIONS.md "no
     /// registration jig") and `dump-contours`'s own `RETR_LIST` card-sized
     /// contours (aspect ~0.70-0.75, area ~56k-75k) show the grid's overall
     /// bounding box actually shifts by up to ~150px between frames even

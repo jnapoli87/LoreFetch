@@ -54,7 +54,7 @@ public class CropScaleExperimentRunnerTests
                 $"large: rank1={largeInset.Statistics.Rank1Rate:P1}, ownMean={largeInset.Statistics.OwnDistanceMean:F1}, correct={largeInset.Statistics.CorrectCount}/{largeInset.Statistics.AvailableCount}");
 
             // Zero inset is a render-to-self match through the shipping
-            // query path -- CLAUDE.md's own gate expects a small, stable
+            // query path -- DECISIONS.md's own gate expects a small, stable
             // distance and a 100% rank-1 rate for exactly this population
             // shape (B2's own measurement). A 15% inset is well outside the
             // observed real-world range and must degrade it substantially.
@@ -97,7 +97,7 @@ public class CropScaleExperimentRunnerTests
 
             var summary = CropScaleExperimentRunner.Run(index, identifier, options);
 
-            // CLAUDE.md's Ladder: "Measure accuracy on normal cards only" --
+            // DECISIONS.md's Ladder: "Measure accuracy on normal cards only" --
             // an all-land index must sample and measure NOTHING, not fall
             // back to lands, confirming the non-land filter is a hard
             // exclusion rather than a soft preference.

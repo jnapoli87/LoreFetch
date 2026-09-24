@@ -2,7 +2,7 @@ using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.Core.Trigger;
 
-/// The count-gated settle trigger (CLAUDE.md "Interaction — capture, then
+/// The count-gated settle trigger (DECISIONS.md "Interaction — capture, then
 /// accept the cohort"): fires once the exact expected count has been held
 /// stable for `ScanSettings.SettleMilliseconds`, then refuses to fire again
 /// until "the scene breaks" — any snapshot whose quad count differs from

@@ -6,7 +6,7 @@ namespace LoreFetch.Tests.Support;
 /// `RealArtifactGate` (orchestration finding V7) -- reimplemented here,
 /// rather than referenced, so the image-domain test projects don't depend
 /// on `Tests/Integration`. Unset -- the CI default -- a missing real-capture fixture
-/// (`test-images/ad-hoc/`, which can never be committed: CLAUDE.md "Never
+/// (`test-images/ad-hoc/`, which can never be committed: DECISIONS.md "Never
 /// commit card imagery") is an honest skip that states its reason. Set to
 /// `"1"`, the SAME condition is a FAILURE instead, so the machine that
 /// actually has the fixtures cannot quietly pass with the real-capture

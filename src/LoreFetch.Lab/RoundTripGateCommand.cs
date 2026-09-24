@@ -11,7 +11,7 @@ namespace LoreFetch.Lab;
 /// The maintainer-run tool that actually PRODUCES the committed
 /// `data/index/thresholds.json` (`referenceFloor` and the margin
 /// statistics) -- package B2, "the one gate that matters most"
-/// (CLAUDE.md). This command is what an implementer runs BY HAND, once,
+/// (DECISIONS.md). This command is what an implementer runs BY HAND, once,
 /// against the real Scryfall image cache and the real committed index, and
 /// commits the result; it deliberately does NOT run as part of the normal
 /// test suite (`Tests/Lab/RoundTrip/RoundTripGateTests.cs` performs the
@@ -24,7 +24,7 @@ public static class RoundTripGateCommand
     public const int DefaultLandSampleSize = 20;
     public const int DefaultNonLandSampleSize = 180;
     public const int DefaultSeed = 20260922;
-    public const double DefaultMinRank1Rate = 0.99; // CLAUDE.md / docs/history/orchestration-plan.md B2: "stop and ask" below this
+    public const double DefaultMinRank1Rate = 0.99; // DECISIONS.md / docs/history/orchestration-plan.md B2: "stop and ask" below this
 
     public static Task<int> RunAsync(string[] args) => Task.FromResult(Run(args));
 
@@ -118,7 +118,7 @@ public static class RoundTripGateCommand
             Console.WriteLine();
             Console.WriteLine(
                 $"STOP: rank-1 ArtworkId match rate {stats.Rank1Rate:P2} is below the {parsed.MinRank1Rate:P0} floor. " +
-                "Per CLAUDE.md/orchestration-plan.md B2, this is a project-level stop-and-ask condition -- " +
+                "Per DECISIONS.md/orchestration-plan.md B2, this is a project-level stop-and-ask condition -- " +
                 "the user decides what happens next, not this tool. Failures:");
             foreach (var failure in stats.Failures)
             {

@@ -300,9 +300,9 @@ public class HashCardIdentifierTests
     {
         var baseHash = SymmetricQueryHash(seed: 1005);
 
-        // All well above CLAUDE.md's ~430-bit "indistinguishable from noise"
+        // All well above DECISIONS.md's ~430-bit "indistinguishable from noise"
         // floor, and above any plausible good/ok threshold -- if Identify
-        // ever grew an early-rejection cutoff (CLAUDE.md "do not port
+        // ever grew an early-rejection cutoff (DECISIONS.md "do not port
         // upstream's early rejection"), some of these would be dropped.
         var distances = new[] { 400, 500, 600, 700, 800 };
         var entries = distances

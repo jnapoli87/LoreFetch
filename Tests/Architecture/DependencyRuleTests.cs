@@ -116,7 +116,7 @@ public class DependencyRuleTests
 
     [Fact]
     public void Identification_DoesNotDependOnDetection() =>
-        // CLAUDE.md hash pipeline: the query side enters with an
+        // DECISIONS.md hash pipeline: the query side enters with an
         // already-rectified 488x680 card.
         AssertHolds(Types().That().Are(Namespace($"{Core}.Identification"))
             .Should().NotDependOnAny(Namespace($"{Core}.Detection"))
@@ -140,7 +140,7 @@ public class DependencyRuleTests
 
     [Fact]
     public void NothingUsesSystemDrawingOrOpenCvSharpExtensions() =>
-        // CLAUDE.md stack table: OpenCvSharp4.Extensions is GDI+ /
+        // DECISIONS.md stack table: OpenCvSharp4.Extensions is GDI+ /
         // System.Drawing.Common and throws off-Windows.
         AssertHolds(Types().That().Are(Namespace("LoreFetch"))
             .Should().NotDependOnAny(Namespaces("System.Drawing", "OpenCvSharp.Extensions"))

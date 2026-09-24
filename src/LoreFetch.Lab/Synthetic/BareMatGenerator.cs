@@ -53,7 +53,7 @@ public static class BareMatGenerator
     /// A mid-gray mat -- a plausible "default" fabric or foam mat.
     public const byte MidBrightness = 140;
 
-    /// The dark mat CLAUDE.md's Risk 3 calls the worst case: modern cards
+    /// The dark mat DECISIONS.md's Risk 3 calls the worst case: modern cards
     /// are black-bordered, so a dark mat is where the card's own edge has
     /// the least contrast against the background to find.
     public const byte DarkBrightness = 35;

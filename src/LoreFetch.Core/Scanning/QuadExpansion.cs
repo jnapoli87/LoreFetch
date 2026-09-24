@@ -9,7 +9,7 @@ namespace LoreFetch.Core.Scanning;
 /// the matching black-mat frame, the detector's own accepted quad sits on
 /// the INNER edge of the card's black border -- the border itself is
 /// cropped away and the coloured inner frame fills the crop -- exactly the
-/// crop-scale defect CLAUDE.md's Risk 4 and B5c's curve describe, caught
+/// crop-scale defect DECISIONS.md's Risk 4 and B5c's curve describe, caught
 /// here at the quad, before `PerspectiveRectifier` ever runs. Package DH's
 /// dual-hypothesis identification (`Core/Scanning/DualHypothesisIdentification`)
 /// uses this type's <see cref="BorderWidthCorrectionFactor"/>/

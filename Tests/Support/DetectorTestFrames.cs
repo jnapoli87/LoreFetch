@@ -5,7 +5,7 @@ using OpenCvSharp;
 namespace LoreFetch.Tests.Support;
 
 /// Deterministic, code-generated frames for `ContourCardDetectorTests` --
-/// never a file on disk, so there is no card-imagery risk (CLAUDE.md
+/// never a file on disk, so there is no card-imagery risk (DECISIONS.md
 /// "Never commit card imagery"). Complements `SyntheticImages` (which
 /// targets the hash pipeline) with frames shaped for the DETECTOR: whole
 /// scenes with a background/mat, rather than a single card's own pixels.

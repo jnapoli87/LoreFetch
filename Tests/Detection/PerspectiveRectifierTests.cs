@@ -7,7 +7,7 @@ using Xunit;
 namespace LoreFetch.Tests.Detection;
 
 /// `PerspectiveRectifier` (package B5b): CardSpotter step 1, query side.
-/// Pins three things that would otherwise degrade silently, per CLAUDE.md
+/// Pins three things that would otherwise degrade silently, per DECISIONS.md
 /// "The one gate that matters most": the interpolation flag (must be
 /// `INTER_LINEAR` -- `warpPerspective` cannot do `INTER_AREA` at all), the
 /// pixel-centre destination convention (`PerspectiveRectifier`'s own doc
@@ -96,7 +96,7 @@ public class PerspectiveRectifierTests
 
         // A quad whose corner LABELS are rotated 180 degrees from the true
         // orientation -- what a detector would hand back if it read this
-        // same physical card upside down (CLAUDE.md "Card orientation is
+        // same physical card upside down (DECISIONS.md "Card orientation is
         // unhandled": a quad's TL/TR/BR/BL are geometric labels, not a
         // semantic "this edge is the top", so this is a legal CardQuad).
         var relabeled = new CardQuad(TL: quad.BR, TR: quad.BL, BR: quad.TL, BL: quad.TR);
@@ -197,7 +197,7 @@ public class PerspectiveRectifierTests
         using var rectifiedFlipped = new Mat();
         Cv2.Flip(rectifiedMat, rectifiedFlipped, FlipMode.XY);
 
-        // Orientation is genuinely ambiguous here (CLAUDE.md "Card
+        // Orientation is genuinely ambiguous here (DECISIONS.md "Card
         // orientation is unhandled" -- corner ordering recovers the true
         // quad OR its 180-degree rotation, never a 90-degree rotation or a
         // mirror), so compare against whichever of upright/flipped is

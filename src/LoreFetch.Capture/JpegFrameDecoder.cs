@@ -26,7 +26,7 @@ internal sealed class JpegFrameDecoder
     /// and rolled up into an Information-level summary every this many
     /// frames (about 5 s at the C920's 30 fps), so a sustained run doesn't
     /// spam Information with 30 lines a second while still surfacing the
-    /// number CLAUDE.md calls out as unmeasured: "30 × 1080p JPEG
+    /// number DECISIONS.md calls out as unmeasured: "30 × 1080p JPEG
     /// decodes/sec on the CPU."
     internal const int DecodeSummaryIntervalFrames = 150;
 

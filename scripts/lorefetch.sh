@@ -91,7 +91,7 @@ esac
 # Mirrors .github/workflows/ci.yml deliberately: a local run that passes where
 # CI fails, or vice versa, is worse than no local run. Both legs drop Hardware;
 # the macOS leg also drops WindowsOnly, because the golden hashes are generated
-# on win-x64 and INTER_AREA is not bit-exact on ARM64 (CLAUDE.md, Risk 2).
+# on win-x64 and INTER_AREA is not bit-exact on ARM64 (DECISIONS.md, Risk 2).
 uname_s=$(uname -s 2>/dev/null || echo unknown)
 case "$uname_s" in
   Darwin)            PLATFORM=macos ;;

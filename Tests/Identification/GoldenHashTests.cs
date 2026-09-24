@@ -15,14 +15,14 @@ namespace LoreFetch.Tests.Identification;
 ///
 /// Generated 2026-09-21 on win-x64
 /// (`RuntimeInformation.OSArchitecture` = `X64`), OpenCvSharp4
-/// 4.13.0.20260627 -- see CLAUDE.md "The one gate that matters most":
+/// 4.13.0.20260627 -- see DECISIONS.md "The one gate that matters most":
 /// `INTER_AREA` is not bit-exact across x86-64/ARM64, so these values are
 /// only meaningful pinned to the architecture that produced them, hence
 /// `WindowsOnly` rather than a shared cross-platform golden.
 ///
 /// Inputs are deterministic and procedural (`SyntheticImages`, fixed seeds,
 /// no time/culture dependence) -- never a file on disk, so there is no
-/// card-imagery risk (CLAUDE.md "Never commit card imagery"). The noise
+/// card-imagery risk (DECISIONS.md "Never commit card imagery"). The noise
 /// input matters most: a regular pattern like a checkerboard degenerates to
 /// the exact same flat gray under both `INTER_AREA`'s box mean and
 /// `INTER_LINEAR`'s bilinear sample (measured -- its hash is all zero bits

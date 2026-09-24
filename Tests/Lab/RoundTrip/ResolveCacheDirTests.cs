@@ -7,7 +7,7 @@ namespace LoreFetch.Tests.Lab.RoundTrip;
 /// method itself, exercised without touching real environment variables
 /// or the real filesystem. See package brief: on the Windows PC, without
 /// `LOREFETCH_SCRYFALL_CACHE` set, the cache lives at
-/// `C:\LoreFetchData\scryfall-cache` (CLAUDE.md), not under the user's
+/// `C:\LoreFetchData\scryfall-cache` (DECISIONS.md), not under the user's
 /// home directory, and every cache-gated test in this project was
 /// skipping silently as a result.
 public class ResolveCacheDirTests

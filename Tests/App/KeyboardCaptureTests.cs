@@ -440,7 +440,7 @@ public class KeyboardCaptureTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests"):
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test"):
  *
  * Case 1 — Remove the focus bail (remove `if (FocusManager?.GetFocusedElement() is TextBox) return;`):
  *   Affected test: FocusBail_SpaceWithTextBoxFocused_DoesNotInvokeCapture

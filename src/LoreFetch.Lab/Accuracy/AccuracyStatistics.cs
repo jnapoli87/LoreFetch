@@ -65,7 +65,7 @@ public sealed record AccuracyBucketCounts(int Correct, int Wrong, int Unresolved
 public sealed record AccuracyBreakdownRow(double HeightIn, string Rung, AccuracyBucketCounts Buckets);
 
 /// The full B6 report over one run's `SlotAccuracyResult`s. `Headline` is
-/// CLAUDE.md's own required scope for the accuracy figures ("measure
+/// DECISIONS.md's own required scope for the accuracy figures ("measure
 /// accuracy on normal cards only") -- lands EXCLUDED via
 /// `ResolvedGroundTruthRow.IsBasicLand` (never via the `rung` string,
 /// which is informational labelling only -- reviewer item 5 asks whether
@@ -74,7 +74,7 @@ public sealed record AccuracyBreakdownRow(double HeightIn, string Rung, Accuracy
 /// this flag exists to replace) AND restricted to `rung == "normal"`,
 /// matching docs/design/identification.md's own "Done when": "&gt;=90%
 /// correct@1 on the real normal-card fixtures". `Breakdown` still reports
-/// EVERY row (lands and stretch included) for visibility -- CLAUDE.md:
+/// EVERY row (lands and stretch included) for visibility -- DECISIONS.md:
 /// "Capture [lands], run them as a smoke test... exclude them from the
 /// table" describes exactly this split, not their absence from the run.
 public sealed record AccuracyStatistics(
@@ -145,6 +145,6 @@ public sealed record AccuracyGateResult(bool Passed, string Reason)
             false,
             $"wrong@1 = {wrongCount} exceeds the bound of {options.MaxWrongAt1AtOkDistance} at " +
             $"OkDistance={options.OkDistance} (headline: non-land, normal-rung slots). A confident wrong " +
-            "match is permanent bad inventory (CLAUDE.md) -- this run must not be treated as passing.");
+            "match is permanent bad inventory (DECISIONS.md) -- this run must not be treated as passing.");
     }
 }

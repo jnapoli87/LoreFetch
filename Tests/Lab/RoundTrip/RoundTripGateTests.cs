@@ -6,7 +6,7 @@ using Xunit;
 
 namespace LoreFetch.Tests.Lab.RoundTrip;
 
-/// Package B2 -- "the one gate that matters most" (CLAUDE.md): a Scryfall
+/// Package B2 -- "the one gate that matters most" (DECISIONS.md): a Scryfall
 /// render, presented through the SHIPPING query path
 /// (`ICardIdentifier.Identify`, exactly as the scanner calls it), must
 /// retrieve its own artwork at rank 1, at a small, recorded, stable
@@ -16,7 +16,7 @@ namespace LoreFetch.Tests.Lab.RoundTrip;
 /// `RealCaptureGate` in this same project, orchestration finding V7): a
 /// missing or incomplete external image cache is a SKIP with a reason,
 /// never a failure, under the CI default -- card imagery can never be
-/// committed (CLAUDE.md "Never commit card imagery"), so this can only run
+/// committed (DECISIONS.md "Never commit card imagery"), so this can only run
 /// for real on a machine that has pulled the cache. Set
 /// `LOREFETCH_REQUIRE_REAL=1` to turn that same skip into a failure on a
 /// machine that DOES have the artifacts.
@@ -28,7 +28,7 @@ namespace LoreFetch.Tests.Lab.RoundTrip;
 /// never by the test suite) -- a test that rewrote a committed data file
 /// as a side effect of an ordinary local run would make "the one gate that
 /// matters most" driftable by anyone who happens to run `dotnet test` with
-/// the cache present, which is exactly the kind of silent change CLAUDE.md
+/// the cache present, which is exactly the kind of silent change DECISIONS.md
 /// warns against. This test's job is VERIFICATION: it performs the SAME
 /// measurement, every real run, and asserts against fixed, previously-
 /// measured bounds (the same "measure once, hardcode the bound" pattern
@@ -59,13 +59,13 @@ public class RoundTripGateTests
     /// across the full 200-artwork sample (lands and non-lands both). This
     /// bound carries deliberate headroom above that measurement -- the
     /// same "measure once, then pin a bound with headroom" pattern B1a's
-    /// own invariant tests use (CLAUDE.md's own gate spec: "Not a ≈ 0" but
+    /// own invariant tests use (DECISIONS.md's own gate spec: "Not a ≈ 0" but
     /// "small, recorded, stable") -- so the test is a real regression
     /// guard, not a number tied to the exact decimal this run happened to
     /// produce.
     private const int MaxAcceptableOwnDistance = 150;
 
-    /// CLAUDE.md/orchestration-plan.md B2: "If the rank-1 artwork rate is
+    /// DECISIONS.md/orchestration-plan.md B2: "If the rank-1 artwork rate is
     /// below 99%, stop and ask" -- a project-level gate, not a tuning knob.
     private const double MinAcceptableRank1Rate = 0.99;
 
@@ -137,13 +137,13 @@ public class RoundTripGateTests
                 $"rank1 -> {f.Rank1ArtworkId ?? "(none)"} at distance {f.Rank1Distance}");
 
             Assert.Fail(
-                $"STOP-AND-ASK (CLAUDE.md / docs/history/orchestration-plan.md B2): rank-1 ArtworkId match rate " +
+                $"STOP-AND-ASK (DECISIONS.md / docs/history/orchestration-plan.md B2): rank-1 ArtworkId match rate " +
                 $"{stats.Rank1Rate:P2} ({stats.CorrectCount}/{stats.AvailableCount}) is below the " +
                 $"{MinAcceptableRank1Rate:P0} floor. This is a project-level gate -- the user decides what " +
                 $"happens next, not this test. Failures:\n{string.Join('\n', failureLines)}");
         }
 
-        // The bound, not equality (CLAUDE.md "The one gate that matters
+        // The bound, not equality (DECISIONS.md "The one gate that matters
         // most": "Not ≈ 0 ... demanding zero would mean deleting the
         // mechanism that makes a webcam frame match a print render").
         // `OwnDistance` is the distance to the QUERIED artwork's own

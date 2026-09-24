@@ -3,7 +3,7 @@ using Xunit;
 
 namespace LoreFetch.Tests.Collection;
 
-/// The header's exact column SET is the format version (CLAUDE.md
+/// The header's exact column SET is the format version (DECISIONS.md
 /// §Storage): a reader seeing an unknown or missing column must fail
 /// loudly rather than mis-parse.
 public class NativeCsvCodecHeaderTests

@@ -4,7 +4,7 @@ Unit tests for the hash port and index lookup: `CardHash`, `CardHasher` (region,
 
 ## Golden hashes are Windows-only
 
-Committed golden hashes carry `[Trait("Category","WindowsOnly")]` and are filtered out on the `macos-latest` CI leg, because `INTER_AREA` is not bit-exact across x86-64 and ARM64 — see [`../../CLAUDE.md`](../../CLAUDE.md#the-one-gate-that-matters-most). The index is built and the goldens generated on `win-x64` only.
+Committed golden hashes carry `[Trait("Category","WindowsOnly")]` and are filtered out on the `macos-latest` CI leg, because `INTER_AREA` is not bit-exact across x86-64 and ARM64 — see [`../../docs/DECISIONS.md`](../../docs/DECISIONS.md#the-one-gate-that-matters-most). The index is built and the goldens generated on `win-x64` only.
 
 ## Running
 

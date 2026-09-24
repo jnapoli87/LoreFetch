@@ -158,7 +158,7 @@ public sealed class ImageDownloader
         // Checked before any request is sent -- the manifest should never
         // carry a non-`normal` URL, but this is the last line of defence
         // against silently hashing a `small` render into the index (see
-        // CLAUDE.md's "Pull normal, not small").
+        // DECISIONS.md's "Pull normal, not small").
         if (!entry.ImageUriNormal.Contains("/normal/", StringComparison.Ordinal))
         {
             return new ImageDownloadOutcome(

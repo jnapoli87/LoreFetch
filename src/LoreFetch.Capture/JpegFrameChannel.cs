@@ -35,7 +35,7 @@ internal sealed class JpegFrameChannel : IAsyncDisposable
     /// `pool` defaults to `ArrayPool&lt;byte&gt;.Shared` — never
     /// `ArrayPool&lt;byte&gt;.Create()`, whose configurable pool throws away
     /// anything above its `DefaultMaxArrayLength` rather than pooling it (see
-    /// CLAUDE.md's C920 trap table: every frame buffer here is well past
+    /// DECISIONS.md's C920 trap table: every frame buffer here is well past
     /// that limit). A caller may inject a wrapping pool to observe rents and
     /// returns, e.g. in tests — the same pattern `FolderFrameSource.Open`
     /// already uses.

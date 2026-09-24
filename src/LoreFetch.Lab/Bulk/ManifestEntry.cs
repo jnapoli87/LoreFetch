@@ -15,7 +15,7 @@ public sealed record ManifestEntry(
     bool IsBasicLand)
 {
     /// Basic lands only, by the exact rule the accuracy doc calls out
-    /// (`CLAUDE.md` "Lands are a smoke test, not a benchmark"): the
+    /// (`DECISIONS.md` "Lands are a smoke test, not a benchmark"): the
     /// type line must *start with* "Basic Land", not merely mention
     /// "Land" anywhere -- a card like a plain "Legendary Land" is not a
     /// basic, and `Contains("Land")` would wrongly call it one.

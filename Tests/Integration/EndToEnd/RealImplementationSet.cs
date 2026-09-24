@@ -48,7 +48,7 @@ namespace LoreFetch.Tests.Integration.EndToEnd;
 /// fake behaviour.
 public sealed class RealImplementationSet : IImplementationSet
 {
-    /// CLAUDE.md's 2026-09-22 ruling: "15in only" — the one geometry this
+    /// DECISIONS.md's 2026-09-22 ruling: "15in only" — the one geometry this
     /// integration package generates synthetic frames at, matching the
     /// committed goodDistance/okDistance (208/240), which were themselves
     /// calibrated from a 15in fixture corpus.
@@ -182,7 +182,7 @@ public sealed class RealImplementationSet : IImplementationSet
 
         using var mat = FrameMat.ToMat(frame);
 
-        // Write-temp-then-rename (CLAUDE.md's own storage-layer pattern,
+        // Write-temp-then-rename (DECISIONS.md's own storage-layer pattern,
         // reused here for the same reason): `FolderFrameSource`'s decode
         // loop is already running on its own timer the instant this method
         // gets called, so writing `path` directly risks the loop's next
@@ -352,7 +352,7 @@ public sealed class RealImplementationSet : IImplementationSet
 
             // Loud on a genuinely corrupt/unsupported file — matches
             // ThresholdsFile.Load's own "loud rather than lenient" rule
-            // (CLAUDE.md/ThresholdsFile's doc comment): a malformed
+            // (DECISIONS.md/ThresholdsFile's doc comment): a malformed
             // committed artifact is a real defect, not a "not present yet"
             // skip.
             ThresholdsFile.Load(thresholdsPath);

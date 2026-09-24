@@ -6,7 +6,7 @@ namespace LoreFetch.Lab.Synthetic;
 /// Shared pixel-level helpers for `SyntheticFrameGenerator` and
 /// `BareMatGenerator` -- deliberately NOT part of either type's public
 /// surface, and deliberately NOT anything CardSpotter's ported pipeline
-/// touches. Nothing here is a step of the seven-step hash (CLAUDE.md
+/// touches. Nothing here is a step of the seven-step hash (DECISIONS.md
 /// "Identification"); it exists purely to make a generated frame LOOK like
 /// a webcam capture before that frame is handed to the real
 /// `ContourCardDetector` -> `PerspectiveRectifier` -> `CardHasher` path --
@@ -17,7 +17,7 @@ namespace LoreFetch.Lab.Synthetic;
 /// the same pattern `FrameMat`/`PerspectiveRectifier` already use to move
 /// pixels in and out of a `Mat` -- rather than `Cv2.Randn`/`Cv2.Randu`.
 /// OpenCV's RNG is not documented bit-exact across platforms (the same
-/// concern CLAUDE.md raises for `INTER_AREA`, "Real risks" #2), and a
+/// concern DECISIONS.md raises for `INTER_AREA`, "Real risks" #2), and a
 /// generator whose fixtures silently differ between the Mac and Windows
 /// CI legs would be exactly the kind of platform-dependent flake this
 /// project has already been burned by once. `System.Random` with an

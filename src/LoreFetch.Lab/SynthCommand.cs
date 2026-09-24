@@ -14,7 +14,7 @@ namespace LoreFetch.Lab;
 /// render (a user's own local cache) or a procedural stand-in; either way
 /// the WRITTEN frame may end up showing recognizable card artwork, so the
 /// same never-write-inside-the-repo rule `DetectCommand` enforces applies
-/// here verbatim (CLAUDE.md "Never commit card imagery").
+/// here verbatim (DECISIONS.md "Never commit card imagery").
 public static class SynthCommand
 {
     public const string DefaultOutDir = @"C:\LoreFetchData\synth-out";

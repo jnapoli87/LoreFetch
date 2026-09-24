@@ -102,7 +102,7 @@ public class SlotMapperTests
     /// (593,92), (1109,96), (839,99). A synthetic grid with perfectly
     /// aligned rows (the tests above) cannot catch this -- it only shows up
     /// when same-row members differ slightly in Y, which is every real
-    /// frame. Card size at 15in is ~216x303px (CLAUDE.md "px/inch =
+    /// frame. Card size at 15in is ~216x303px (DECISIONS.md "px/inch =
     /// 1360/height_inches"), so these quads are built at that size.
     [Fact]
     public void SortRowMajor_RealCapturedTopRowWithYJitter_StillOrdersByXAscending()

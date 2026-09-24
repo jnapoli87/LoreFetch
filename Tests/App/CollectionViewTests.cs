@@ -227,7 +227,7 @@ public class CollectionViewTests
 }
 
 /*
- * Chaos-test results (see CLAUDE.md "Chaos-test new regression tests"):
+ * Chaos-test results (see docs/TESTING.md "Standing practice: chaos-test every regression test"):
  *
  * Case 1 — Make the picker always treat exporters as verified
  *   (return `false` from ExporterItem.IsUnverified, or equivalently `true` from IsVerified):

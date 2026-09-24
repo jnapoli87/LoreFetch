@@ -11,7 +11,7 @@ namespace LoreFetch.Tests.Lab.RoundTrip;
 /// engineered fixture: two entries sharing ONE `OracleId` but carrying
 /// DIFFERENT `ArtworkId`s, where the "sibling" art's hash is deliberately
 /// closer to the query than the queried artwork's own entry. This is the
-/// exact silent-failure shape CLAUDE.md's gate exists to catch ("a gate
+/// exact silent-failure shape DECISIONS.md's gate exists to catch ("a gate
 /// asserting only OracleId passes while matching a different art of the
 /// same card"), and it is the vehicle for this package's two chaos-test
 /// requirements: proving `ArtworkId` catches what `OracleId` alone would

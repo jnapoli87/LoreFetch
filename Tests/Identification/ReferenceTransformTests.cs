@@ -5,7 +5,7 @@ using Xunit;
 namespace LoreFetch.Tests.Identification;
 
 /// B1's invariants, restated as bounds rather than equalities -- per
-/// CLAUDE.md and docs/design/identification.md, none of these are exact
+/// DECISIONS.md and docs/design/identification.md, none of these are exact
 /// invariants of a lossy, order-statistic-based hash. Each bound below was
 /// set from a value measured against these exact generators (see the
 /// comment on each test) and then rounded up with headroom, not picked
@@ -25,7 +25,7 @@ public class ReferenceTransformTests
         // a different box filter each time, so bits near a cell's median
         // can flip. Not an invariant; measured on win-x64 was 4/1024. The
         // bound leaves headroom for running on a different architecture
-        // (INTER_AREA is not bit-exact across x86-64/ARM64 -- CLAUDE.md
+        // (INTER_AREA is not bit-exact across x86-64/ARM64 -- DECISIONS.md
         // "The one gate that matters most") without chasing a platform-tuned
         // number here.
         using var full = SyntheticImages.MakeCardLikeBgr(976, 1360, seed: 1);

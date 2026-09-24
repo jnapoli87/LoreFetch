@@ -130,7 +130,7 @@ ORIENTATIONS="portrait rotated"
 # height is 12" (1.83" of margin) — see compute_fit below.
 
 # Sane numeric bounds for --height, inches. Below ~6" not even the smallest
-# footprint (1 card, 2.5"x3.5" — CLAUDE.md's Geometry table) fits
+# footprint (1 card, 2.5"x3.5" — DECISIONS.md's Geometry table) fits
 # comfortably. Above ~30" a card is under ~113px wide (1360/30 * 2.5 =
 # 113.3) — well past anything useful for hashing or for a human to frame by
 # hand. Anything inside this range is only a candidate; compute_fit() still
@@ -208,7 +208,7 @@ native_path() {
 }
 
 # Resolves layout + orientation to a short x long footprint, inches, from
-# CLAUDE.md's Geometry table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7, 3x3
+# DECISIONS.md's Geometry table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7, 3x3
 # grid 7.7x10.7 or its swap). Only layout 9 (a 3x3 grid) has two real
 # arrangements, because it is the only footprint whose two sides differ:
 # PORTRAIT puts the grid's shorter 7.7" side on the frame's short (binding)
@@ -234,7 +234,7 @@ layout_footprint() {  # $1 = layout, $2 = orientation ("portrait"|"rotated")
 }
 
 # Does this height/footprint combination physically fit the C920's frame?
-# ppi = 1360/h (CLAUDE.md's "Geometry" table); the frame then covers
+# ppi = 1360/h (DECISIONS.md's "Geometry" table); the frame then covers
 # 1920/ppi x 1080/ppi inches, long axis x short axis. fs/fl (short x long)
 # come from layout_footprint above — this function no longer derives them
 # from a layout number itself, so the same formula and thresholds serve

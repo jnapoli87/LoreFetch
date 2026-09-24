@@ -5,7 +5,7 @@ namespace LoreFetch.Lab.Accuracy;
 /// A `GroundTruthRow` enriched with what the loaded hash index says about
 /// its `OracleName` -- resolved ONCE, up front, rather than re-looked-up per
 /// classification. Keeping `ExpectedOracleId` (rather than comparing names)
-/// matches CLAUDE.md's own identity rule ("OracleId is the identity key
+/// matches DECISIONS.md's own identity rule ("OracleId is the identity key
 /// everywhere in LoreFetch... never OracleName") and lets
 /// `AccuracyFrameRunner` compare against `CardCandidate.OracleId` directly.
 public sealed record ResolvedGroundTruthRow(GroundTruthRow Row, string ExpectedOracleId, bool IsBasicLand);

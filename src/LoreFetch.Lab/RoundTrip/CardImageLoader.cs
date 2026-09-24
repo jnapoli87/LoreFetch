@@ -6,7 +6,7 @@ namespace LoreFetch.Lab.RoundTrip;
 
 /// Wraps an already-decoded, canonical-size (488x680) BGR `Mat` -- a
 /// Scryfall `normal` render, exactly `RectifiedCard.CanonicalWidth/Height`
-/// (CLAUDE.md Scryfall: "`normal` is exactly `RectifiedCard`'s canonical
+/// (DECISIONS.md Scryfall: "`normal` is exactly `RectifiedCard`'s canonical
 /// size, which is the whole reason 488x680 was chosen") -- directly as a
 /// `RectifiedCard`, with NO call to `PerspectiveRectifier`.
 ///

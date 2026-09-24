@@ -4,7 +4,7 @@ namespace LoreFetch.Core.Fakes;
 
 /// Generates a small folder of synthetic, non-card placeholder images for
 /// `FolderFrameSourceFactory` — the Fakes-mode frame source this app runs
-/// against. CLAUDE.md bans committing card imagery (WotC IP either way,
+/// against. DECISIONS.md bans committing card imagery (WotC IP either way,
 /// Scryfall render or our own photo) and says even the fixture corpus must
 /// stay local and gitignored. Rather than ship or require ANY image asset
 /// at all, this draws a few solid-colour rectangles at runtime with

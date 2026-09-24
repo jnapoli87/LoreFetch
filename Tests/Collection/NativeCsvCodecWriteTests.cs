@@ -37,7 +37,7 @@ public class NativeCsvCodecWriteTests
         // "+2 Mace" — the only oracle name Excel treats as a formula. The
         // native format's job is correctness for machine readers; sanitising
         // it here would corrupt the source of truth to fix one program's
-        // display. See CLAUDE.md's Excel-formula-injection note.
+        // display. See DECISIONS.md's Excel-formula-injection note.
         var row = TestSupport.Row(oracleName: "+2 Mace");
         var writer = new StringWriter();
 

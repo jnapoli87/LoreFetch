@@ -83,7 +83,7 @@ public class AccuracyHarnessRealCaptureTests
 
         // OkDistance comes from the committed thresholds.json (B6's real-
         // corpus-calibrated value), not the AccuracyHarnessOptions.Default
-        // CardSpotter-prior placeholder (270) -- CLAUDE.md/CONTRACTS.md:
+        // CardSpotter-prior placeholder (270) -- DECISIONS.md/CONTRACTS.md:
         // "nothing may hardcode a distance; the thresholds file is the one
         // source of truth." The committed index exists by this point
         // (checked above), and thresholds.json ships alongside it, so this

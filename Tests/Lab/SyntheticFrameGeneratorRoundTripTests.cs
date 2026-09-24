@@ -187,7 +187,7 @@ public class SyntheticFrameGeneratorRoundTripTests
     /// card-vs-mat contrast (what Canny's gradient magnitude actually
     /// measures) drops toward zero, breaking the outer edge into
     /// disconnected arcs instead of one closed contour. Real cards do not
-    /// have this problem: they carry a black border (CLAUDE.md "Card
+    /// have this problem: they carry a black border (DECISIONS.md "Card
     /// detection") that keeps their OUTER edge dark and high-contrast
     /// against any mat, light or dark. Darkening the procedural fixture to
     /// 0-45% of its original range reproduces that property -- a uniformly

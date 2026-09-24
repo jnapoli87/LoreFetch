@@ -24,7 +24,7 @@ dotnet test Tests/App/LoreFetch.Tests.App.csproj -c Release
 
 **Headless setup.** `TestApp.cs` configures `AvaloniaHeadlessPlatformOptions` with `UseSkia()`, `UseHeadlessDrawing = false` and `ShouldRenderOnUIThread = true`. `UseHeadlessDrawing = true` looks like the natural headless-testing default, but it is Avalonia.Headless's own no-op stub renderer — it never touches Skia and never populates a real surface, on any platform. That flag, not a macOS-ARM64 rendering gap as first assumed, was the actual cause of `CaptureRenderedFrame()` returning null: it failed identically everywhere it ran, including Windows. Worth remembering if a future headless screenshot test comes back null — check this flag before suspecting the platform.
 
-**Screenshot output.** Every headless screenshot test saves its PNG to `AppContext.BaseDirectory` — the test project's own output directory — and never into the repository. `CLAUDE.md`'s no-card-imagery rule and the commit hook's raster-file guard both apply to anything committed; these PNGs are a local verification artifact only.
+**Screenshot output.** Every headless screenshot test saves its PNG to `AppContext.BaseDirectory` — the test project's own output directory — and never into the repository. `docs/DECISIONS.md`'s no-card-imagery rule and the commit hook's raster-file guard both apply to anything committed; these PNGs are a local verification artifact only.
 
 **Test files, by what they cover:**
 

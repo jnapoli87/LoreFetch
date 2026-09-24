@@ -19,7 +19,7 @@ public class SyntheticFrameGeneratorTests
     /// `CardHeightInches` -- reusing those constants in the assertion
     /// would make the test agree with the production formula by
     /// construction, no matter what that formula says. 9.75in x
-    /// (1360/9.75) px/inch, from CLAUDE.md's own "Geometry" table, gives
+    /// (1360/9.75) px/inch, from DECISIONS.md's own "Geometry" table, gives
     /// 348.7 x 488.2px, i.e. 349 x 488 once rounded -- computed here from
     /// the raw numbers, not from the type under test.
     [Fact]
@@ -34,7 +34,7 @@ public class SyntheticFrameGeneratorTests
         }
     }
 
-    /// A second, independently-computed height: at 3.1in (CLAUDE.md's
+    /// A second, independently-computed height: at 3.1in (DECISIONS.md's
     /// single-card minimum height) px/inch = 1360/3.1 = 438.7, giving a
     /// card of 1096.8 x 1535.3px -- rounds to 1097 x 1535. Two points on
     /// the curve, not one, make it harder for a mutated formula to
@@ -56,7 +56,7 @@ public class SyntheticFrameGeneratorTests
     }
 
     /// Reviewer finding (2026-09-22): `SyntheticFrameOptions.Default` must
-    /// use `INTER_AREA` for the downscale -- CLAUDE.md's own "by choice,
+    /// use `INTER_AREA` for the downscale -- DECISIONS.md's own "by choice,
     /// not by fidelity" reasoning for `ReferenceTransform`'s equivalent
     /// step applies identically here (see `DownscaleInterpolation`'s own
     /// doc comment). Paired with `Generate_AreaVsLinearDownscale_

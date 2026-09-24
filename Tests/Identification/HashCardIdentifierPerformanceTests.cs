@@ -5,7 +5,7 @@ using Xunit;
 
 namespace LoreFetch.Tests.Identification;
 
-/// Timing check for package B3b: CLAUDE.md's "Step 7" measures 0.243 ms per
+/// Timing check for package B3b: DECISIONS.md's "Step 7" measures 0.243 ms per
 /// query over 55k entries (2.19 ms for a 9-card cohort) as the argument
 /// against any early-rejection shortcut. This test reproduces that
 /// measurement against `HashCardIdentifier` itself, at a comparable index
@@ -17,7 +17,7 @@ namespace LoreFetch.Tests.Identification;
 /// pass/skip.
 public class HashCardIdentifierPerformanceTests
 {
-    // CLAUDE.md's measured, in-scope index shape (Scryfall's `unique_artwork`
+    // DECISIONS.md's measured, in-scope index shape (Scryfall's `unique_artwork`
     // after the modern-frame/English/single-faced filter): ~48,700 arts over
     // ~33,600 oracle ids, ~1.45 arts/oracle on average. A 1:1 entries-to-
     // oracles fixture (the original version of this test) hid the ranking
@@ -58,7 +58,7 @@ public class HashCardIdentifierPerformanceTests
 
         // Warm-up: JIT, first-call allocations -- excluded from the
         // measurement so it reflects steady-state cost, matching how
-        // CLAUDE.md's own 0.243 ms/query figure was measured.
+        // DECISIONS.md's own 0.243 ms/query figure was measured.
         identifier.Identify(card, maxCandidates: 5);
 
         var stopwatch = Stopwatch.StartNew();
@@ -78,7 +78,7 @@ public class HashCardIdentifierPerformanceTests
         {
             Assert.Skip(
                 $"{QueryCount} Identify calls took {elapsedMs:F3} ms, over the {SoftBudgetMs} ms soft budget -- " +
-                "recorded above, not failed. See CLAUDE.md \"Step 7\" (0.243 ms/query baseline).");
+                "recorded above, not failed. See DECISIONS.md \"Step 7\" (0.243 ms/query baseline).");
         }
     }
 
@@ -114,7 +114,7 @@ public class HashCardIdentifierPerformanceTests
         {
             Assert.Skip(
                 $"{DualHypothesisQueryCount} Identify calls took {elapsedMs:F3} ms, over the {SoftBudgetMs} ms soft " +
-                "budget -- recorded above, not failed. See CLAUDE.md \"Step 7\" (0.243 ms/query baseline); dual-" +
+                "budget -- recorded above, not failed. See DECISIONS.md \"Step 7\" (0.243 ms/query baseline); dual-" +
                 "hypothesis identification is expected to cost roughly 2x that per card.");
         }
     }

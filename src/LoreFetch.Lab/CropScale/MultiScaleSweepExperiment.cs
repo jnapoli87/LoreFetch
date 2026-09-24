@@ -10,7 +10,7 @@ namespace LoreFetch.Lab.CropScale;
 /// because that test only asks whether a sweep RECOVERS the one known
 /// failure, never whether trying extra scales makes an already-correct
 /// query worse. This type is experimental, NOT a second `ICardIdentifier`
-/// (that interface is frozen -- CLAUDE.md/CONTRACTS.md): it reproduces
+/// (that interface is frozen -- DECISIONS.md/CONTRACTS.md): it reproduces
 /// `HashCardIdentifier`'s own per-oracle best-of-both-orientations
 /// reduction (`HashBothOrientations` + `RankOracles`'s "best distance per
 /// oracle"), generalized over several CANDIDATE query scales instead of
@@ -23,7 +23,7 @@ public static class MultiScaleSweepExperiment
     /// sweep would report, by taking the elementwise minimum, across every
     /// `scale` in `scales` AND both orientations, of the same raw Hamming
     /// scan `RoundTripMeasurement`'s own margin computation performs --
-    /// never a threshold, never an early exit, matching CLAUDE.md "Step 7".
+    /// never a threshold, never an early exit, matching DECISIONS.md "Step 7".
     /// Returns the swept rank-1 oracle id and its distance, plus the
     /// swept margin to the best OTHER oracle -- comparable field-for-field
     /// with `RoundTripSampleOutcome`.

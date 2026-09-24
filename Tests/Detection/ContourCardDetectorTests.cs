@@ -6,7 +6,7 @@ using Xunit;
 namespace LoreFetch.Tests.Detection;
 
 /// Package B5a: `ContourCardDetector` on generated frames (CI has no real
-/// imagery -- CLAUDE.md "Never commit card imagery"). See
+/// imagery -- DECISIONS.md "Never commit card imagery"). See
 /// `DetectorTestFrames` for the scene generators and
 /// `ContourCardDetectorRealCaptureTests` for the artifact-gated real-C920
 /// check.
@@ -295,7 +295,7 @@ public class ContourCardDetectorTests
     }
 
     /// Accepts either the true orientation or its 180-degree relabeling
-    /// (CLAUDE.md: "card orientation is unhandled" -- upside-down is a
+    /// (DECISIONS.md: "card orientation is unhandled" -- upside-down is a
     /// separate, accepted problem solved by hashing both orientations, not
     /// by the detector), each corner within `toleranceOfPx`. Never accepts
     /// a 90-degree rotation or a mirror -- see `ContourCardDetector`'s own

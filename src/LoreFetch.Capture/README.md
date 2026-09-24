@@ -14,7 +14,7 @@ Grants `InternalsVisibleTo` to `LoreFetch.Tests.Capture` for its internal captur
 
 ## The C920 trap
 
-USB 2.0 bandwidth, DSHOW-over-MSMF backend preference — see [`../../CLAUDE.md`](../../CLAUDE.md#the-c920-trap) for the bandwidth arithmetic. What this project actually does about it is **not** `VideoCapture`'s "set `FourCC` before width/height, then read the properties back and assert" — that's the fallback path for if FlashCap itself doesn't work out (see `docs/design/capture.md`'s *Fallbacks*). The shipped path is FlashCap's own explicit negotiation: `FlashCapDeviceCatalog.Enumerate` calls `EnumerateDescriptors()` and logs every backend's full characteristic list, then `CaptureDeviceSelector.SelectDevice` picks the one `VideoCharacteristics` matching exactly `1920x1080`, `PixelFormats.JPEG`, `>= 30 fps` — preferring DirectShow, falling back to Media Foundation, never Video for Windows — **or throws with that full enumerated list in the message** rather than silently opening a lower mode. There is no `set()`-and-hope call to get wrong in the first place.
+USB 2.0 bandwidth, DSHOW-over-MSMF backend preference — see [`../../docs/DECISIONS.md`](../../docs/DECISIONS.md#stack-with-the-traps) for the bandwidth arithmetic. What this project actually does about it is **not** `VideoCapture`'s "set `FourCC` before width/height, then read the properties back and assert" — that's the fallback path for if FlashCap itself doesn't work out (see `docs/design/capture.md`'s *Fallbacks*). The shipped path is FlashCap's own explicit negotiation: `FlashCapDeviceCatalog.Enumerate` calls `EnumerateDescriptors()` and logs every backend's full characteristic list, then `CaptureDeviceSelector.SelectDevice` picks the one `VideoCharacteristics` matching exactly `1920x1080`, `PixelFormats.JPEG`, `>= 30 fps` — preferring DirectShow, falling back to Media Foundation, never Video for Windows — **or throws with that full enumerated list in the message** rather than silently opening a lower mode. There is no `set()`-and-hope call to get wrong in the first place.
 
 ## Testing
 
@@ -28,7 +28,7 @@ FlashCap is confined to two files: `FlashCapDeviceCatalog` (enumeration) and `We
 FlashCap capture callback (OnFrameArrived, in WebcamFrameSourceFactory)
   → JpegFrameChannel.Push        — copies FlashCap's scope-limited ArraySegment into an
                                     ArrayPool<byte>.Shared-rented buffer (never .Create() —
-                                    see CLAUDE.md's C920 trap table on why that silently
+                                    see DECISIONS.md's C920 trap table on why that silently
                                     stops pooling anything this size), then offers it to a
                                     capacity-1, BoundedChannelFullMode.DropOldest channel
                                     whose itemDropped callback disposes (and thus returns

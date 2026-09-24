@@ -31,7 +31,7 @@ public sealed record CorpusCoverage(
 /// relative to the repo root, resolves every frame's `ResolvedGroundTruthRow`s
 /// against the loaded index, and splits frames into "found on disk" (the
 /// harness actually runs these) vs. "missing" (H3's corpus is delivered in
-/// batches -- CLAUDE.md's own "run on whatever subset exists" requirement).
+/// batches -- DECISIONS.md's own "run on whatever subset exists" requirement).
 /// Never writes to `ground-truth.csv` -- read-only, per this package's
 /// brief.
 public static class AccuracyCorpusLoader

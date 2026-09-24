@@ -8,7 +8,7 @@ namespace LoreFetch.Core.Identification;
 /// sides. `ReferenceTransform` and `QueryTransform` each exist exactly once
 /// and produce whatever grayscale image their own side calls for; this type
 /// exists exactly once too and both sides call it on that output. See
-/// CLAUDE.md "Identification" for why the two sides differ before this
+/// DECISIONS.md "Identification" for why the two sides differ before this
 /// point, and "The one gate that matters most" for why that split matters.
 ///
 /// Two details here are easy to get wrong porting from a description rather

@@ -10,7 +10,7 @@ namespace LoreFetch.Core.Identification;
 /// `Words[0..15]` (index = `gridRow * 4 + gridCol`).
 ///
 /// Matching is always the FULL Hamming distance across all 16 words -- see
-/// CLAUDE.md "step 7: do not port upstream's early rejection." CardSpotter's
+/// DECISIONS.md "step 7: do not port upstream's early rejection." CardSpotter's
 /// own early rejection is threshold-keyed (it prunes on one cell's distance
 /// against a fraction of the match-score threshold) and can discard the true
 /// best match, so this type deliberately has no partial-distance shortcut.

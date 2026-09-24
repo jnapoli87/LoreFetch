@@ -6,7 +6,7 @@ using Xunit;
 namespace LoreFetch.Tests.Capture;
 
 /// Exercises `JpegFrameDecoder` on synthetic JPEGs encoded in memory —
-/// never image files, per CLAUDE.md's "never commit card imagery." Each
+/// never image files, per DECISIONS.md's "never commit card imagery." Each
 /// fixture is a procedurally drawn frame with a solid marker block in its
 /// top-left quadrant against a contrasting background, so rotation can be
 /// verified by asking "where did the marker end up," not just "is the

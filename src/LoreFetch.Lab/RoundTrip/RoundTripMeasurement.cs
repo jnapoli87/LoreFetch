@@ -22,7 +22,7 @@ public sealed record RoundTripSampleOutcome(
     string? BestOtherArtworkId)
 {
     /// The B2 gate's actual pass/fail bit for this sample: rank 1 named
-    /// THIS artwork, not merely this oracle card (CLAUDE.md "the one gate
+    /// THIS artwork, not merely this oracle card (DECISIONS.md "the one gate
     /// that matters most": "Assert on ArtworkId"). `false` for a missing
     /// image, never counted as a pass.
     public bool IsCorrect => ImageAvailable && string.Equals(Rank1ArtworkId, ArtworkId, StringComparison.Ordinal);
@@ -45,7 +45,7 @@ public sealed record RoundTripSampleOutcome(
 ///      (CONTRACTS.md; `HashCardIdentifier`'s own doc comment: "best
 ///      distance per oracle across all of its arts"), so a heavily
 ///      reprinted card's OWN sibling arts never appear as separate
-///      candidates -- exactly the artwork-granularity gap CLAUDE.md's gate
+///      candidates -- exactly the artwork-granularity gap DECISIONS.md's gate
 ///      exists to catch ("a gate asserting only OracleId passes while
 ///      matching a different art of the same card"). The raw scan below
 ///      recomposes ONLY `QueryTransform.Prepare`, `Cv2.Flip(...,

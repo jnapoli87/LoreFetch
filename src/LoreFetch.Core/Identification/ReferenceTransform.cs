@@ -6,7 +6,7 @@ namespace LoreFetch.Core.Identification;
 /// side ONLY. Blurring and downsampling the reference is what destroys the
 /// high-frequency detail a webcam frame can never reproduce, which is what
 /// lets a photo and a print render converge at `CardHasher`'s shared steps
-/// 4-6 -- see CLAUDE.md "Identification". This exists exactly once; the
+/// 4-6 -- see DECISIONS.md "Identification". This exists exactly once; the
 /// query side (`QueryTransform`) does NOT call it, by design, and never
 /// should, even for "symmetry" -- blurring both sides equally would not make
 /// a render and a photo converge, it would just delete the mechanism that
@@ -37,7 +37,7 @@ public static class ReferenceTransform
         // Step 2: GaussianBlur 3x3, sigma=1 on BOTH axes, passed explicitly
         // rather than left at the (0, 0) default -- this is what forces
         // OpenCV's bit-exact fixed-point path instead of an IPP/HAL shortcut
-        // that is not bit-exact across platforms. See CLAUDE.md "The one
+        // that is not bit-exact across platforms. See DECISIONS.md "The one
         // gate that matters most".
         using var blurred = new Mat();
         Cv2.GaussianBlur(source, blurred, new Size(3, 3), sigmaX: 1, sigmaY: 1);
@@ -49,7 +49,7 @@ public static class ReferenceTransform
 
         // Step 3: ... then grayscale -- after the resize, matching upstream
         // (`CardData.cpp:130` then grayscale conversion) and matching the
-        // step ordering in CLAUDE.md's table.
+        // step ordering in DECISIONS.md's table.
         return ToGray(resized);
     }
 

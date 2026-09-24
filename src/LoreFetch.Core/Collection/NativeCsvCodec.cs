@@ -7,7 +7,7 @@ namespace LoreFetch.Core.Collection;
 
 /// <summary>
 /// Reader and writer for the native CSV format — the source of truth
-/// described in CLAUDE.md §Storage and docs/CONTRACTS.md §"Collection and
+/// described in DECISIONS.md §Storage and docs/CONTRACTS.md §"Collection and
 /// export". This is the codec only: quoting, header validation, field
 /// parsing and intra-file duplicate folding. It knows nothing about files,
 /// temp-file-then-rename, or <c>.bak</c> copies — that is the collection
@@ -124,7 +124,7 @@ public static class NativeCsvCodec
         // real in-scope card and the only oracle name Excel treats as a
         // formula. A `'`/tab-prefix mitigation would corrupt the source of
         // truth for every machine reader to fix one program's rendering —
-        // CLAUDE.md and CONTRACTS.md are both explicit that this is a
+        // DECISIONS.md and CONTRACTS.md are both explicit that this is a
         // README note, not a code path.
         string[] fields =
         [
@@ -232,7 +232,7 @@ public static class NativeCsvCodec
     /// column, none missing, none duplicated — and returns a name→position
     /// map for the rows that follow. This is deliberately a set comparison,
     /// not a positional one: the column set IS the format version
-    /// (CLAUDE.md §Storage), not the column order, which
+    /// (DECISIONS.md §Storage), not the column order, which
     /// <see cref="Abstractions.CollectionRow"/>'s own doc comment calls
     /// "incidental". A hand-reordered file — plausible after an Excel
     /// save — still reads; an added or dropped column does not.
@@ -279,7 +279,7 @@ public static class NativeCsvCodec
 
             throw new NativeCsvFormatException(
                 $"Header does not match the native format's column set ({string.Join("; ", parts)}). " +
-                "The header's exact column set is the format version; see CLAUDE.md §Storage.");
+                "The header's exact column set is the format version; see DECISIONS.md §Storage.");
         }
 
         return index;
@@ -306,7 +306,7 @@ public static class NativeCsvCodec
         // quotes are stripped — deliberately: there is no second way to
         // write "unassessed" that this codec preserves, so there is no
         // separate empty-string state to round-trip. See CollectionRow's own
-        // doc comment and CLAUDE.md §Storage.
+        // doc comment and DECISIONS.md §Storage.
         var conditionRaw = Field("Condition");
         var condition = conditionRaw.Length == 0 ? null : conditionRaw;
 

@@ -7,14 +7,14 @@ using OpenCvSharp;
 namespace LoreFetch.Core.Identification;
 
 /// `ICardIdentifier` over a loaded `cards.lfidx`: brute-force full 1024-bit
-/// Hamming search, no early rejection, no threshold -- see CLAUDE.md "Step 7:
+/// Hamming search, no early rejection, no threshold -- see DECISIONS.md "Step 7:
 /// do not port upstream's early rejection" and `CardHash`'s own doc comment.
 /// Also `IOracleCatalog`, backed by the same loaded table, since both read
 /// off the same index and a second type would just be a second copy of
 /// `HashIndexData.OracleTable`.
 ///
 /// The query path is exactly `QueryTransform.Prepare` -> `CardHasher.Hash` --
-/// no blur, no resize added here, matching CLAUDE.md's asymmetric-sides rule
+/// no blur, no resize added here, matching DECISIONS.md's asymmetric-sides rule
 /// (see `QueryTransform`'s own doc comment). The one thing this type adds on
 /// top of that path is orientation: a card laid on the mat 180 degrees round
 /// rectifies to a perfectly valid quad (`TL`/`TR`/`BR`/`BL` are geometric, not
@@ -29,7 +29,7 @@ namespace LoreFetch.Core.Identification;
 /// `_flatWords` (16 `ulong` per entry) and `_entryOracleIndex` -- rather than
 /// an array of `CardHash`/`HashIndexEntry` structs, so the per-query scan
 /// walks one cache-friendly buffer instead of chasing 55k boxed-looking
-/// entries. Brute force is still the design (CLAUDE.md measures 0.243 ms per
+/// entries. Brute force is still the design (DECISIONS.md measures 0.243 ms per
 /// query over 55k entries); this only keeps that scan cheap, it does not
 /// change what gets searched.
 public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
@@ -113,7 +113,7 @@ public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
 
     /// Full brute-force scan: every entry, both query orientations, no
     /// early exit and no distance threshold -- see this type's own doc
-    /// comment and CLAUDE.md "Step 7". Returns the nearest `maxCandidates`
+    /// comment and DECISIONS.md "Step 7". Returns the nearest `maxCandidates`
     /// DISTINCT `OracleId`s, best distance per oracle across all of its
     /// arts and both orientations, ascending by distance. Ties break by the
     /// oracle's position in the index's own oracle table (i.e. first-seen
@@ -166,7 +166,7 @@ public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
     }
 
     /// Query side, both orientations: `QueryTransform.Prepare` (no blur, no
-    /// resize -- CLAUDE.md's asymmetric-sides rule) then, for the 180-degree
+    /// resize -- DECISIONS.md's asymmetric-sides rule) then, for the 180-degree
     /// variant, `Cv2.Flip` on that SAME full-card grayscale before either
     /// one reaches `CardHasher` -- flipping the already-cropped icon would
     /// leave the region crop pointed at the old top of the card instead of
@@ -215,7 +215,7 @@ public sealed class HashCardIdentifier : ICardIdentifier, IOracleCatalog
     /// oracle slot is still visited exactly once (the loop below), and a
     /// candidate is only ever dropped for being worse than all `capacity`
     /// slots already kept -- never because of a distance threshold. See
-    /// CLAUDE.md "Step 7" (`ICardIdentifier.Identify` never filters by
+    /// DECISIONS.md "Step 7" (`ICardIdentifier.Identify` never filters by
     /// threshold) -- that invariant is about the SET of results, and this
     /// only changes how that set is picked.
     private IReadOnlyList<CardCandidate> RankOracles(

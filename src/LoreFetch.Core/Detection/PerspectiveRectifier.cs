@@ -6,7 +6,7 @@ namespace LoreFetch.Core.Detection;
 
 /// `IRectifier`: CardSpotter step 1, query side -- perspective-correct a
 /// detected `CardQuad` out of a `CameraFrame` into a canonical 488x680
-/// `RectifiedCard`. See CLAUDE.md's seven-step table: this is the ONE step
+/// `RectifiedCard`. See DECISIONS.md's seven-step table: this is the ONE step
 /// that is pinned to `INTER_LINEAR` rather than `INTER_AREA`, because
 /// `warpPerspective` does not support `INTER_AREA` at all -- OpenCV's own
 /// docs list it as "not supported by this function" for both `warpAffine`
@@ -80,11 +80,11 @@ public sealed class PerspectiveRectifier : IRectifier
         using var warped = new Mat();
 
         // Step 1: INTER_LINEAR explicitly -- warpPerspective does not
-        // support INTER_AREA (CLAUDE.md's seven-step table; OpenCV's own
+        // support INTER_AREA (DECISIONS.md's seven-step table; OpenCV's own
         // docs list it as unsupported for this function). Leaving the flag
         // at its default would also BE InterpolationFlags.Linear, but an
         // unstated default is exactly the silent-divergence vector the
-        // round-trip gate exists to catch -- see CLAUDE.md "The one gate
+        // round-trip gate exists to catch -- see DECISIONS.md "The one gate
         // that matters most" -- so it is passed explicitly here.
         Cv2.WarpPerspective(
             source,

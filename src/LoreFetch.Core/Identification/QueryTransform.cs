@@ -7,7 +7,7 @@ namespace LoreFetch.Core.Identification;
 /// Query-side pre-step: grayscale ONLY -- no blur, no resize. The query
 /// enters the shared pipeline at step 4 with an already-rectified 488x680
 /// card (`IRectifier`'s job), so it has nothing left of steps 2-3 to do; see
-/// CLAUDE.md "Identification", where steps 2-3 are marked reference-side
+/// DECISIONS.md "Identification", where steps 2-3 are marked reference-side
 /// only. This exists exactly once. Do NOT add the reference side's blur or
 /// 96px resize here, even for symmetry with `ReferenceTransform` -- the
 /// asymmetry is the whole mechanism (see that type's own doc comment).

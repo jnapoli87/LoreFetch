@@ -113,7 +113,7 @@ public class QueryHashWitnessTests
 
         // Foreign architecture: this IS the measurement. Never a failure,
         // never upgraded by LOREFETCH_REQUIRE_REAL -- a cross-architecture
-        // divergence here is expected, documented behaviour (CLAUDE.md
+        // divergence here is expected, documented behaviour (DECISIONS.md
         // Real risk #2), not "the real path is untested". Missing and
         // differing are reported SEPARATELY, and the bit-distance stats
         // cover differing hashes only -- conflating "not compared" with

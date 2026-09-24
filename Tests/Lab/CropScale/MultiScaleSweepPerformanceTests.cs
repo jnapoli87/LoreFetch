@@ -12,7 +12,7 @@ namespace LoreFetch.Tests.Lab.CropScale;
 /// plainly whether it breaches [the 50 ms / 9-query soft budget]; do not
 /// silently relax the budget to fit." This reproduces
 /// `HashCardIdentifierPerformanceTests`'s own realistic index shape
-/// (48,700 entries / 33,600 oracles, CLAUDE.md's measured in-scope shape)
+/// (48,700 entries / 33,600 oracles, DECISIONS.md's measured in-scope shape)
 /// so the two numbers -- baseline `Identify` and a 3-scale sweep -- are
 /// directly comparable, not measured under different conditions.
 public class MultiScaleSweepPerformanceTests

@@ -30,7 +30,7 @@ public class CommittedThresholdsFileTests
         Assert.True(thresholds.IndexArtworkCount > 0);
         Assert.False(string.IsNullOrWhiteSpace(thresholds.Notes));
 
-        // The sanity relationship CLAUDE.md/orchestration-plan.md expect
+        // The sanity relationship DECISIONS.md/orchestration-plan.md expect
         // between the three distances, even though ThresholdsFile.Load
         // itself does not enforce it (no code currently does -- see this
         // package's own report): a "good" match must never require MORE

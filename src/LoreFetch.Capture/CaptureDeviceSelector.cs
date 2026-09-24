@@ -23,7 +23,7 @@ internal static class CaptureDeviceSelector
 
     /// Backends this stream will ever open, in preference order. Video for
     /// Windows (and anything folded into `CaptureBackend.Other`) is
-    /// deliberately absent from this list — CLAUDE.md: "a legacy path that
+    /// deliberately absent from this list — DECISIONS.md: "a legacy path that
     /// typically misreports modern modes" — so a VfW-only match falls
     /// through to the same "no matching format" diagnosis as no match at
     /// all. `SelectPreferred` enforces the same exclusion explicitly, so

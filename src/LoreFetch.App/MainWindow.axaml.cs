@@ -57,7 +57,7 @@ public partial class MainWindow : Window
     //
     // ONE WriteableBitmap for the life of the app (A2). Reallocated only
     // when the frame's Width/Height changes — never per frame, which is the
-    // per-frame-allocation trap CLAUDE.md's "Avalonia preview" note warns
+    // per-frame-allocation trap DECISIONS.md's "Avalonia preview" note warns
     // about ("the documented cause of every 'camera preview is choppy'
     // report").
     private WriteableBitmap? _bitmap;

@@ -10,7 +10,7 @@ namespace LoreFetch.Tests.Lab.Index;
 /// `ImageCache`'s own path mapping so `IndexBuilder` finds them exactly the
 /// way it would find real Scryfall downloads) plus a matching in-memory
 /// manifest, for `IndexBuilderTests`/`BuildIndexCommandTests`. Deliberately
-/// procedural, never a checked-in image -- CLAUDE.md "never commit card
+/// procedural, never a checked-in image -- DECISIONS.md "never commit card
 /// imagery" applies to fixtures too, not just real Scryfall renders.
 internal static class IndexBuildFixtures
 {

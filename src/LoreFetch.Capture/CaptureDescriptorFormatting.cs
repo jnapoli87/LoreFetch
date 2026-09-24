@@ -10,7 +10,7 @@ namespace LoreFetch.Capture;
 ///
 /// Format: <c>"{Backend}:{IdentityText}"</c>, e.g. <c>"DirectShow:\\?\usb#vid_046d..."</c>,
 /// using `CaptureBackend`'s own enum member name (PascalCase) rather than
-/// the lowercase illustration in CONTRACTS.md/CLAUDE.md — those are
+/// the lowercase illustration in CONTRACTS.md/DECISIONS.md — those are
 /// illustrative, not a literal spec, and the enum's own name round-trips
 /// losslessly via ordinal string comparison with no case-folding decision
 /// to get wrong. The prefix matters on its own: Windows enumeration

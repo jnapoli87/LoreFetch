@@ -34,7 +34,7 @@ public sealed record IndexBuildResult(
 /// codebase is pinned to -- `ReferenceTransform.Prepare` then
 /// `CardHasher.Hash` -- and nothing else. This is deliberate: `build-index`
 /// COMPOSES Core's functions, it does not reimplement any step of them.
-/// See CLAUDE.md "The one gate that matters most" -- a third transform
+/// See DECISIONS.md "The one gate that matters most" -- a third transform
 /// living here, even one that happens to agree with the other two today,
 /// is exactly the silent divergence that gate exists to catch. There is no
 /// other code in this type that touches pixels.
@@ -109,7 +109,7 @@ public static class IndexBuilder
     /// inside `ReferenceTransform.Prepare` or `CardHasher.Hash` themselves
     /// is NOT caught here -- that would be a real bug in the shared
     /// transform, and swallowing it into "missing image" would hide
-    /// exactly the kind of defect CLAUDE.md's gate exists to surface. It
+    /// exactly the kind of defect DECISIONS.md's gate exists to surface. It
     /// propagates out of `Parallel.For` as an `AggregateException`
     /// instead, which is the correct, loud failure for that case.
     private static void HashOne(

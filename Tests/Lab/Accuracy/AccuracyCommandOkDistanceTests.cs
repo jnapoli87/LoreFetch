@@ -8,7 +8,7 @@ namespace LoreFetch.Tests.Lab.Accuracy;
 /// come from the committed `data/index/thresholds.json`, not the hardcoded
 /// `AccuracyHarnessOptions.Default.OkDistance` (270, a documented
 /// CardSpotter-upstream prior -- see that type's own doc comment) --
-/// CLAUDE.md/CONTRACTS.md: "nothing may hardcode a distance; the
+/// DECISIONS.md/CONTRACTS.md: "nothing may hardcode a distance; the
 /// thresholds file is the one source of truth." Exercises
 /// `AccuracyCommand.ResolveOkDistance` directly (made `internal` for this
 /// purpose -- `InternalsVisibleTo("LoreFetch.Tests.Lab")` already
@@ -16,7 +16,7 @@ namespace LoreFetch.Tests.Lab.Accuracy;
 /// the full CLI end to end, because a full `accuracy` run only prints its
 /// resolved `OkDistance` once it also finds `test-images/ground-truth.csv`
 /// + fixtures, which are real card imagery and can never be committed
-/// (CLAUDE.md "Never commit card imagery") -- this logic must be testable
+/// (DECISIONS.md "Never commit card imagery") -- this logic must be testable
 /// without that corpus.
 public class AccuracyCommandOkDistanceTests
 {
