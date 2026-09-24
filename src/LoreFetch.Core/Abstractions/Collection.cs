@@ -11,12 +11,12 @@ public readonly record struct CollectionRow(
     string OracleName, // denormalised for human readability; never a key
     int Quantity,
     string? Condition, // null = not assessed; v1 never assesses.
-                        // null is the ONLY representation of
-                        // "unassessed": null serialises to a blank
-                        // field, and a blank field parses back to
-                        // null — never "". Condition is half the
-                        // dedup key, so "" vs null would silently
-                        // split one card into two rows.
+                       // null is the ONLY representation of
+                       // "unassessed": null serialises to a blank
+                       // field, and a blank field parses back to
+                       // null — never "". Condition is half the
+                       // dedup key, so "" vs null would silently
+                       // split one card into two rows.
     DateTimeOffset LastScannedAt,
     int? BestMatchDistance, // null when Source is Manual
     RowSource Source,
