@@ -7,20 +7,29 @@ namespace LoreFetch.Tests.Integration.Unit;
 /// A test `ArrayPool<byte>` that tallies every Rent and Return, so
 /// "the buffer was returned exactly once" can be asserted directly rather
 /// than inferred.
+///
+/// Thread-safe on purpose: `FolderFrameSource` rents on its background
+/// producer loop while frames are returned on the consumer's thread or a
+/// channel drop, and the tests read the counts while that loop runs. A plain
+/// `++` can lose an increment to that race, which makes RentCount and
+/// ReturnCount disagree at random.
 public sealed class CountingArrayPool : ArrayPool<byte>
 {
-    public int RentCount { get; private set; }
-    public int ReturnCount { get; private set; }
+    private int _rentCount;
+    private int _returnCount;
+
+    public int RentCount => Volatile.Read(ref _rentCount);
+    public int ReturnCount => Volatile.Read(ref _returnCount);
 
     public override byte[] Rent(int minimumLength)
     {
-        RentCount++;
+        Interlocked.Increment(ref _rentCount);
         return Shared.Rent(minimumLength);
     }
 
     public override void Return(byte[] array, bool clearArray = false)
     {
-        ReturnCount++;
+        Interlocked.Increment(ref _returnCount);
         Shared.Return(array, clearArray);
     }
 }
