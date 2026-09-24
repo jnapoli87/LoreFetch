@@ -1,4 +1,4 @@
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;
 using Xunit;

@@ -5,7 +5,7 @@ These are the seams between LoreFetch's domains. They were written so four paral
 > [!NOTE]
 > The rationale below dates from the v0.1 build and names the streams that built each domain: **stream A** = App (UI and auto-capture trigger), **stream B** = detection and identification (plus the Lab tooling), **stream C** = Capture, **stream D** = Collection and export. **Stream 0** was the serial foundation pass that created this surface and the fakes. See [Domain map](#domain-map).
 
-The contract surface is two directories: **`LoreFetch.Core/Abstractions`** (types and interfaces) and **`LoreFetch.Core/Scanning`** (the scan pipeline that composes them). **No OpenCvSharp types appear in any contract** — that's deliberate, so the UI stream never writes CV code, and so the identification stream can swap its internals freely. (`Core` itself does reference OpenCvSharp, because `Core/Imaging` and `FolderFrameSource` need it; the rule is about the seam, not the dependency graph.)
+The contract surface is two directories: **`LoreFetch.Core/Abstractions`** (types and interfaces) and **`LoreFetch.Core/Scanning`** (the scan pipeline that composes them). **No OpenCvSharp types appear in any contract** — that's deliberate, so the UI stream never writes CV code, and so the identification stream can swap its internals freely. (`Core` itself does reference OpenCvSharp, because `Core/Detection`, `Core/Identification` and `FolderFrameSource` need it; the rule is about the seam, not the dependency graph.)
 
 Vocabulary follows [`../CONTEXT.md`](../CONTEXT.md).
 
@@ -567,8 +567,8 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 | Domain | Code | Tests | Consumes from the contract surface |
 |---|---|---|---|
 | **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/App` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
-| **Detection** | `Core/Imaging`: `ContourCardDetector`, `PerspectiveRectifier`, `QuadExpansion` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
-| **Identification** | `Core/Identification`, plus the hash pipeline still in `Core/Imaging` (`CardHasher`, `QueryTransform`, `ReferenceTransform`) | `Tests/Identification` | Abstractions; implements `ICardIdentifier`, `IOracleCatalog` |
+| **Detection** | `Core/Detection`: `ContourCardDetector`, `PerspectiveRectifier`, `QuadExpansion`, `FrameMat` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
+| **Identification** | `Core/Identification`: the hash pipeline (`ReferenceTransform`, `QueryTransform`, `CardHasher`, `CardHash`), `HashIndexFile`, `HashCardIdentifier` | `Tests/Identification` | Abstractions; implements `ICardIdentifier`, `IOracleCatalog` |
 | **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/Lab` | Abstractions, Detection, Identification, the local fixture corpus |
 | **Capture** | `src/LoreFetch.Capture` | `Tests/Capture` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |
 | **Collection and export** | `Core/Collection`, `Core/Export` | `Tests/Collection` | `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, `OracleEntry`, `TileState`, `RowSource`, `CollectionStoreException` |

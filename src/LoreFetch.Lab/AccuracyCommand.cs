@@ -1,5 +1,5 @@
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Lab.Accuracy;
 using Microsoft.Extensions.Logging;

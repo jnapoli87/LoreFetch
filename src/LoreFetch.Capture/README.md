@@ -4,7 +4,7 @@ The FlashCap → `IFrameSource` adapter: opens the webcam, negotiates a format a
 
 ## Dependencies
 
-References `LoreFetch.Core` (for `Abstractions`, notably `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`, `ScanSettings`) and is the **only project that references FlashCap** — no other project may depend on it. It also references OpenCvSharp4, but only for MJPEG decode (`Cv2.ImDecode`) and rotation; card detection and rectification stay in `Core/Imaging`.
+References `LoreFetch.Core` (for `Abstractions`, notably `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`, `ScanSettings`) and is the **only project that references FlashCap** — no other project may depend on it. It also references OpenCvSharp4, but only for MJPEG decode (`Cv2.ImDecode`) and rotation; card detection and rectification stay in `Core/Detection`.
 
 Grants `InternalsVisibleTo` to `LoreFetch.Tests.Capture` for its internal capture stage.
 

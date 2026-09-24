@@ -8,7 +8,7 @@ using OpenCvSharp;
 // directly (`OrderCorners`, `IsNestedOrDuplicate`, `DedupeAndTakeTopN`).
 [assembly: InternalsVisibleTo("LoreFetch.Tests.Detection")]
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Detection;
 
 /// Why a contour was NOT turned into an accepted `CardQuad`. Exposed
 /// structurally (not just logged) so `LoreFetch.Lab`'s `detect` command and

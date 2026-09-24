@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
 
 namespace LoreFetch.Core.Identification;
 

@@ -1,6 +1,6 @@
 using OpenCvSharp;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Identification;
 
 /// Reference-side pre-step -- CardSpotter steps 2-3, reference (index-build)
 /// side ONLY. Blurring and downsampling the reference is what destroys the

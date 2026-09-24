@@ -1,6 +1,6 @@
 using OpenCvSharp;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Identification;
 
 /// Steps 4-6 of the ported CardSpotter 1024-bit perceptual hash
 /// (github.com/relgin/cardspotter, BSD-3-Clause, see THIRD-PARTY-NOTICES) --

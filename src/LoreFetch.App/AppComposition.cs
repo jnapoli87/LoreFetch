@@ -6,7 +6,7 @@ using LoreFetch.Core.Collection;
 using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging;

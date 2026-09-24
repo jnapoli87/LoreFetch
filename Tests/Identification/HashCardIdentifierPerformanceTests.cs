@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
 using Xunit;
 
 namespace LoreFetch.Tests.Identification;

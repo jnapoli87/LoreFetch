@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using LoreFetch.Core.Abstractions;
 using OpenCvSharp;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Detection;
 
 /// `IRectifier`: CardSpotter step 1, query side -- perspective-correct a
 /// detected `CardQuad` out of a `CameraFrame` into a canonical 488x680

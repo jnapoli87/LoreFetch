@@ -5,7 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Core/Imaging and FolderFrameSource decode via OpenCvSharp. -->
+    <!-- Core/Detection, Core/Identification and FolderFrameSource use OpenCvSharp. -->
     <PackageReference Include="OpenCvSharp4" />
     <PackageReference Include="OpenCvSharp4.runtime.win" />
     <PackageReference Include="OpenCvSharp4.runtime.osx.arm64" />

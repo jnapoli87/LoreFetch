@@ -104,9 +104,9 @@ public class SyntheticFrameGeneratorTests
         using (linearResult.Frame)
         using (defaultResult.Frame)
         {
-            using var areaMat = Core.Imaging.FrameMat.ToMat(areaResult.Frame);
-            using var linearMat = Core.Imaging.FrameMat.ToMat(linearResult.Frame);
-            using var defaultMat = Core.Imaging.FrameMat.ToMat(defaultResult.Frame);
+            using var areaMat = Core.Detection.FrameMat.ToMat(areaResult.Frame);
+            using var linearMat = Core.Detection.FrameMat.ToMat(linearResult.Frame);
+            using var defaultMat = Core.Detection.FrameMat.ToMat(defaultResult.Frame);
 
             using var areaVsLinearDiff = new Mat();
             Cv2.Absdiff(areaMat, linearMat, areaVsLinearDiff);
@@ -168,9 +168,9 @@ public class SyntheticFrameGeneratorTests
         using (nearestResult.Frame)
         using (defaultResult.Frame)
         {
-            using var linearMat = Core.Imaging.FrameMat.ToMat(linearResult.Frame);
-            using var nearestMat = Core.Imaging.FrameMat.ToMat(nearestResult.Frame);
-            using var defaultMat = Core.Imaging.FrameMat.ToMat(defaultResult.Frame);
+            using var linearMat = Core.Detection.FrameMat.ToMat(linearResult.Frame);
+            using var nearestMat = Core.Detection.FrameMat.ToMat(nearestResult.Frame);
+            using var defaultMat = Core.Detection.FrameMat.ToMat(defaultResult.Frame);
 
             using var linearVsNearestDiff = new Mat();
             Cv2.Absdiff(linearMat, nearestMat, linearVsNearestDiff);
@@ -217,8 +217,8 @@ public class SyntheticFrameGeneratorTests
         using (highResult.Frame)
         using (lowResult.Frame)
         {
-            using var highMat = Core.Imaging.FrameMat.ToMat(highResult.Frame);
-            using var lowMat = Core.Imaging.FrameMat.ToMat(lowResult.Frame);
+            using var highMat = Core.Detection.FrameMat.ToMat(highResult.Frame);
+            using var lowMat = Core.Detection.FrameMat.ToMat(lowResult.Frame);
 
             using var diff = new Mat();
             Cv2.Absdiff(highMat, lowMat, diff);
@@ -250,8 +250,8 @@ public class SyntheticFrameGeneratorTests
         using (mildResult.Frame)
         using (strongResult.Frame)
         {
-            using var mildMat = Core.Imaging.FrameMat.ToMat(mildResult.Frame);
-            using var strongMat = Core.Imaging.FrameMat.ToMat(strongResult.Frame);
+            using var mildMat = Core.Detection.FrameMat.ToMat(mildResult.Frame);
+            using var strongMat = Core.Detection.FrameMat.ToMat(strongResult.Frame);
 
             using var diff = new Mat();
             Cv2.Absdiff(mildMat, strongMat, diff);

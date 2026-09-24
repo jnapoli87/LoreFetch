@@ -1,4 +1,4 @@
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Identification;
 using Xunit;
 
 namespace LoreFetch.Tests.Identification;

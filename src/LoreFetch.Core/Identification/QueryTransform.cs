@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using LoreFetch.Core.Abstractions;
 using OpenCvSharp;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Identification;
 
 /// Query-side pre-step: grayscale ONLY -- no blur, no resize. The query
 /// enters the shared pipeline at step 4 with an already-rectified 488x680

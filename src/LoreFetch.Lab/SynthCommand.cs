@@ -102,7 +102,7 @@ public static class SynthCommand
 
         using (result.Frame)
         {
-            using var color = Core.Imaging.FrameMat.ToMat(result.Frame);
+            using var color = Core.Detection.FrameMat.ToMat(result.Frame);
             WriteImage(outPath, color);
         }
 
@@ -134,7 +134,7 @@ public static class SynthCommand
 
         var options = new BareMatOptions { Seed = parsed.Seed, NoiseSigma = parsed.Noise, WithSeam = parsed.Seam };
         using var frame = BareMatGenerator.Generate(parsed.Contrast, options);
-        using var color = Core.Imaging.FrameMat.ToMat(frame);
+        using var color = Core.Detection.FrameMat.ToMat(frame);
         WriteImage(outPath, color);
 
         Console.WriteLine($"synth mat: wrote {outPath} -- contrast={parsed.Contrast}.");

@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using LoreFetch.Core.Abstractions;
 using OpenCvSharp;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Detection;
 
 /// Converts between `CameraFrame` (the contract's plain-managed-memory
 /// frame type) and an OpenCvSharp `Mat`, in both directions. Exists once so

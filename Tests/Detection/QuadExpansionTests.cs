@@ -1,10 +1,10 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using Xunit;
 
 namespace LoreFetch.Tests.Detection;
 
-/// `QuadExpansion` now ships in `Core/Imaging` (package DH: dual-hypothesis
+/// `QuadExpansion` now ships in `Core/Detection` (package DH: dual-hypothesis
 /// identification uses it to build its expanded hypothesis), moved here
 /// from `Tests/Lab/CropScale` accordingly. These tests pin its GEOMETRY
 /// directly -- the centroid stays fixed, each axis scales independently

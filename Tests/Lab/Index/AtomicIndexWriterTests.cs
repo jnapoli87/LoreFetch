@@ -11,7 +11,7 @@ public sealed class AtomicIndexWriterTests : IDisposable
     public void Dispose() => IndexBuildFixtures.DeleteQuietly(_dir);
 
     private static HashIndexEntry MakeEntry(string artworkId) => new(
-        Hash: new LoreFetch.Core.Imaging.CardHash(new ulong[LoreFetch.Core.Imaging.CardHash.WordCount]),
+        Hash: new LoreFetch.Core.Identification.CardHash(new ulong[LoreFetch.Core.Identification.CardHash.WordCount]),
         OracleId: "oracle-" + artworkId,
         OracleName: "Name " + artworkId,
         ArtworkId: artworkId,

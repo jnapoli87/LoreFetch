@@ -5,21 +5,21 @@ namespace LoreFetch.Lab.CropScale;
 /// Package B5c ONLY: synthesizes a crop-scale error onto an already-
 /// canonical (488x680, or any other fixed size the caller passes) color
 /// `Mat` -- this is not part of the shipping reference or query path (see
-/// `LoreFetch.Core.Imaging.ReferenceTransform`/`QueryTransform`'s own doc
+/// `LoreFetch.Core.Identification.ReferenceTransform`/`QueryTransform`'s own doc
 /// comments for why each of those exists exactly once and unmodified). It
 /// exists so the crop-scale experiment can ask "what would the query card
 /// have looked like if `ContourCardDetector` had found a quad
 /// `insetFraction` off from the card's true outer edge" without touching
 /// `ContourCardDetector` or `PerspectiveRectifier` themselves.
 ///
-/// Lives in `LoreFetch.Lab`, not `LoreFetch.Core.Imaging` (package
+/// Lives in `LoreFetch.Lab`, not `LoreFetch.Core` (package
 /// B5c-cleanup, moved from `Core/Imaging` 2026-09-22): B5c's 3-scale crop
 /// sweep was REJECTED for v1 (docs/history/orchestration-plan.md "Rulings -- the 90%
 /// gate and B5c's sweep" -- every real wrong match sits at 272-344,
 /// outside the ~5% crop tolerance this transform's own curve identified,
 /// so crop error is not what is failing real cards). This type is
 /// diagnostic-only, exercised only by `lab crop-scale` and its tests, and
-/// must not ship in the product assembly -- `Core/Imaging` is what ships.
+/// must not ship in the product assembly -- `Core` is what ships.
 ///
 /// Why this reproduces the real defect (B5a/B5b: a black-bordered card's
 /// outer edge merges into a dark mat, so the detected quad lands inside the

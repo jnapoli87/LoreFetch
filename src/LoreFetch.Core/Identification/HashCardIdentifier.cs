@@ -1,6 +1,5 @@
 using System.Numerics;
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;

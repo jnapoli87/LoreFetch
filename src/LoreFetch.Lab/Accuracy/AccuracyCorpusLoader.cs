@@ -1,4 +1,4 @@
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using OpenCvSharp;
 
 namespace LoreFetch.Lab.Accuracy;

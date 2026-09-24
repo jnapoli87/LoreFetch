@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Text;
 
-namespace LoreFetch.Core.Imaging;
+namespace LoreFetch.Core.Identification;
 
 /// The 1024-bit perceptual hash `CardHasher` produces: 16 grid cells (a 4x4
 /// grid of 8x8-pixel cells), one `ulong` per cell. Bit `i` of a cell's word

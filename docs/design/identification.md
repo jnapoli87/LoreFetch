@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Design record from v0.1.** Written as the hackathon's Stream B spec. Code comments cite its section IDs (B0, B1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
 >
-> Code: `src/LoreFetch.Core/Imaging`, `src/LoreFetch.Core/Identification`, `src/LoreFetch.Lab`. Tests: `Tests/Detection`, `Tests/Identification`, `Tests/Lab`.
+> Code: `src/LoreFetch.Core/Detection`, `src/LoreFetch.Core/Identification`, `src/LoreFetch.Lab`. Tests: `Tests/Detection`, `Tests/Identification`, `Tests/Lab`.
 
 Consumes: `Core/Abstractions` (see [`CONTRACTS.md`](../CONTRACTS.md)), the local fixture corpus
 Implements: `ICardDetector`, `IRectifier`, `ICardIdentifier`, `IOracleCatalog`

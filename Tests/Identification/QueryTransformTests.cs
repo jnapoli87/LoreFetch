@@ -1,5 +1,5 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Identification;
 using OpenCvSharp;
 using Xunit;
 

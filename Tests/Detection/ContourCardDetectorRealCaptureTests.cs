@@ -1,5 +1,5 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using LoreFetch.Lab;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;

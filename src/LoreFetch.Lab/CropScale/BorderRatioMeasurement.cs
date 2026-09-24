@@ -16,7 +16,7 @@ namespace LoreFetch.Lab.CropScale;
 /// Diagnostic-only, `LoreFetch.Lab`-scoped: it exists to MEASURE a
 /// correction factor from arbitrary samples for `lab expand-experiment` to
 /// explore, not to apply one -- `QuadExpansion` itself moved to
-/// `Core/Imaging` (package DH) once its committed constants
+/// `Core/Detection` (package DH) once its committed constants
 /// (`BorderWidthCorrectionFactor`/`BorderHeightCorrectionFactor`) started
 /// shipping in the product's dual-hypothesis identification path; this
 /// type stays here because re-measuring the ratio from a fresh sample is
