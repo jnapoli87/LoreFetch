@@ -125,7 +125,7 @@ Negotiated 1080p30 MJPG proven from the device's own characteristics; flat memor
 
 Both legs run Unit + Integration(synthetic) + Integration(end-to-end), and both filter out `Category=Hardware`. The macOS leg additionally filters out `Category=WindowsOnly`, which is how the golden hashes stay on one architecture. Neither runs Accuracy or Hardware.
 
-A `lint` job checks formatting against `.editorconfig` (`dotnet format --verify-no-changes`; fix locally with `scripts/lorefetch.sh lint --fix`). Two more checks run on every PR, and each has a label that says "I meant it":
+A `lint` job checks formatting against `.editorconfig` (`dotnet format --verify-no-changes`; fix locally with `scripts/lorefetch.sh lint --fix`). A `guards` job runs `hooks/pre-commit`, the card-imagery and attribution checks, because the local hook can be unwired or skipped ([`DECISIONS.md`](DECISIONS.md#git-identity)). Two more checks run on every PR, and each has a label that says "I meant it":
 
 | Check | Fails when | Override label |
 |---|---|---|

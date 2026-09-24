@@ -74,8 +74,7 @@ jobs:
       # disagrees with CI is worse than no local run.
       #
       # `shell: bash` works on windows-latest, which ships Git Bash — the
-      # same interpreter hooks/pre-commit and .claude/hooks/*.sh already
-      # require.
+      # same interpreter hooks/pre-commit already requires.
       # ---------------------------------------------------------------------
       # The Windows leg also writes TRX results and coverage, which the
       # metrics job below compares with main. One leg is enough, and it must
@@ -127,6 +126,19 @@ jobs:
 
       - name: Lint
         run: bash scripts/lorefetch.sh lint
+
+  # The card-imagery and CardSpotter-attribution checks, by running the
+  # pre-commit hook itself. A contributor can leave the hook unwired or skip it
+  # with --no-verify, so as a local check it only helps; as a required check it
+  # holds. One file, so the hook and CI cannot disagree.
+  guards:
+    name: guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Imagery and attribution
+        run: sh hooks/pre-commit
 
   # The test-count and coverage ratchet (scripts/Metrics.cs). Compares this
   # PR's metrics with the latest successful push to main. Fails on fewer

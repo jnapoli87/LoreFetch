@@ -26,14 +26,14 @@ The hash has two sides that share steps 4–6. The reference side (`ReferenceTra
 
 ## Hard rules
 
-- **Card imagery stays out of git**, including Scryfall renders and our own photos: the artwork is Wizards of the Coast IP. Commit only derived data (the index, accuracy tables). Local fixtures live in gitignored `test-images/`, and `hooks/pre-commit` rejects staged rasters.
+- **Card imagery stays out of git**, including Scryfall renders and our own photos: the artwork is Wizards of the Coast IP. Commit only derived data (the index, accuracy tables). Local fixtures live in gitignored `test-images/`; `hooks/pre-commit` rejects rasters, and CI's `guards` check runs the same hook.
 - **The hash transforms change only together with an index rebuild on `win-x64`** and regenerated golden hashes. The goldens are `WindowsOnly` because `INTER_AREA` is not bit-exact on ARM64. Read `docs/DECISIONS.md` "The one gate that matters most" first.
 - **Identification ranks every candidate by full Hamming distance and returns the top N**, with no threshold filtering or early rejection. Match distance drives UI emphasis; Enter is the gate.
 - **Pin every OpenCV interpolation flag and border mode explicitly** (`docs/TESTING.md`).
 - **Storage is CSV**: UTF-8 with BOM, written to a temp file in the same directory and then renamed, with a `.bak` kept. A header with unknown or missing columns fails loudly.
 - **Scryfall requests carry our `User-Agent` and an `Accept` header, and honour 429s.** Pull `normal` images, never `small`.
 - **Nothing reaches GitHub without the owner approving the exact content first**: pushes, PRs, issues, labels, releases, repo settings. Local commits on a branch are fine.
-- **On a fresh clone, run `scripts/lorefetch.sh setup` before the first commit.** It wires the repo-local noreply identity and the pre-commit hook; `doctor` checks them.
+- **On a fresh clone, run `scripts/lorefetch.sh setup` before the first commit.** It wires the pre-commit hook; `doctor` checks it. Commit identity is yours to set.
 
 **Read `docs/DECISIONS.md` before changing** identification, detection, camera geometry, the capture/commit keys, storage or export formats, the package stack (Avalonia, OpenCvSharp, FlashCap pins and traps), Scryfall access, or platform scope. It holds each settled decision, why it holds, and why the alternatives (OCR, embeddings, a database, …) stay rejected. Code comments cite its sections as `DECISIONS.md "<section>"`.
 

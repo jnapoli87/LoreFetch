@@ -120,12 +120,12 @@ Reasoning in [`docs/history/PLAN.md`](docs/history/PLAN.md#stretch-goals--after-
 
 ```sh
 scripts/lorefetch.sh setup     # FIRST, in any fresh clone
-scripts/lorefetch.sh doctor    # fails while the guards aren't live
+scripts/lorefetch.sh doctor    # fails while the hook isn't wired
 scripts/lorefetch.sh build
 scripts/lorefetch.sh test
 ```
 
-`setup` wires the repo-local git identity, hooks path and SSH key pin, and touches nothing global. It's required: `hooks/pre-commit` is tracked, but `core.hooksPath` is local config and doesn't clone, so until you run it the hook silently never fires.
+`setup` points `core.hooksPath` at the tracked `hooks/` folder and touches nothing global. Run it before your first commit: `core.hooksPath` is local config and doesn't clone, so until then `hooks/pre-commit` silently never fires, and you'd find out about stray card images or a trimmed notices file from CI instead. Set your own git identity; a GitHub noreply address keeps your email out of public history.
 
 Clones from before 2026-09-21 no longer match — the history was rewritten that day. Fetch, then hard-reset to `origin/main`; a merge would drag the old history back.
 

@@ -148,25 +148,23 @@ Ship **`win-x64` binary only**. But the codebase stays portable — no project n
 
 ## Git identity
 
-Repo-local, **no global config touched** (the global default on these machines is a work address):
+**Commit identity is each contributor's own.** `scripts/lorefetch.sh setup` wires only `core.hooksPath = hooks`, repo-locally, and touches nothing global. Until #5 it also pinned the owner's name, noreply address and SSH key, and the hook refused every other identity, so nobody else could commit, and a contributor who followed `setup` committed *as the owner*.
 
-- `user.name` = `jnapoli87`, `user.email` = `jnapoli87@users.noreply.github.com` — a noreply address, because commits publish whatever email they carry and public history is hard to rewrite.
-- `core.sshCommand` pins `~/.ssh/id_ed25519_personal` (GitHub won't accept one key on two accounts).
-- `core.hooksPath = hooks`, with **`hooks/pre-commit` enforcing three hard rules** — commit identity, no card imagery, and CardSpotter attribution. Tracked, so it survives a fresh clone (where `.git/hooks/` would not) and applies inside every worktree.
+The owner's global default is a work address, so the owner's checkouts carry repo-local `user.email = jnapoli87@users.noreply.github.com` and a `core.sshCommand` pinning `~/.ssh/id_ed25519_personal` (GitHub won't accept one key on two accounts). A fresh clone needs both set by hand; nothing in the repo enforces them any more.
+
+`hooks/pre-commit` enforces **two hard rules, no card imagery and CardSpotter attribution**, and CI runs the same file as the required `guards` check. The hook is tracked, so it survives a fresh clone (where `.git/hooks/` would not) and applies inside every worktree.
 
 **What the hook checks, and why each detail matters:**
 
 | Check | Detail |
 |---|---|
-| Identity | Uses `git var GIT_AUTHOR_IDENT` / `GIT_COMMITTER_IDENT`, **not** `git config user.email` — `git var` reports the identity git will *actually* use, catching `GIT_AUTHOR_EMAIL` overrides a config lookup would miss. Author and committer are checked independently. |
-| Identity | Accepts both noreply forms via `^([0-9]+\+)?jnapoli87@users\.noreply\.github\.com$` — GitHub's web UI uses the ID-prefixed variant, so rejecting it would block every web edit. |
-| Imagery | Rejects staged raster files outside `src/LoreFetch.App/Assets/` and `docs/img/`. This is the layer that catches **`git add -f`**, which bypasses `.gitignore` entirely. |
+| Imagery | Rejects raster files in the index (`git ls-files`) outside `src/LoreFetch.App/Assets/` and `docs/img/`. This is the layer that catches **`git add -f`**, which bypasses `.gitignore` entirely. It reads the index, not the staged diff, because in CI nothing is staged: the index is the commit under test. |
 | Attribution | Requires `THIRD-PARTY-NOTICES` to retain the CardSpotter **credit, copyright holder, BSD-3 conditions *and* disclaimer** — all four. BSD-3-Clause requires "this list of conditions" be retained, so a bare "uses CardSpotter" credit does not satisfy it, and trimming the file to one is the realistic way this rots. Checked against the working tree, not the index: the obligation is about what the repo *contains*, not what this commit touched. |
 | Attribution | Also prints an **advisory** (non-blocking) list of `PackageReference` ids absent from the notices file, since packages legitimately land before their notice entry does. |
 
-**Why attribution is a git hook rather than CI or a Claude hook:** a git hook binds every commit from any tool by any author — which is the only thing that covers working on this repo without Claude. A Claude hook binds only Claude, and CI catches a licence violation on the wrong side of the push.
+**Why both a git hook and CI:** the hook catches a violation before the push, from any tool. But a hook can be left unwired or skipped with `--no-verify`, so only a required check guarantees `main`. CI runs the hook file itself rather than a copy, so the two cannot disagree.
 
-⚠️ **Do not rewrite that identity regex as `^(|[0-9]+\+)…`.** BSD grep on macOS rejects an empty alternative with *"empty (sub)expression"* and then matches nothing — which silently converts the guard into "refuse every commit." That bug was in the first version and only surfaced because the hook was tested rather than eyeballed. **An untested guard is not a guard.**
+⚠️ **Write optional regex groups as `(x)?`, never `(|x)`.** BSD grep on macOS rejects an empty alternative with *"empty (sub)expression"* and then matches nothing, which once silently turned an earlier version of this hook into "refuse every commit". It only surfaced because the hook was tested rather than eyeballed. **An untested guard is not a guard.**
 
 `gh` CLI auth is per-host, not per-repo — it is machine-wide, not bound to this repo. On the Windows PC it is logged in as `jnapoli87` (verified 2026-09-24), so `gh` is fine for this repo there. On any other machine, run `gh auth status` before a `gh` write; publishing via `gh` is still subject to the review-before-push rule.
 
@@ -192,39 +190,24 @@ Two ways this still fails silently, both guarded rather than assumed:
 6. **Foils.** Glare defeats hashing without polarized or diffuse light. Out of v1 scope — document the failure rather than hiding it.
 7. **`OpenCvSharp4.runtime.osx.arm64` has exactly one release** (2026-06-27, ~6k downloads). No bug reports, which may mean "works" or "unused". Dev-only. Don't confuse it with `OpenCvSharp4.runtime.osx_arm64` (underscore), an unofficial package.
 
-## Card imagery is enforced in two layers, not just documented
+## Card imagery is enforced in three layers, not just documented
 
-The artwork is Wizards of the Coast IP regardless of who photographed it, so neither Scryfall renders nor our own captures may be committed. Once artwork is in history it is there permanently, short of a rewrite — so this is enforced twice:
+The artwork is Wizards of the Coast IP regardless of who photographed it, so neither Scryfall renders nor our own captures may be committed. Once artwork is in history it is there permanently, short of a rewrite — so this is enforced three times:
 
 1. **`.gitignore`** blocks all raster formats tree-wide, opting UI/doc assets back in individually, so a stray fixture can't slip through on `git add -A`. Verify with `git check-ignore -v <path>`.
-2. **`hooks/pre-commit`** rejects staged raster files outside the allowed asset paths — which catches `git add -f`, the one move that bypasses `.gitignore` completely.
+2. **`hooks/pre-commit`** rejects raster files outside the allowed asset paths — which catches `git add -f`, the one move that bypasses `.gitignore` completely.
+3. **The `guards` CI check** runs that same hook on every PR, so an unwired or skipped hook cannot let imagery reach `main`. It cannot keep an image off the PR branch itself, which is already pushed by then; that is the hook's job.
 
 Only **derived** data is committed: the ~8.2 MiB hash index and the accuracy tables. The raw Scryfall downloads that build the index are ignored, as is the user's own `collection.csv`.
 
 ## Repository guards
 
-`.claude/settings.json` (committed, so it applies in every clone) runs `.claude/hooks/guard-bash.sh` before Claude's `git` and `gh` commands:
+`main`'s ruleset on GitHub blocks deletion, force-pushes and direct pushes, merges only by squash through a PR, and requires every CI check (both build legs, `lint`, `guards`, `contract-check`, `metrics`) on a branch that is up to date with `main`. It has no bypass actors.
 
-| Guard | Rule | Behaviour |
-|---|---|---|
-| `guard-bash.sh` | Guards must be wired before committing | **Denies** `git … commit` when `core.hooksPath` is not `hooks`, naming `scripts/lorefetch.sh setup` as the fix. This is the one guard that can still speak when the *git* hook is switched off — see *Two things that bite a fresh clone* below. It lives here rather than in `hooks/pre-commit` for exactly that reason, and in a wired checkout it costs one `git config` read and never fires. |
-| `guard-bash.sh` | No force-push | **Denies** `--force`, `-f`, `--force-with-lease` on any `git … push`. The repo is public; rewriting history is unrecoverable for anyone who cloned it, and history is the audit trail for authorship and the imagery rule. |
-| `guard-bash.sh` | Publishing needs prior review | **Warns** (does not block) on plain `git push`, `gh pr create`, `gh repo create`, `gh release create`. Deliberately a tripwire rather than a wall — explicit go-aheads do happen, and a block would make pushing impossible. |
-
-The deny for force-push is deliberately tight: the force flag must appear after `push` and in the same shell segment, so a `-f` belonging to another command on the same line does not trip it. Detecting a push is deliberately loose, because a loose match only adds the warning.
-
-⚠ **The guard reads the command text, so it cannot tell a command from a string that merely contains one.** Authoring docs *about* force-pushing through a Bash heredoc trips it. Write that kind of content with the Write/Edit tools, which never inspect prose for commands. Not a defect: distinguishing quoted text from shell syntax in a regex is a rabbit hole, and every approximation weakens the deny.
-
-**Without `jq` on `PATH` the hook fails open.** On Windows, winget installs it outside `PATH` until a new session starts; `scripts/lorefetch.sh doctor` reports it.
-
-**After changing these, run `/hooks` or restart the session** — the settings watcher only watches directories that already had a settings file at session start, so a newly created `.claude/settings.json` is not live until then.
+It replaced `.claude/hooks/guard-bash.sh` (#5), a Claude Code hook that denied force-pushes and commits from an unwired checkout and warned before `git push` and `gh pr create`. A server rule binds every client, where a Claude hook bound only Claude. The review-before-publish rule in `CLAUDE.md` still stands; no hook re-raises it any more.
 
 ## Two things that bite a fresh clone
 
-**1. A fresh clone has NO guards, and nothing about it looks wrong.** `hooks/pre-commit` is tracked, so the file arrives — but **`core.hooksPath` is config, and config does not clone.** With `user.email` also unset, git falls back to the global identity, which on these machines is a work address. So a clone commits under the wrong identity, into a **public** repo, with the hook that exists to refuse precisely that not running at all. Verified on a real clone, 2026-09-21; it is not theoretical.
-
-Enforced in two places rather than documented in one, because the failure is silent:
-- **`scripts/lorefetch.sh setup`** wires identity, `core.hooksPath` and the SSH key pin, repo-locally, touching nothing global. **`doctor` exits non-zero** while the guards are not live, so it is a check rather than a report.
-- **`.claude/hooks/guard-bash.sh` denies `git commit`** when `core.hooksPath` is unwired. `.claude/` *does* clone, which is why the guard lives there: it is the only one that still works when the git hook is off. It covers Claude-driven commits in any clone; a human committing by hand is covered by the README and by `doctor`.
+**1. A fresh clone's hook is unwired, and nothing about it looks wrong.** `hooks/pre-commit` is tracked, so the file arrives, but **`core.hooksPath` is config, and config does not clone.** `scripts/lorefetch.sh setup` wires it, repo-locally, and **`doctor` exits non-zero** until it is, so it is a check rather than a report. CI's `guards` check runs the same file, so an unwired hook no longer lets anything reach `main`; it only moves the failure to after the push. In the owner's clones, `user.email` also falls back to the global work address until it is set by hand (see *Git identity*).
 
 **2. History was rewritten on 2026-09-21, so every commit hash changed.** A clone predating that must `git fetch && git reset --hard origin/main`. **Not `git pull`** — a merge would drag the old history back in and undo the rewrite. Prefer the reset over re-cloning, because of point 1. The rewrite was verified by cloning from GitHub afterwards and grepping every commit's content, messages and trees.

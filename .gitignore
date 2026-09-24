@@ -104,9 +104,8 @@ test-images/*
 #
 # Everything else under .claude/ IS tracked, deliberately and for one reason:
 # Claude Code runs on both the Mac and the Windows PC against this same repo,
-# and in four linked worktrees after the fork. hooks/, settings.json and
-# skills/ only apply where they exist on disk, so git is the only thing that
-# puts them on the other machine. A skill that lives in one checkout is a
+# and in four linked worktrees after the fork. skills/ only apply where they
+# exist on disk, so git is the only thing that puts them on the other machine. A skill that lives in one checkout is a
 # skill the other machine silently does not have.
 #
 # The consequence to respect: this repo is PUBLIC, so .claude/skills/ holds
