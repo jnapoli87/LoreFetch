@@ -10,7 +10,7 @@ namespace LoreFetch.Capture;
 ///
 /// Format: <c>"{Backend}:{IdentityText}"</c>, e.g. <c>"DirectShow:\\?\usb#vid_046d..."</c>,
 /// using `CaptureBackend`'s own enum member name (PascalCase) rather than
-/// the lowercase illustration in CONTRACTS.md/CLAUDE.md — those are
+/// the lowercase illustration in CONTRACTS.md/DECISIONS.md — those are
 /// illustrative, not a literal spec, and the enum's own name round-trips
 /// losslessly via ordinal string comparison with no case-folding decision
 /// to get wrong. The prefix matters on its own: Windows enumeration
@@ -28,7 +28,7 @@ internal static class CaptureDescriptorFormatting
 
     /// One descriptor per line — id, name, and its full characteristic
     /// list — used in the "no matching format" diagnosis. This is the
-    /// "enumerated list" stream-c-capture.md's C2 requires every such
+    /// "enumerated list" docs/design/capture.md's C2 requires every such
     /// exception to carry, so a user can see not just that nothing matched
     /// but exactly what the device offered instead.
     internal static string FormatList(IReadOnlyList<CaptureDescriptor> descriptors) =>

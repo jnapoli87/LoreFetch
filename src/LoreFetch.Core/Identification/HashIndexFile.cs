@@ -1,12 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
 
 namespace LoreFetch.Core.Identification;
 
 /// One entry of the committed hash index: a card's perceptual hash plus
-/// enough identity to answer a query -- see stream-b-identification.md
+/// enough identity to answer a query -- see docs/design/identification.md
 /// "B3 -- HashIndex" and CONTRACTS.md "Identification" for what OracleId
 /// and ArtworkId mean. OracleId/OracleName are denormalized here for a
 /// convenient in-memory shape; on disk each distinct oracle card is stored
@@ -59,7 +58,7 @@ public sealed class HashIndexFormatException : Exception
 }
 
 /// Reads and writes `cards.lfidx`, the committed hash index's binary format
-/// (stream-b-identification.md "B3 -- HashIndex"; orchestration-plan.md
+/// (docs/design/identification.md "B3 -- HashIndex"; docs/history/orchestration-plan.md
 /// V11 for the `IsBasicLand` flag, which is what lets B6 exclude lands from
 /// the accuracy table by data the builder already has, rather than a
 /// `type_line` string check repeated at every call site).

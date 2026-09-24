@@ -8,7 +8,7 @@ public sealed class RoundTripGateOptions
 {
     public required string CacheDir { get; init; }
 
-    /// "About 200 renders spread across the ladder" (stream-b-identification.md
+    /// "About 200 renders spread across the ladder" (docs/design/identification.md
     /// "B2"): land and non-land counts are separate knobs rather than one
     /// total + a fraction, so a caller can see and vary each independently.
     public int LandSampleSize { get; init; } = 20;

@@ -130,7 +130,7 @@ ORIENTATIONS="portrait rotated"
 # height is 12" (1.83" of margin) — see compute_fit below.
 
 # Sane numeric bounds for --height, inches. Below ~6" not even the smallest
-# footprint (1 card, 2.5"x3.5" — CLAUDE.md's Geometry table) fits
+# footprint (1 card, 2.5"x3.5" — DECISIONS.md's Geometry table) fits
 # comfortably. Above ~30" a card is under ~113px wide (1360/30 * 2.5 =
 # 113.3) — well past anything useful for hashing or for a human to frame by
 # hand. Anything inside this range is only a candidate; compute_fit() still
@@ -138,7 +138,7 @@ ORIENTATIONS="portrait rotated"
 MIN_HEIGHT=6
 MAX_HEIGHT=30
 
-STREAMC_CSPROJ="$REPO/Tests/StreamC/LoreFetch.Tests.StreamC.csproj"
+CAPTURE_TESTS_CSPROJ="$REPO/Tests/Capture/LoreFetch.Tests.Capture.csproj"
 # Narrow enough to select exactly ONE test: the single frame-saving Hardware
 # test, never SustainedRunKeepsMemoryFlat (~3 min), SlowConsumerSeesLatency-
 # NotGrowth (~60s) or UnplugCameraTests (interactive). Verified with
@@ -202,13 +202,13 @@ slugify() {
 }
 
 # Windows-native path for a value handed to a .NET process under Git Bash —
-# same trick guard-write.sh uses the other direction (win_to_unix).
+# the inverse of converting a Windows path to a Git Bash one.
 native_path() {
   if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else printf '%s' "$1"; fi
 }
 
 # Resolves layout + orientation to a short x long footprint, inches, from
-# CLAUDE.md's Geometry table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7, 3x3
+# DECISIONS.md's Geometry table (1 card 2.5x3.5, 3-in-a-line 2.5x10.7, 3x3
 # grid 7.7x10.7 or its swap). Only layout 9 (a 3x3 grid) has two real
 # arrangements, because it is the only footprint whose two sides differ:
 # PORTRAIT puts the grid's shorter 7.7" side on the frame's short (binding)
@@ -234,7 +234,7 @@ layout_footprint() {  # $1 = layout, $2 = orientation ("portrait"|"rotated")
 }
 
 # Does this height/footprint combination physically fit the C920's frame?
-# ppi = 1360/h (CLAUDE.md's "Geometry" table); the frame then covers
+# ppi = 1360/h (DECISIONS.md's "Geometry" table); the frame then covers
 # 1920/ppi x 1080/ppi inches, long axis x short axis. fs/fl (short x long)
 # come from layout_footprint above — this function no longer derives them
 # from a layout number itself, so the same formula and thresholds serve
@@ -715,7 +715,7 @@ fi
 
 # Scratch dir OUTSIDE the repo — never let a captured frame reach git, even
 # transiently. LOREFETCH_HW_OUT is HardwareTestSupport's own escape hatch
-# for exactly this (Tests/StreamC/Hardware/HardwareTestSupport.cs).
+# for exactly this (Tests/Capture/Hardware/HardwareTestSupport.cs).
 scratch_dir=$(mktemp -d "${TMPDIR:-/tmp}/lorefetch-fixture-capture.XXXXXX")
 hw_out_native=$(native_path "$scratch_dir")
 cleanup() { rm -rf "$scratch_dir" 2>/dev/null || true; }
@@ -735,13 +735,13 @@ run_step() {  # label, then the command
   fi
 }
 
-if ! run_step "Build (Release)" dotnet build "$STREAMC_CSPROJ" -c Release; then
+if ! run_step "Build (Release)" dotnet build "$CAPTURE_TESTS_CSPROJ" -c Release; then
   cleanup
   die "build failed; see output above — nothing was filed"
 fi
 
 if ! run_step "Capture (dotnet test, filter: $FILTER)" \
-     env "LOREFETCH_HW_OUT=$hw_out_native" dotnet test "$STREAMC_CSPROJ" -c Release --no-build --filter "$FILTER"; then
+     env "LOREFETCH_HW_OUT=$hw_out_native" dotnet test "$CAPTURE_TESTS_CSPROJ" -c Release --no-build --filter "$FILTER"; then
   note "scratch directory kept for inspection: $scratch_dir"
   die "capture test failed; see output above — nothing was filed"
 fi

@@ -8,11 +8,11 @@ namespace LoreFetch.Lab.Accuracy;
 public sealed record AccuracyHarnessOptions
 {
     /// The distance at or below which a rank-1 result counts as "confident"
-    /// for the wrong@1 classification (CLAUDE.md/CONTEXT.md's own "Ok
+    /// for the wrong@1 classification (DECISIONS.md/CONTEXT.md's own "Ok
     /// threshold": "between good and ok is a low-confidence match").
     ///
     /// Default 270 -- CardSpotter upstream's own `myOkMatchScore` default
-    /// (stream-b-identification.md "Verified", target 1: `QueryThread.cpp
+    /// (docs/design/identification.md "Verified", target 1: `QueryThread.cpp
     /// :152-153`, `myOkMatchScore(270)`). This is NOT a value calibrated
     /// against LoreFetch's own margin data -- there is no real-corpus
     /// margin data yet (H3 gates B6) -- it is a documented, cited prior
@@ -27,7 +27,7 @@ public sealed record AccuracyHarnessOptions
     /// `OkDistance`.
     ///
     /// Default 0 -- zero tolerance. Chosen deliberately, not arbitrarily:
-    /// CLAUDE.md's own reasoning is "a silent miss is recoverable, a
+    /// DECISIONS.md's own reasoning is "a silent miss is recoverable, a
     /// confident wrong answer is permanent bad inventory" (TESTING.md
     /// "Accuracy"), and with no real corpus yet to justify a looser bound
     /// empirically, the conservative default is the one that fails the
@@ -39,7 +39,7 @@ public sealed record AccuracyHarnessOptions
     /// How many ranked candidates `ICardIdentifier.Identify` is asked for
     /// per slot. Must be at least 2 for the margin distribution (rank-1 vs
     /// the best DIFFERENT `OracleId`) to be computable at all; 3 leaves
-    /// headroom without meaningfully changing brute-force cost (CLAUDE.md:
+    /// headroom without meaningfully changing brute-force cost (DECISIONS.md:
     /// 0.243 ms/query either way).
     public int MaxCandidates { get; init; } = 3;
 

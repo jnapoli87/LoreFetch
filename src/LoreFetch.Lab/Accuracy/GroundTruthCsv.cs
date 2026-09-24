@@ -4,7 +4,7 @@ using System.Text;
 namespace LoreFetch.Lab.Accuracy;
 
 /// One row of `test-images/ground-truth.csv`, package H3's fixed schema:
-/// `file,height_in,layout,slot,oracle_name,rung,mat` (orchestration-plan.md
+/// `file,height_in,layout,slot,oracle_name,rung,mat` (docs/history/orchestration-plan.md
 /// "H3", ruling 2026-09-22: 7 columns, orientation deliberately NOT a
 /// column -- it is invisible to identification by design and recoverable
 /// from `File` for layout 9). `Slot` is 1-based, in the row-major order the

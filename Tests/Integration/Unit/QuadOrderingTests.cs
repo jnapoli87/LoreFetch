@@ -9,7 +9,7 @@ namespace LoreFetch.Tests.Integration.Unit;
 /// pipeline-level test that proves the pipeline actually calls this and
 /// that `Cohort` tiles come out in the order it produces.
 ///
-/// Card dimensions used throughout (346 x 483 px) match CLAUDE.md's locked
+/// Card dimensions used throughout (346 x 483 px) match DECISIONS.md's locked
 /// mount geometry — every card in every layout is 346 x 483 px at the
 /// ~9.75" height a 3x3 requires — so these fixtures are the shape a real
 /// freehand 3x3 actually produces, not an arbitrary test size.
@@ -175,11 +175,11 @@ public class QuadOrderingTests
     /// **Real-capture regression.** Centroids and quad size for the first
     /// row are lifted directly from a real captured 3x3 frame, as pinned in
     /// stream B's independently-built inference at
-    /// `Tests/StreamB/Accuracy/SlotMapperTests.cs`
+    /// `Tests/Lab/Accuracy/SlotMapperTests.cs`
     /// (`SortRowMajor_RealCapturedTopRowWithYJitter_StillOrdersByXAscending`):
     /// three real detected centroids, (593,92), (839,99), (1109,96), each
     /// ~216x303 px -- card size at the ~15in height that frame was shot at,
-    /// via CLAUDE.md's `px/inch = 1360/height_inches`. Y spans only 7 px
+    /// via DECISIONS.md's `px/inch = 1360/height_inches`. Y spans only 7 px
     /// across the row, which is enough to put the rightmost card ahead of
     /// the middle one under a strict `OrderBy(centroid Y).ThenBy(centroid X)`
     /// -- exactly the naive algorithm `ReadingOrder`'s own doc comment warns
@@ -257,7 +257,7 @@ public class QuadOrderingTests
     public void ReadingOrder_RotatedPortraitGeometry_1080x1920_ComesOutRowMajor()
     {
         // Post-rotation frame is 1080 wide x 1920 tall -- the 1080/1920 axes
-        // CLAUDE.md's locked mount produces for a 3x3 (1920 runs along the
+        // DECISIONS.md's locked mount produces for a 3x3 (1920 runs along the
         // table's depth). QuadOrdering takes no frame dimensions at all, so
         // this is really checking that nothing here silently assumes a
         // landscape frame; the fixture is sized to fit inside the stated

@@ -1,8 +1,11 @@
 # Contracts
 
-These are the seams that let four streams run in parallel. **Frozen after the foundation pass.** If a stream needs a change here, it stops and asks — it does not edit this surface unilaterally, because every unilateral change is a four-way merge conflict.
+These are the seams between LoreFetch's domains. They were written so four parallel streams could build v0.1 without colliding, and they are still what keeps each domain replaceable on its own. A change here affects every domain at once, so make it deliberately and call it out in the PR.
 
-The contract surface is two directories: **`LoreFetch.Core/Abstractions`** (types and interfaces) and **`LoreFetch.Core/Scanning`** (the scan pipeline that composes them). **No OpenCvSharp types appear in any contract** — that's deliberate, so the UI stream never writes CV code, and so the identification stream can swap its internals freely. (`Core` itself does reference OpenCvSharp, because `Core/Imaging` and `FolderFrameSource` need it; the rule is about the seam, not the dependency graph.)
+> [!NOTE]
+> The rationale below dates from the v0.1 build and names the streams that built each domain: **stream A** = App (UI and auto-capture trigger), **stream B** = detection and identification (plus the Lab tooling), **stream C** = Capture, **stream D** = Collection and export. **Stream 0** was the serial foundation pass that created this surface and the fakes. See [Domain map](#domain-map).
+
+The contract surface is two directories: **`LoreFetch.Core/Abstractions`** (types and interfaces) and **`LoreFetch.Core/Scanning`** (the scan pipeline that composes them). **No OpenCvSharp types appear in any contract** — that's deliberate, so the UI stream never writes CV code, and so the identification stream can swap its internals freely. (`Core` itself does reference OpenCvSharp, because `Core/Detection`, `Core/Identification` and `FolderFrameSource` need it; the rule is about the seam, not the dependency graph.)
 
 Vocabulary follows [`../CONTEXT.md`](../CONTEXT.md).
 
@@ -346,7 +349,7 @@ public static class ScanPipelineFactory
 
 **Composition:** the App is the composition root, but it does not know the wiring — it calls `ScanPipelineFactory.Create` and `IFrameSourceFactory.CreateAsync`, both frozen in Stream 0's code, and calls `RunAsync` once at startup. **Stream 0 also loads stream B's thresholds file into `ScanSettings`**, so stream A never implements a file format that stream B defines; stream A only renders the failure when the file is missing.
 
-**Tile order: `Cohort.Tiles` is in reading order, not detection order.** `ICardDetector` orders quads by descending area, and that ordering is untouched — it is what selects which N quads survive when more than N are detected. Reading order is layered on top, applied to the survivors only, inside `TryCaptureFromRetained`, strictly AFTER that selection and BEFORE any `CohortTile` is built — so it can only ever reshuffle who already made the cut, never change who did. The pure function is `QuadOrdering.ReadingOrder` (`Core/Scanning`): centroid and height per quad, sort by centroid Y, start a new row when a centroid's Y differs from the current row's mean Y by more than half the MEDIAN quad height (the median, not the mean, so one oddly detected or partially occluded quad can't drag the threshold around — see the ruling in `docs/orchestration-plan.md`), sort each row by centroid X, concatenate rows top to bottom. Coordinates are the same post-rotation frame coordinates `ICardDetector` and the live preview already use. Half the median height comfortably absorbs the ~10 px gaps and few-degree skew a freehand-placed 3x3 produces (cards run ~483 px tall at the locked mount height) while staying narrow enough that two genuinely different rows never merge. `Cohort`'s tiles, their rectified images and commit order all follow from this — a `CohortTile` still does not carry its source quad, so this is the only place the physical layout is recoverable from a `Cohort` at all.
+**Tile order: `Cohort.Tiles` is in reading order, not detection order.** `ICardDetector` orders quads by descending area, and that ordering is untouched — it is what selects which N quads survive when more than N are detected. Reading order is layered on top, applied to the survivors only, inside `TryCaptureFromRetained`, strictly AFTER that selection and BEFORE any `CohortTile` is built — so it can only ever reshuffle who already made the cut, never change who did. The pure function is `QuadOrdering.ReadingOrder` (`Core/Scanning`): centroid and height per quad, sort by centroid Y, start a new row when a centroid's Y differs from the current row's mean Y by more than half the MEDIAN quad height (the median, not the mean, so one oddly detected or partially occluded quad can't drag the threshold around — see the ruling in `docs/history/orchestration-plan.md`), sort each row by centroid X, concatenate rows top to bottom. Coordinates are the same post-rotation frame coordinates `ICardDetector` and the live preview already use. Half the median height comfortably absorbs the ~10 px gaps and few-degree skew a freehand-placed 3x3 produces (cards run ~483 px tall at the locked mount height) while staying narrow enough that two genuinely different rows never merge. `Cohort`'s tiles, their rectified images and commit order all follow from this — a `CohortTile` still does not carry its source quad, so this is the only place the physical layout is recoverable from a `Cohort` at all.
 
 **Detection rate:** every frame the source yields, on the pipeline's thread. The preview throttle (~15 fps) is the UI's concern, applied inside its handler.
 
@@ -559,20 +562,39 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 
 ---
 
-## Stream boundaries
+## Domain map
 
-| Stream | Owns (exclusive write access) | Consumes | Must not touch |
+| Domain | Code | Tests | Consumes from the contract surface |
 |---|---|---|---|
-| **A — UI** | `LoreFetch.App/**`, `Core/Trigger/**`, `Tests/StreamA/**` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the seven fakes | `Core/Identification`, `Core/Imaging`, `Core/Collection`, `Core/Export`, `Capture` |
-| **B — Identification** | `Core/Identification/**`, `Core/Imaging/**`, `LoreFetch.Lab/**`, `Tests/StreamB/**` | Abstractions + the fixture corpus | `App`, `Capture`, `Core/Trigger`, `Core/Collection`, `Core/Export` |
-| **C — Capture** | `LoreFetch.Capture/**`, `Tests/StreamC/**` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` | `App`, everything else in `Core` |
-| **D — Collection & export** | `Core/Collection/**`, `Core/Export/**`, `Tests/StreamD/**` | Abstractions — specifically `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, `CollectionStoreException` | `App`, `Capture`, `Core/Identification`, `Core/Imaging`, `Core/Trigger` |
+| **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/App` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
+| **Detection** | `Core/Detection`: `ContourCardDetector`, `PerspectiveRectifier`, `FrameMat` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
+| **Identification** | `Core/Identification`: the hash pipeline (`ReferenceTransform`, `QueryTransform`, `CardHasher`, `CardHash`), `HashIndexFile`, `HashCardIdentifier` | `Tests/Identification` | Abstractions; implements `ICardIdentifier`, `IOracleCatalog` |
+| **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/Lab` | Abstractions, Detection, Identification, the local fixture corpus |
+| **Capture** | `src/LoreFetch.Capture` | `Tests/Capture` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |
+| **Collection and export** | `Core/Collection`, `Core/Export` | `Tests/Collection` | `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, `OracleEntry`, `TileState`, `RowSource`, `CollectionStoreException` |
+| **Contract surface** | `Core/Abstractions`, `Core/Scanning` (incl. `QuadExpansion`, the geometry behind dual-hypothesis identification), `Core/Fakes` (incl. `DemoFrames`) | `Tests/Integration` | — |
 
-**Shared and frozen (hook-enforced):** `Core/Abstractions/**`, `Core/Scanning/**`, every `.csproj`, and `LoreFetch.slnx`. The foundation pass creates all projects with **all** package references already in place, so no stream ever edits a project file — that's the main merge-conflict source removed by construction.
+`Tests/Integration` holds the end-to-end suite, parameterised over the fakes and the real implementations, plus the contract surface's own unit tests. It is the one suite that would catch a broken seam, so a PR that weakens it should say why.
 
-**Owned by Stream 0, not edited by streams:** the fakes, `Tests/Integration/**` (the end-to-end suite; real implementations are injected at integration, not before).
+`THIRD-PARTY-NOTICES` gains an entry whenever a package lands; the pre-commit hook's advisory list names any that are missing.
 
-**Shared by section:** `README.md` — Stream 0 writes one headed section per stream, and each stream edits only its own. `THIRD-PARTY-NOTICES` — entries are added at integration only; the pre-commit hook's advisory list tolerates the lag.
+## Dependency rules
+
+Enforced by [`Tests/Architecture`](../Tests/Architecture/README.md); a PR that breaks one fails CI. Arrows are "may not depend on".
+
+| Rule | Why (where it is decided) |
+|---|---|
+| `Core/Abstractions` ↛ OpenCvSharp, or anything else in LoreFetch | Frames cross the seam as `byte[]`; the contract types are the bottom of the graph (this file, top) |
+| `Core/Scanning`, `Core/Fakes` ↛ any domain (Detection, Identification, Collection, Export, Trigger, Capture, App, Lab) | The contract surface composes domains through interfaces and must not reach for a real implementation |
+| `Core` ↛ App, Capture, Lab, Avalonia, FlashCap | Core stays portable; the macOS CI leg depends on it (`src/LoreFetch.Core/README.md`) |
+| App ↛ OpenCvSharp, Lab | The UI never writes CV code; the Lab does not ship (`src/LoreFetch.App/README.md`) |
+| App, except `AppComposition` ↛ Detection, Identification, Collection, Export, Capture | Only the composition root knows concrete implementations; the UI holds no per-format knowledge (§ Collection, below) |
+| `Core/Collection`, `Core/Export` ↛ OpenCvSharp, Detection, Identification | "No camera, no UI, no hash, no image processing" (`docs/design/collection.md`) |
+| Detection ↛ Identification, and Identification ↛ Detection | Identification starts from an already-rectified card, however it was produced (`DECISIONS.md`, Identification) |
+| Real implementations ↛ `Core/Fakes` | Fakes serve demo mode and tests, never as a fallback inside a real implementation |
+| Capture ↛ any `Core` namespace but Abstractions | The camera adapter produces `CameraFrame`s and nothing more |
+| Nothing ↛ `System.Drawing`, `OpenCvSharp.Extensions` | Windows-only; would break the portable build (`DECISIONS.md`, Stack) |
+
 
 ---
 
@@ -588,7 +610,7 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 
 Four parallel stream reviews raised **20 proposed contract changes and 20 open questions**; all 40 were ruled on in the reconciliation pass of 2026-09-21 and the accepted changes are applied above. The decision record — every ruling, its rationale, and what was rejected — is [`RECONCILIATION.md`](RECONCILIATION.md).
 
-Three things the reviews changed that are *not* visible in this file, because they live in [`../CLAUDE.md`](../CLAUDE.md):
+Three things the reviews changed that are *not* visible in this file, because they live in [`DECISIONS.md`](DECISIONS.md):
 
 1. The reference and query transforms are **deliberately asymmetric**, not identical, and the round-trip gate asserts a recorded stable distance floor rather than ≈ 0.
 2. The "measured ceiling is 60 fps @ 1080p" preview figure had no primary source and has been removed.

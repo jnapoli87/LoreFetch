@@ -7,7 +7,7 @@ namespace LoreFetch.Lab;
 ///   [--sample-size N] [--seed N]`
 ///
 /// Generates the committed query-hash witness
-/// (`Tests/StreamB/RoundTrip/round-trip-witness.json`) -- a fixed,
+/// (`Tests/Lab/RoundTrip/round-trip-witness.json`) -- a fixed,
 /// deterministic sample of query-side hashes, run by hand and committed as
 /// derived (non-imagery) data, so a later run on a DIFFERENT architecture
 /// can regenerate the same sample and diff the two. See

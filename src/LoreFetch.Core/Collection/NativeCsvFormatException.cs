@@ -3,7 +3,7 @@ namespace LoreFetch.Core.Collection;
 /// <summary>
 /// Thrown when the native CSV format is violated: an unknown or missing
 /// header column (the header's exact column SET is the format version —
-/// CLAUDE.md §Storage and docs/stream-d-export.md §D1), a data row with the
+/// DECISIONS.md §Storage and docs/design/collection.md §D1), a data row with the
 /// wrong field count, or a field that fails to parse into its typed
 /// <see cref="Abstractions.CollectionRow"/> member.
 ///

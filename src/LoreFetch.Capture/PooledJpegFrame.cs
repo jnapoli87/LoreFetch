@@ -3,7 +3,7 @@ using System.Buffers;
 namespace LoreFetch.Capture;
 
 /// One undecoded JPEG frame, held in a rented buffer, exactly as the capture
-/// callback delivers it (stream-c-capture.md C2a: "FlashCap does not decode
+/// callback delivers it (docs/design/capture.md C2a: "FlashCap does not decode
 /// MJPEG"). Internal — nothing outside this project ever sees a JPEG frame
 /// directly; the scan pipeline only ever consumes the decoded, rotated
 /// `CameraFrame` that `IFrameSource.ReadAsync` yields once C1b's decode step

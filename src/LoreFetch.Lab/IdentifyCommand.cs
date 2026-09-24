@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
 using LoreFetch.Core.Scanning;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

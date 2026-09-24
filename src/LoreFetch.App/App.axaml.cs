@@ -60,7 +60,7 @@ public partial class App : Application
             catch (Exception ex) when (mode == CompositionMode.Real)
             {
                 // Real mode must fail LOUDLY rather than silently fall back
-                // to Fakes (docs/orchestration-plan.md's I2/I3 override) —
+                // to Fakes (docs/history/orchestration-plan.md's I2/I3 override) —
                 // a missing or corrupt committed hash index/thresholds file
                 // is exactly this path; AppComposition already logged the
                 // specific path at Critical before this exception reached

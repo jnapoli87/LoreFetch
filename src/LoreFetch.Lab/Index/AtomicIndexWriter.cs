@@ -3,7 +3,7 @@ using LoreFetch.Core.Identification;
 namespace LoreFetch.Lab.Index;
 
 /// Writes `cards.lfidx` atomically: to a temp file in the SAME directory as
-/// the real destination (never the OS temp dir -- CLAUDE.md's storage trap
+/// the real destination (never the OS temp dir -- DECISIONS.md's storage trap
 /// about `%TEMP%` silently degrading a same-volume rename to copy+delete
 /// applies here just as much as it does to the collection CSV), verifies
 /// what actually landed on disk, and only then `File.Move(overwrite: true)`

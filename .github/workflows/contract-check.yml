@@ -1,0 +1,62 @@
+name: Contract check
+
+# The v0.1 build froze the contract surface with a write hook so parallel
+# agent streams could not collide. Solo, a freeze only gets in the way, but
+# a change there still affects every domain at once. So instead of blocking
+# it, this check makes it deliberate: a PR that touches the paths below
+# fails until it carries the `contract-change` label. Adding the label
+# re-runs the check. See docs/CONTRACTS.md.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: contract-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  contract-check:
+    name: contract-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for contract-surface changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'contract-change') }}
+        run: |
+          # Contract surface (Core/Abstractions, Scanning, Fakes), the suite
+          # that guards it, the dependency rules, and every build file.
+          pattern='^(src/LoreFetch\.Core/(Abstractions|Scanning|Fakes)/|Tests/Integration/|Tests/Architecture/)|\.csproj$|\.slnx$|(^|/)Directory\.(Build|Packages)\.props$|^global\.json$'
+          # Markdown is excluded: a README edit is not a contract change.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -E "$pattern" | grep -v '\.md$' || true)
+
+          if [ -z "$changed" ]; then
+            echo "No contract-surface or build-file changes."
+            exit 0
+          fi
+
+          {
+            echo "### Contract-surface changes"
+            echo
+            echo '```'
+            echo "$changed"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$HAS_LABEL" = "true" ]; then
+            echo "Contract-surface changes, acknowledged by the contract-change label:"
+            echo "$changed" | sed 's/^/  /'
+            exit 0
+          fi
+
+          echo "::error title=Contract change not acknowledged::This PR changes the contract surface or build files. If that is intended, add the 'contract-change' label and say why in the PR description."
+          echo "$changed" | sed 's/^/  /'
+          exit 1

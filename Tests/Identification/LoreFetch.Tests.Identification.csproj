@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>LoreFetch.Tests.Identification</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <!-- The index is built on one OS, and the non-golden tests still run on
+         both CI legs, so both runtimes are needed here. -->
+    <PackageReference Include="OpenCvSharp4" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" />
+    <PackageReference Include="OpenCvSharp4.runtime.osx.arm64" />
+
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\LoreFetch.Core\LoreFetch.Core.csproj" />
+    <ProjectReference Include="..\..\src\LoreFetch.Lab\LoreFetch.Lab.csproj" />
+  </ItemGroup>
+
+  <!-- Shared fixtures (synthetic images, the real-capture gate, hash and detector
+       frames) compiled into each image-domain test project; see ../Support/README.md. -->
+  <ItemGroup>
+    <Compile Include="..\Support\*.cs" LinkBase="Support" />
+    <Using Include="LoreFetch.Tests.Support" />
+  </ItemGroup>
+
+</Project>

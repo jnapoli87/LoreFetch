@@ -7,7 +7,7 @@ namespace LoreFetch.Core.Collection;
 
 /// <summary>
 /// Reader and writer for the native CSV format — the source of truth
-/// described in CLAUDE.md §Storage and docs/CONTRACTS.md §"Collection and
+/// described in DECISIONS.md §Storage and docs/CONTRACTS.md §"Collection and
 /// export". This is the codec only: quoting, header validation, field
 /// parsing and intra-file duplicate folding. It knows nothing about files,
 /// temp-file-then-rename, or <c>.bak</c> copies — that is the collection
@@ -27,7 +27,7 @@ namespace LoreFetch.Core.Collection;
 /// actually matters here. CsvHelper throws on a *missing* expected header
 /// by default, but silently ignores an *unknown, extra* one — there is no
 /// configuration flag that changes that — so "fail loudly on an unknown
-/// column" is hand-written code either way (docs/stream-d-export.md §D1,
+/// column" is hand-written code either way (docs/design/collection.md §D1,
 /// point 4).</item>
 /// <item>Writing RFC 4180 is four rules (quote on comma/quote/CR/LF, double
 /// an embedded quote, never trim, quote-only-if-comma is wrong). A
@@ -95,7 +95,7 @@ public static class NativeCsvCodec
     /// is the file a user opens directly in Excel, which mangles non-ASCII
     /// card names without one. The BOM only lands if <paramref name="destination"/>
     /// is at position 0 at first flush (StreamWriter's own rule — see
-    /// docs/stream-d-export.md §D1, mechanic 2); a fresh temp file
+    /// docs/design/collection.md §D1, mechanic 2); a fresh temp file
     /// satisfies that, an append would silently drop it. Does not close or
     /// dispose <paramref name="destination"/> — the caller owns it (the
     /// same <c>leaveOpen</c> requirement CONTRACTS.md places on every
@@ -124,7 +124,7 @@ public static class NativeCsvCodec
         // real in-scope card and the only oracle name Excel treats as a
         // formula. A `'`/tab-prefix mitigation would corrupt the source of
         // truth for every machine reader to fix one program's rendering —
-        // CLAUDE.md and CONTRACTS.md are both explicit that this is a
+        // DECISIONS.md and CONTRACTS.md are both explicit that this is a
         // README note, not a code path.
         string[] fields =
         [
@@ -232,7 +232,7 @@ public static class NativeCsvCodec
     /// column, none missing, none duplicated — and returns a name→position
     /// map for the rows that follow. This is deliberately a set comparison,
     /// not a positional one: the column set IS the format version
-    /// (CLAUDE.md §Storage), not the column order, which
+    /// (DECISIONS.md §Storage), not the column order, which
     /// <see cref="Abstractions.CollectionRow"/>'s own doc comment calls
     /// "incidental". A hand-reordered file — plausible after an Excel
     /// save — still reads; an added or dropped column does not.
@@ -279,7 +279,7 @@ public static class NativeCsvCodec
 
             throw new NativeCsvFormatException(
                 $"Header does not match the native format's column set ({string.Join("; ", parts)}). " +
-                "The header's exact column set is the format version; see CLAUDE.md §Storage.");
+                "The header's exact column set is the format version; see DECISIONS.md §Storage.");
         }
 
         return index;
@@ -306,7 +306,7 @@ public static class NativeCsvCodec
         // quotes are stripped — deliberately: there is no second way to
         // write "unassessed" that this codec preserves, so there is no
         // separate empty-string state to round-trip. See CollectionRow's own
-        // doc comment and CLAUDE.md §Storage.
+        // doc comment and DECISIONS.md §Storage.
         var conditionRaw = Field("Condition");
         var condition = conditionRaw.Length == 0 ? null : conditionRaw;
 
@@ -434,7 +434,7 @@ public static class NativeCsvCodec
     /// field</b> — the override this codec was built against, and the
     /// opposite of <c>Microsoft.VisualBasic.FileIO.TextFieldParser</c>'s
     /// documented <c>BeginQuotesRegex</c> behaviour
-    /// (docs/stream-d-export.md §D1). A field only opens a quoted region
+    /// (docs/design/collection.md §D1). A field only opens a quoted region
     /// when the very first character read for that field is <c>"</c> —
     /// tracked below via <c>field.Length == 0</c>. If anything (even one
     /// space) was already appended, a later <c>"</c> is ordinary content:

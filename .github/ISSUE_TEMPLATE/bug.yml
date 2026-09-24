@@ -1,0 +1,85 @@
+name: Bug report
+description: Something LoreFetch did wrong, such as a wrong match, a missed card, a crash or a bad export.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please don't attach photos or screenshots that show card artwork.** It is Wizards of the Coast IP, whoever took the picture. Describe the card by name instead; a screenshot of the UI with no card art in it is fine.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        Scanned a 3-card row. Expected Sol Ring in the middle tile; got Mind Stone.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Your best guess. It's fine to be wrong.
+      options:
+        - Identification (wrong or no match)
+        - Detection (card not found, or found something that isn't a card)
+        - Capture (camera, preview, frame rate)
+        - App (keys, tiles, collection view)
+        - Collection / export (CSV, Moxfield)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layout
+    attributes:
+      label: Layout
+      options:
+        - 1 card
+        - 3 in a line
+        - 3×3 grid
+        - Not a scanning issue
+    validations:
+      required: true
+
+  - type: input
+    id: cards
+    attributes:
+      label: Card(s) involved
+      description: Name as printed, and which tile if it was a multi-card layout.
+      placeholder: "Sol Ring (middle tile)"
+
+  - type: input
+    id: distance
+    attributes:
+      label: BestMatchDistance
+      description: From the tile, or the collection row's BestMatchDistance column, if it's an identification issue.
+      placeholder: "231"
+
+  - type: input
+    id: height
+    attributes:
+      label: Camera height
+      description: Derived from the frame if you can, not from a tape measure. height_inches = 1360 × 2.5 / card_pixel_width.
+      placeholder: "≈12″ (card 283 px wide)"
+
+  - type: input
+    id: lighting
+    attributes:
+      label: Lighting and mat
+      placeholder: "Diffuse lamp at a shallow angle, dark mat, sleeved cards"
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "v0.1.0, or the commit hash if built from source"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: Anything relevant from the console, such as detector discard reasons or exceptions.
+      render: text

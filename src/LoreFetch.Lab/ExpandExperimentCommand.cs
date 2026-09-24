@@ -1,6 +1,7 @@
 using LoreFetch.Core.Abstractions;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Scanning;
 using LoreFetch.Lab.Accuracy;
 using LoreFetch.Lab.CropScale;
 using LoreFetch.Lab.Images;
@@ -278,10 +279,10 @@ public static class ExpandExperimentCommand
     /// "the same seed measures the same sample" holds here too), decodes
     /// each cached render, and measures `BorderRatioMeasurement` over it.
     /// Lands are excluded because many are full-art with no conventional
-    /// black frame (CLAUDE.md's Ladder note: "full-art lands also lack a
+    /// black frame (DECISIONS.md's Ladder note: "full-art lands also lack a
     /// type line where the hash region expects one") -- a land's own
     /// border geometry would not represent the black-bordered NORMAL cards
-    /// this experiment's frames are actually testing (CLAUDE.md's "Measure
+    /// this experiment's frames are actually testing (DECISIONS.md's "Measure
     /// accuracy on normal cards only" applies here too, one level down, to
     /// what BUILDS the correction factor).
     private static BorderSummary? MeasureBorderFromCache(HashIndexData index, string cacheDir, int sampleSize, int seed)
@@ -370,7 +371,7 @@ public static class ExpandExperimentCommand
         var identified = rows.Where(r => r.Status == "Identified").ToList();
         var normalOnly = identified.Where(r => !r.Slot.IsBasicLand).ToList();
 
-        Console.WriteLine("=== Summary (CLAUDE.md Ladder: lands excluded from every count below) ===");
+        Console.WriteLine("=== Summary (DECISIONS.md Ladder: lands excluded from every count below) ===");
         Console.WriteLine($"Identified slots: {identified.Count} total, {normalOnly.Count} non-land, " +
             $"{rows.Count(r => r.Status == "NoDetection")} no-detection, {rows.Count(r => r.Status == "DroppedFrame")} dropped-frame.");
         Console.WriteLine();

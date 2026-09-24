@@ -97,14 +97,18 @@ An export adapter whose output has actually been imported into its live target t
 
 ### Build process
 
-**Stream**:
-One of the four parallel workstreams (A UI, B Identification, C Capture, D Collection & export), each with exclusive write ownership of its directories.
+**Domain**:
+One area of the codebase with its own code and its own test project: App, Detection, Identification, Lab, Capture, Collection. See the domain map in `docs/CONTRACTS.md`.
+_Avoid_: stream (except when talking about the v0.1 build), module, layer
+
+**Stream** *(historical)*:
+One of the four parallel workstreams that built v0.1 (A UI, B Identification, C Capture, D Collection & export). Retired after v0.1.0; use it only when citing the v0.1 build record.
 _Avoid_: track, workstream, team
 
-**Stream 0**:
-The serial foundation pass that creates every project, the contract surface and the fakes before the streams fork.
+**Stream 0** *(historical)*:
+The serial foundation pass that created every project, the contract surface and the fakes before the v0.1 streams forked.
 _Avoid_: setup, bootstrap
 
 **Contract surface**:
-The shared, frozen code every stream builds against; changed only by stopping and asking.
+The shared code every domain builds against: `Core/Abstractions`, `Core/Scanning` and `Core/Fakes`. Changes here affect every domain at once, so they are made deliberately and called out in the PR.
 _Avoid_: interfaces, API, shared code

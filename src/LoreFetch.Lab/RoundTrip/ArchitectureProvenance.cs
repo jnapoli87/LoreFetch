@@ -5,7 +5,7 @@ namespace LoreFetch.Lab.RoundTrip;
 /// A short, machine-comparable token for "which architecture/OS produced
 /// this measurement" -- e.g. `arm64-darwin`, `x64-windows` -- plus a longer
 /// human-readable detail string. Exists because `INTER_AREA` is NOT
-/// bit-exact across x86-64/ARM64 (CLAUDE.md "The one gate that matters
+/// bit-exact across x86-64/ARM64 (DECISIONS.md "The one gate that matters
 /// most": OpenCV #24163 confirmed, #22477 closed won't-fix), and that
 /// includes the query side's own 32x32 resize (`CardHasher.ToIcon`,
 /// `CardHasher`'s own doc comment) -- so ANY number this stream measures
@@ -15,7 +15,7 @@ namespace LoreFetch.Lab.RoundTrip;
 public static class ArchitectureProvenance
 {
     /// `"<arch>-<platform>"`, both lowercase -- e.g. `arm64-darwin`,
-    /// `x64-windows`. This is the exact form CLAUDE.md's own example uses
+    /// `x64-windows`. This is the exact form DECISIONS.md's own example uses
     /// (`"measuredOn": "arm64-darwin"`).
     public static string CurrentToken() => $"{ArchitectureToken()}-{PlatformToken()}";
 

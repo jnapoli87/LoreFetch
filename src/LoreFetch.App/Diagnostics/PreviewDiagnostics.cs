@@ -24,7 +24,7 @@ public readonly record struct PreviewDiagnosticsSample(
 /// The two counters are DELIBERATELY separate instances, not one counter
 /// incremented from two call sites: collapsing them would make "rendered
 /// fps" silently read the same as "received fps", which is exactly the
-/// preview-choppiness class of bug CLAUDE.md's "Avalonia preview" note
+/// preview-choppiness class of bug DECISIONS.md's "Avalonia preview" note
 /// warns about (a preview that never actually re-renders can still report
 /// a healthy frame rate if the metric only tracks arrivals). Call
 /// <see cref="RecordFrameProcessed"/> from <c>OnFrameProcessed</c> (every

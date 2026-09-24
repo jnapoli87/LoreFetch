@@ -1,5 +1,6 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
 using Microsoft.Extensions.Logging;
 using OpenCvSharp;
 
@@ -21,11 +22,11 @@ namespace LoreFetch.Lab;
 /// eyeballed off the overlay's quad outline alone. Output never lands in
 /// the repository -- see `EnsureOutputOutsideRepo` -- because the input
 /// image, and therefore the annotated output and the rectified crops, may
-/// itself contain photographed card artwork (CLAUDE.md "Never commit card
+/// itself contain photographed card artwork (DECISIONS.md "Never commit card
 /// imagery").
 public static class DetectCommand
 {
-    /// CLAUDE.md/the package brief: detection output goes outside the repo
+    /// DECISIONS.md/the package brief: detection output goes outside the repo
     /// tree entirely, on this Windows-only tool.
     public const string DefaultOutDir = @"C:\LoreFetchData\detect-out";
 

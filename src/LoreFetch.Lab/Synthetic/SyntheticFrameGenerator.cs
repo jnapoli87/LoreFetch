@@ -1,5 +1,6 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
+using LoreFetch.Core.Identification;
 using OpenCvSharp;
 
 namespace LoreFetch.Lab.Synthetic;
@@ -13,7 +14,7 @@ namespace LoreFetch.Lab.Synthetic;
 public sealed record SyntheticFrameOptions
 {
     /// The simulated camera frame's own resolution -- 1920x1080, the C920's
-    /// native mode (CLAUDE.md "Geometry": "px/inch = 1360 / height_inches"
+    /// native mode (DECISIONS.md "Geometry": "px/inch = 1360 / height_inches"
     /// is itself derived from a 1920-wide sensor).
     public int FrameWidth { get; init; } = 1920;
 
@@ -58,7 +59,7 @@ public sealed record SyntheticFrameOptions
 
     /// The filter `Generate`'s own downscale (step 1: `sourceCardBgr` down
     /// to the camera-observed card size) uses. Defaults to `INTER_AREA` --
-    /// **by choice, not by fidelity**, the same reasoning CLAUDE.md gives
+    /// **by choice, not by fidelity**, the same reasoning DECISIONS.md gives
     /// for `ReferenceTransform`'s own 96px resize: `INTER_AREA` is the
     /// correct filter for what is always a downscale here (a ~5.1x
     /// downscale from a 488px-wide Scryfall `normal` render at the 9.75in
@@ -70,7 +71,7 @@ public sealed record SyntheticFrameOptions
     /// B5c is itself a filter-and-scale experiment -- a caller genuinely
     /// may want to sweep this. Changing it makes frames generated under
     /// the new value **not pixel-comparable** with ones generated before
-    /// the change, the same caution CLAUDE.md gives for any resize filter
+    /// the change, the same caution DECISIONS.md gives for any resize filter
     /// in this codebase.
     public InterpolationFlags DownscaleInterpolation { get; init; } = InterpolationFlags.Area;
 
@@ -85,7 +86,7 @@ public sealed record SyntheticFrameOptions
     /// this option's default is `Linear` while `DownscaleInterpolation`'s is
     /// `Area`: readers should not mistake that asymmetry for an
     /// inconsistency, since it is the same "`INTER_AREA` at every RESIZE,
-    /// pinned `INTER_LINEAR` at the WARP" split CLAUDE.md documents for the
+    /// pinned `INTER_LINEAR` at the WARP" split DECISIONS.md documents for the
     /// shipping pipeline. Reviewer finding (2026-09-22): this was previously
     /// a hardcoded literal at the `Cv2.WarpPerspective` call, and changing
     /// it to `INTER_NEAREST` left every test green -- the same blind spot
@@ -98,9 +99,9 @@ public sealed record SyntheticFrameOptions
 
 /// A generated frame plus the geometry it was generated FROM -- never
 /// anything the hash pipeline itself produced. `ExpectedCardWidthPx`/
-/// `ExpectedCardHeightPx` are the pre-keystone downscaled card size (CLAUDE.md
+/// `ExpectedCardHeightPx` are the pre-keystone downscaled card size (DECISIONS.md
 /// "px/inch = 1360 / height_inches" applied to the 2.5x3.5-inch card
-/// footprint from CLAUDE.md's own Geometry table) -- exposed so a test can
+/// footprint from DECISIONS.md's own Geometry table) -- exposed so a test can
 /// pin the SIZE claim directly, independent of whether `ContourCardDetector`
 /// happens to detect the composited result. See chaos case (d) in this
 /// package's own test file for why that independence matters: a test that
@@ -112,13 +113,13 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 /// Builds a camera-like `CameraFrame` from a source card render (a Scryfall
 /// `normal` image on disk for real use; a procedural "card-like" Mat in CI,
 /// per orchestration finding V13 -- neither this type nor its tests care
-/// which). Package B7 (docs/stream-b-identification.md).
+/// which). Package B7 (docs/design/identification.md).
 ///
 /// **This type produces a SCENE, never a hash and never a `RectifiedCard`.**
 /// That is not a style choice -- it is the whole structural guard the
 /// package brief calls for ("the generator must not become a third
-/// transform" / "must not be a third transform", CLAUDE.md +
-/// stream-b-identification.md B7): the only public output is a
+/// transform" / "must not be a third transform", DECISIONS.md +
+/// docs/design/identification.md B7): the only public output is a
 /// `CameraFrame` containing a mat background with a keystoned, blurred,
 /// noised, JPEG-compressed card composited into it at some position this
 /// type never reveals. There is no overload that hands back a rectified
@@ -130,14 +131,14 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 /// exists to make possible, and its own chaos-test notes for what happens
 /// when a test tries to shortcut around this.
 ///
-/// Steps, all deliberately OUTSIDE CardSpotter's seven-step hash (CLAUDE.md
+/// Steps, all deliberately OUTSIDE CardSpotter's seven-step hash (DECISIONS.md
 /// "Identification") -- nothing here touches `ReferenceTransform`,
 /// `QueryTransform` or `CardHasher`:
 ///   1. Downscale `sourceCardBgr` (any size; a Scryfall `normal` render is
 ///      488x680) to the camera-observed card size at `heightInches`, via
 ///      `SyntheticFrameOptions.DownscaleInterpolation` (default
 ///      `INTER_AREA` -- the correct filter for what is always a downscale
-///      at any realistic camera height; CLAUDE.md's own ladder tops out at
+///      at any realistic camera height; DECISIONS.md's own ladder tops out at
 ///      9.75" for the 3x3 grid, where a card is already smaller than
 ///      488x680, and a taller/farther camera only downscales further; see
 ///      that option's own doc comment for why it is a named knob rather
@@ -164,12 +165,12 @@ public sealed record SyntheticFrameResult(CameraFrame Frame, float ExpectedCardW
 ///      encoder compresses whatever the sensor already captured).
 public static class SyntheticFrameGenerator
 {
-    /// CLAUDE.md "Geometry": card footprint is 2.5in x 3.5in.
+    /// DECISIONS.md "Geometry": card footprint is 2.5in x 3.5in.
     public const float CardWidthInches = 2.5f;
 
     public const float CardHeightInches = 3.5f;
 
-    /// CLAUDE.md "Geometry": "px/inch = 1360 / height_inches" for the C920
+    /// DECISIONS.md "Geometry": "px/inch = 1360 / height_inches" for the C920
     /// (78-degree diagonal FOV on a 1920-wide, 16:9 sensor).
     public const float PxPerInchNumerator = 1360f;
 

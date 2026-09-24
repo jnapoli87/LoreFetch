@@ -14,7 +14,7 @@ namespace LoreFetch.Lab;
 /// render (a user's own local cache) or a procedural stand-in; either way
 /// the WRITTEN frame may end up showing recognizable card artwork, so the
 /// same never-write-inside-the-repo rule `DetectCommand` enforces applies
-/// here verbatim (CLAUDE.md "Never commit card imagery").
+/// here verbatim (DECISIONS.md "Never commit card imagery").
 public static class SynthCommand
 {
     public const string DefaultOutDir = @"C:\LoreFetchData\synth-out";
@@ -102,7 +102,7 @@ public static class SynthCommand
 
         using (result.Frame)
         {
-            using var color = Core.Imaging.FrameMat.ToMat(result.Frame);
+            using var color = Core.Detection.FrameMat.ToMat(result.Frame);
             WriteImage(outPath, color);
         }
 
@@ -134,7 +134,7 @@ public static class SynthCommand
 
         var options = new BareMatOptions { Seed = parsed.Seed, NoiseSigma = parsed.Noise, WithSeam = parsed.Seam };
         using var frame = BareMatGenerator.Generate(parsed.Contrast, options);
-        using var color = Core.Imaging.FrameMat.ToMat(frame);
+        using var color = Core.Detection.FrameMat.ToMat(frame);
         WriteImage(outPath, color);
 
         Console.WriteLine($"synth mat: wrote {outPath} -- contrast={parsed.Contrast}.");

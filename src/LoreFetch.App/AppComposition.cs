@@ -3,10 +3,10 @@ using LoreFetch.App.Fakes;
 using LoreFetch.Capture;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Collection;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Core.Trigger;
 using Microsoft.Extensions.Logging;
@@ -32,7 +32,7 @@ namespace LoreFetch.App;
 /// images when `LOREFETCH_FRAMES_DIR` is set, so real captured frames can be
 /// replayed through the full real pipeline without a camera (package I3).
 /// `ScanSettings.CameraRotationDegrees` is set to 0 at composition — the
-/// camera is landscape and unrotated (CLAUDE.md "Geometry"); the contract's
+/// camera is landscape and unrotated (DECISIONS.md "Geometry"); the contract's
 /// own default stays 90 and is unchanged.
 ///
 /// A missing or corrupt committed index/thresholds file fails Real mode
@@ -255,7 +255,7 @@ public static class AppComposition
     /// Resolves <c>LOREFETCH_MODE</c> into a <see cref="CompositionMode"/>.
     /// Takes the raw env var value as a parameter, rather than reading
     /// <see cref="Environment.GetEnvironmentVariable"/> itself, so the
-    /// resolution logic is a pure function `Tests/StreamA` can exercise
+    /// resolution logic is a pure function `Tests/App` can exercise
     /// without mutating process-global state (the same shape as
     /// <see cref="ChooseFrameFolder"/>).
     /// </summary>
@@ -352,7 +352,7 @@ public static class AppComposition
     /// method lets <see cref="HashCardIdentifier.Load"/>/
     /// <see cref="ThresholdsFile.Load"/>'s own exceptions propagate — after
     /// logging them at <see cref="LogLevel.Critical"/>, naming the path —
-    /// rather than catching and falling back to Fakes (docs/orchestration-plan.md's
+    /// rather than catching and falling back to Fakes (docs/history/orchestration-plan.md's
     /// I2/I3 override: "a shipped app that quietly runs on stub identification
     /// is worse than one that refuses to start"). <see cref="App"/> is what
     /// turns that exception into a clean, non-zero exit.
@@ -372,7 +372,7 @@ public static class AppComposition
             OkDistance = thresholds.OkDistance,
         };
 
-        // Geometry re-ruling (CLAUDE.md "Geometry"): the camera stays
+        // Geometry re-ruling (DECISIONS.md "Geometry"): the camera stays
         // landscape and unrotated for every layout. ScanSettings' own
         // default stays 90 (frozen contract) — this is a value set at
         // composition, not a change to that default.
@@ -579,7 +579,7 @@ public static class AppComposition
     /// <summary>
     /// Resolves the collection file's path. Takes the raw env var value as a
     /// parameter (see <see cref="ResolveCompositionMode"/> for why), so
-    /// <c>Tests/StreamA</c> can exercise the whole resolution — including the
+    /// <c>Tests/App</c> can exercise the whole resolution — including the
     /// "create the directory if missing" step — against a temp path, never the
     /// real Documents folder.
     /// </summary>
@@ -669,7 +669,7 @@ public static class AppComposition
         // A6: oracle catalog for the "Set card manually…" type-ahead. The
         // StubOracleCatalog defaults to ~33,000 entries (the size where
         // AutoCompleteBox's uncapped defaults become a real problem) — see
-        // plan-finding V16 and stream-a-ui.md §A5.
+        // plan-finding V16 and docs/design/app.md §A5.
         IOracleCatalog catalog = new StubOracleCatalog();
 
         // Best-effort cleanup of the temp folder DemoFrames created, run
@@ -733,7 +733,7 @@ public static class AppComposition
     /// </returns>
     /// <remarks>
     /// Factored out of <see cref="BuildFakesPipelinePieces"/> so
-    /// <c>Tests/StreamA</c> can exercise the three code paths — user
+    /// <c>Tests/App</c> can exercise the three code paths — user
     /// folder with images, user folder with no images, and env var unset —
     /// without launching the full composition stack.
     /// </remarks>
@@ -775,7 +775,7 @@ public static class AppComposition
         return (DemoFrames.CreateFolder(), isTempFolder: true);
     }
 
-    /// The testable core of composition, factored out so Tests/StreamA can
+    /// The testable core of composition, factored out so Tests/App can
     /// substitute a counting `IFrameSourceFactory` (and trivial detector /
     /// rectifier / identifier / trigger doubles) without touching a real
     /// folder on disk or the real fakes. Opens the frame source, builds the

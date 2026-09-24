@@ -1,5 +1,8 @@
 # Accuracy — crop-scale sensitivity (package B5c)
 
+> [!NOTE]
+> A dated lab log from the v0.1 build onward. Paths such as `Tests/StreamB/...` and package IDs (B5c, B6, …) are as they stood when each entry was written; the test projects have since been split by domain (see the [domain map](CONTRACTS.md#domain-map)), and the package IDs are defined in [`history/orchestration-plan.md`](history/orchestration-plan.md).
+
 Measured on the Mac (arm64-darwin), 2026-09-22. `INTER_AREA` is not
 bit-exact across x86-64/ARM64 (CLAUDE.md "The one gate that matters
 most"), so the exact numbers below are provisional the same way
@@ -620,7 +623,7 @@ scanner itself makes:
 | **Unresolved** | Identification ran (the frame's detected count matched its layout) but returned no candidates, or a wrong rank-1 beyond `OkDistance` — an honest "don't know." |
 | **DroppedFrame** | The frame's detected card count did not match its ground-truth layout, so this slot was never mapped or queried at all. |
 
-**Reporting rule (orchestration-plan.md B6, "the three buckets sum to
+**Reporting rule (docs/history/orchestration-plan.md B6, "the three buckets sum to
 100%"):** the headline table reports exactly three buckets —
 **correct@1**, **wrong@1**, and **no-match** — and `Unresolved` +
 `DroppedFrame` both fold into **no-match** for that sum (from the
@@ -712,7 +715,7 @@ already-full count). `SlotMapper.TryMapToSlots` still refuses an
 over-count defensively as a general property of its own contract.
 
 **This is the single highest-value test in the package**
-(orchestration-plan.md H3 note), and it is run twice: once as pure
+(docs/history/orchestration-plan.md H3 note), and it is run twice: once as pure
 `SlotMapper`/`AccuracyFrameRunner` logic against stub quads (no image),
 and once end-to-end through the real `ContourCardDetector` →
 `PerspectiveRectifier` → `HashCardIdentifier` on a synthetic 3-card frame
@@ -1024,7 +1027,7 @@ Informational only, NOT applied -- frame == "2015": 30448 of 47418
 **47,418 arts / 32,743 oracle ids** in the manifest -- within one art of
 this session's own earlier arm64 measurement (47,417 / 32,743, a
 different, slightly earlier bulk snapshot) and within ~2% of
-orchestration-plan.md's predicted ~47,417/~32,743. Confirmed zero
+docs/history/orchestration-plan.md's predicted ~47,417/~32,743. Confirmed zero
 `A-`-prefixed (Alchemy) names remain in the manifest.
 
 **Images:** `lab images` against `C:\LoreFetchData\scryfall-cache` (5.1
@@ -1428,7 +1431,7 @@ bits 0, max bits in one hash 0, average bit-distance 0.0.
 `INTER_AREA` step (`CardHasher`'s 32x32 resize) across x86-64 vs. ARM64.**
 Everything recorded elsewhere in this file about the architecture
 divergence (the 11-of-49.9M-bits figure under "Measured -- ARM64 index
-divergence is real but vanishing" in `docs/orchestration-plan.md`) is
+divergence is real but vanishing" in `docs/history/orchestration-plan.md`) is
 whole-index and reference-side: it comes from diffing two full committed
 index files, which only exercise `ReferenceTransform`
 (`GaussianBlur` + 96px `INTER_AREA` resize), never the query path. This
@@ -1546,7 +1549,7 @@ overload), `Tests/StreamB/RoundTrip/RoundTripThresholdsDocumentTests.cs`
 
 ## B5c-cleanup, part C: `CropScaleTransform` moved out of `Core/Imaging`, 2026-09-22
 
-**Consequent cleanup owed**, per `docs/orchestration-plan.md`'s B5c ruling
+**Consequent cleanup owed**, per `docs/history/orchestration-plan.md`'s B5c ruling
 (above): `CropScaleTransform` (93 lines) sat in `src/LoreFetch.Core/Imaging`,
 which is correct only if the 3-scale crop sweep were adopted -- it was
 rejected for v1 (every real wrong match sits at 272-344, outside the ~5%

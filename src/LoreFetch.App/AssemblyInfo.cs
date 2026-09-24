@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
 
-// Lets Tests/StreamA exercise DemoFrames (internal — it is an
-// implementation detail of the Fakes composition path, not a public API)
-// directly, for the temp-folder create/delete regression test. This is a
-// C# attribute in an ordinary source file, not a .csproj edit.
-[assembly: InternalsVisibleTo("LoreFetch.Tests.StreamA")]
+// Lets Tests/App reach the App's internal types (for example CatalogItem,
+// used by the tile type-ahead tests) without making them public API.
+[assembly: InternalsVisibleTo("LoreFetch.Tests.App")]

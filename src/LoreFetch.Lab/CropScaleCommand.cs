@@ -11,7 +11,7 @@ namespace LoreFetch.Lab;
 /// synthetic crop-scale error (`CropScaleTransform`) is applied to real
 /// Scryfall renders before they are presented through the shipping query
 /// path -- see `CropScaleExperimentRunner`'s own doc comment for the
-/// mechanism, and CLAUDE.md/orchestration-plan.md's B5c item for why this
+/// mechanism, and DECISIONS.md/orchestration-plan.md's B5c item for why this
 /// exists (B5b's `plains_black` failure: a black-bordered card's outer
 /// edge merges into a dark mat, so the detected quad is inset from the
 /// true card, and the result is a CONFIDENT WRONG match, not a miss).

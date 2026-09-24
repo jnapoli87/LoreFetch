@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using LoreFetch.Core.Abstractions;
 using LoreFetch.Core.Collection;
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Export;
 using LoreFetch.Core.Fakes;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Lab;
 using LoreFetch.Lab.Images;
@@ -18,7 +18,7 @@ namespace LoreFetch.Tests.Integration.EndToEnd;
 /// the real classes, constructed over the COMMITTED index
 /// (<c>data/index/cards.lfidx</c>) exactly the way
 /// <see cref="LoreFetch.App.AppComposition"/> composes Real mode (docs/
-/// orchestration-plan.md §4, the I2/I3 override). The store and both
+/// docs/history/orchestration-plan.md §4, the I2/I3 override). The store and both
 /// exporters stay as package I1 wired them.
 ///
 /// The one thing this set cannot do literally is honour an arbitrary
@@ -48,7 +48,7 @@ namespace LoreFetch.Tests.Integration.EndToEnd;
 /// fake behaviour.
 public sealed class RealImplementationSet : IImplementationSet
 {
-    /// CLAUDE.md's 2026-09-22 ruling: "15in only" — the one geometry this
+    /// DECISIONS.md's 2026-09-22 ruling: "15in only" — the one geometry this
     /// integration package generates synthetic frames at, matching the
     /// committed goodDistance/okDistance (208/240), which were themselves
     /// calibrated from a 15in fixture corpus.
@@ -182,7 +182,7 @@ public sealed class RealImplementationSet : IImplementationSet
 
         using var mat = FrameMat.ToMat(frame);
 
-        // Write-temp-then-rename (CLAUDE.md's own storage-layer pattern,
+        // Write-temp-then-rename (DECISIONS.md's own storage-layer pattern,
         // reused here for the same reason): `FolderFrameSource`'s decode
         // loop is already running on its own timer the instant this method
         // gets called, so writing `path` directly risks the loop's next
@@ -284,7 +284,7 @@ public sealed class RealImplementationSet : IImplementationSet
     }
 
     /// A simple flow layout for `cardCount` cards, generous enough to avoid
-    /// the tight-gap contour-merging risk orchestration-plan.md calls out
+    /// the tight-gap contour-merging risk docs/history/orchestration-plan.md calls out
     /// for a real packed 3x3 (this suite only ever asks for 7, and only
     /// needs THOSE 7 reliably detected, not a maximally-realistic mat) —
     /// rows of up to 4, spread across the vertical middle 60% of the frame,
@@ -352,7 +352,7 @@ public sealed class RealImplementationSet : IImplementationSet
 
             // Loud on a genuinely corrupt/unsupported file — matches
             // ThresholdsFile.Load's own "loud rather than lenient" rule
-            // (CLAUDE.md/ThresholdsFile's doc comment): a malformed
+            // (DECISIONS.md/ThresholdsFile's doc comment): a malformed
             // committed artifact is a real defect, not a "not present yet"
             // skip.
             ThresholdsFile.Load(thresholdsPath);
@@ -397,7 +397,7 @@ public sealed class RealImplementationSet : IImplementationSet
             return (new RealFixtures { Identifier = identifier, SampleCardBgr = sampleCardBgr }, null);
         }
 
-        /// A copy of `Tests/StreamB/RoundTrip/RoundTripGateTests.ResolveCacheDir`'s
+        /// A copy of `Tests/Lab/RoundTrip/RoundTripGateTests.ResolveCacheDir`'s
         /// resolution order — that method is internal to a sibling test
         /// assembly this project cannot reference, so this is a small,
         /// deliberate duplicate rather than a new production seam:

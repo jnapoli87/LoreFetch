@@ -4,7 +4,7 @@ namespace LoreFetch.Lab.Accuracy;
 
 /// One slot's classification. `Unresolved`, `NoDetection` and
 /// `DroppedFrame` are ALL "no-match" for the purposes of the required
-/// correct@1/wrong@1/no-match three-bucket 100% sum (orchestration-plan.md
+/// correct@1/wrong@1/no-match three-bucket 100% sum (docs/history/orchestration-plan.md
 /// B6: "the three buckets sum to 100%") -- from the collection's point of
 /// view a slot the harness never got a confident identification for is
 /// indistinguishable from one that got no confident match, either way
@@ -33,7 +33,7 @@ public enum SlotOutcome
 
     /// Rank-1's `OracleId` did NOT match the ground truth, AND its distance
     /// was <= `AccuracyHarnessOptions.OkDistance` -- a CONFIDENT wrong
-    /// answer, the failure mode CLAUDE.md/TESTING.md call out as worse than
+    /// answer, the failure mode DECISIONS.md/TESTING.md call out as worse than
     /// a miss.
     Wrong,
 

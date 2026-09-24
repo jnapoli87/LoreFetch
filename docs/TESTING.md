@@ -1,6 +1,6 @@
 # Testing strategy
 
-Spans all four streams, so it belongs to the spine rather than to any one of them. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
+Spans every domain. Written for the v0.1 build, so its timeline talks about streams and "Stream 0" (the key is at the top of [`CONTRACTS.md`](CONTRACTS.md)); the five levels and what each must assert still stand. The governing constraint: **no card imagery may ever be committed** (WotC IP, regardless of who photographed it), so CI can never run against the real fixture corpus. That single fact shapes the whole strategy.
 
 ---
 
@@ -37,22 +37,24 @@ Not "zero skips in CI", which is unreachable by construction: the real-implement
 
 Its corollary matters too: a skip that survives past its checkpoint is a bug, not a convenience. Flipping that switch at the integration checkpoint is what stops skips becoming permanent and the suite silently stopping testing anything real.
 
-### What blocks a stream merging into `main`
+### What blocks a PR merging into `main`
 
 | Must be green | Must not block |
 |---|---|
 | Build, both CI legs | Accuracy tables (measurement, not pass/fail) |
 | All unit tests | Hardware verification (can't run in CI) |
-| The fakes end-to-end test | Other streams' unfinished work |
-| That stream's own tests | Tests skipped for a missing artifact |
+| The fakes end-to-end test | Work in other open PRs |
+| The tests of every domain the PR touches | Tests skipped for a missing artifact |
+| The architecture rules (`Tests/Architecture`) | |
+| `contract-check`, and the `metrics` ratchet (see *CI*) | |
 
-Streams own disjoint directories — including `Tests/StreamA|B|C|D/`, with the end-to-end suite in `Tests/Integration/` owned by Stream 0 — so their tests can't interfere with each other — which is what makes "green at every merge" achievable with four concurrent streams.
+Each domain has its own test project, and the end-to-end suite lives in `Tests/Integration/`, so a failure points at a domain rather than at "the tests". See the [domain map](CONTRACTS.md#domain-map).
 
 ## The five levels
 
 | Level | What it covers | Where it lives | Live from | Runs in CI? |
 |---|---|---|---|---|
-| **Unit** | Pure logic: trigger state machine, tile state transitions, hash invariants, CSV store, quad filtering, escaping | `Tests/Stream<X>/`, plus Stream 0 for the pipeline | as written | ✅ |
+| **Unit** | Pure logic: trigger state machine, tile state transitions, hash invariants, CSV store, quad filtering, escaping | The domain test projects (`Tests/App`, `Tests/Detection`, …), plus `Tests/Integration/Unit` for the pipeline | as written | ✅ |
 | **Integration (fakes)** | Frame source → detect → rectify → identify → cohort → commit → CSV, all through stubs | Stream 0 | **end of Stream 0** | ✅ |
 | **Integration (real)** | The *same* tests with real implementations injected | Stream 0, impls swapped in | skips until the artifact exists | ✅ (skips, never red) |
 | **Accuracy** | Real fixture corpus: correct@1 / wrong@1 / no-match × height × difficulty | stream B, **local only** | when fixtures captured | ❌ images can't be committed |
@@ -122,6 +124,15 @@ Negotiated 1080p30 MJPG proven from the device's own characteristics; flat memor
 `windows-latest` **and** `macos-latest`. The macOS leg is not about shipping macOS — it's what mechanically enforces that `Core` stays free of Windows-only dependencies. If it goes red because someone reached for a Windows API, that's the leg doing its job.
 
 Both legs run Unit + Integration(synthetic) + Integration(end-to-end), and both filter out `Category=Hardware`. The macOS leg additionally filters out `Category=WindowsOnly`, which is how the golden hashes stay on one architecture. Neither runs Accuracy or Hardware.
+
+Two more checks run on every PR, and each has a label that says "I meant it":
+
+| Check | Fails when | Override label |
+|---|---|---|
+| `contract-check` | The PR touches the contract surface (`Core/Abstractions`, `Core/Scanning`, `Core/Fakes`), `Tests/Integration`, `Tests/Architecture`, or any build file | `contract-change` |
+| `metrics` | Against `main`'s latest numbers: a test project has fewer tests; fewer tests *ran* (an existing test became a skip); or line coverage of `LoreFetch.Core`, `.Capture` or `.App` fell by more than 0.5 points | `tests-removed`, `coverage-drop` |
+
+`metrics` is a ratchet, not a target: nothing may go backwards unannounced. It counts tests that *ran* rather than skips, because in CI every real-data test skips, so a new gated test adds a skip without taking anything away. `*PerformanceTests` classes are left out of the ran count, because their soft time budgets skip or run depending on the machine. Lab coverage is reported but never fails a PR. The numbers come from the Windows leg only (`scripts/lorefetch.sh test --results <dir>`, then `scripts/Metrics.cs`), and the table lands in the job summary. Adding or removing a label re-runs CI, which is how an override takes effect.
 
 ---
 

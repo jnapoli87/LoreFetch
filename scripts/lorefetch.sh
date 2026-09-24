@@ -2,9 +2,8 @@
 #
 # LoreFetch — pull, build, test, run.
 #
-# One entry point for both machines. The orchestrator builds and tests on the
-# Mac and pushes; the Windows PC pulls and runs the same commands here, so
-# "works on my machine" is the same machine-independent script either way.
+# One entry point on every machine and in CI, so a local run and a CI run
+# apply the same filter and the same guards.
 #
 #   scripts/lorefetch.sh              # pull, build, test, then run the app
 #   scripts/lorefetch.sh setup        # wire this checkout's guards (do this first
@@ -23,6 +22,8 @@
 #   --filter <expr>    override the test filter entirely
 #   --hardware         include Category=Hardware tests (needs the C920)
 #   --all-tests        no category filter at all
+#   --results <dir>    also write TRX results and code coverage to <dir>
+#                      (what scripts/Metrics.cs reads; CI's Windows leg)
 #   -v, --verbose      show full dotnet output instead of the tail
 #
 # POSIX sh on purpose: on Windows this runs under Git Bash, which is already
@@ -45,6 +46,7 @@ VERBOSE=0
 FILTER=""
 INCLUDE_HARDWARE=0
 NO_FILTER=0
+RESULTS_DIR=""
 CMD=""
 APP_ARGS=""
 
@@ -68,6 +70,7 @@ while [ $# -gt 0 ]; do
     --all-tests)   NO_FILTER=1 ;;
     -v|--verbose)  VERBOSE=1 ;;
     --filter)      shift; [ $# -gt 0 ] || die "--filter needs a value"; FILTER=$1 ;;
+    --results)     shift; [ $# -gt 0 ] || die "--results needs a directory"; RESULTS_DIR=$1 ;;
     --)            shift; APP_ARGS="$*"; break ;;
     -h|--help)     sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)             die "unknown argument: $1  (try --help)" ;;
@@ -87,7 +90,7 @@ esac
 # Mirrors .github/workflows/ci.yml deliberately: a local run that passes where
 # CI fails, or vice versa, is worse than no local run. Both legs drop Hardware;
 # the macOS leg also drops WindowsOnly, because the golden hashes are generated
-# on win-x64 and INTER_AREA is not bit-exact on ARM64 (CLAUDE.md, Risk 2).
+# on win-x64 and INTER_AREA is not bit-exact on ARM64 (DECISIONS.md, Risk 2).
 uname_s=$(uname -s 2>/dev/null || echo unknown)
 case "$uname_s" in
   Darwin)            PLATFORM=macos ;;
@@ -109,9 +112,8 @@ default_filter() {
 # --------------------------------------------------------------------------
 # Discover the solution and the app project.
 #
-# Deliberately discovered rather than hardcoded: this script is written before
-# S0.1 creates the solution, and it has to be honest about that instead of
-# failing with a confusing MSBuild error.
+# Discovered rather than hardcoded, so a checkout without them gets a plain
+# message instead of a confusing MSBuild error.
 # --------------------------------------------------------------------------
 find_solution() {
   for f in "$REPO"/*.slnx "$REPO"/*.sln; do
@@ -238,14 +240,14 @@ cmd_doctor() {
   if command -v jq >/dev/null 2>&1; then
     note "jq       : $(jq --version)"
   else
-    note "jq       : MISSING — .claude/hooks/guard-write.sh fails OPEN without it,"
-    note "           so the frozen contract surface is unguarded. Install it and"
+    note "jq       : MISSING — .claude/hooks/guard-bash.sh fails OPEN without it,"
+    note "           so force-push and unwired-commit checks are off. Install it and"
     note "           start a new shell so PATH picks it up."
   fi
 
   say "Solution"
   if sln=$(find_solution); then note "solution : $sln"; else
-    note "solution : none yet (S0.1 has not run)"; fi
+    note "solution : none found"; fi
   if app=$(find_app); then note "app      : $app"; else
     note "app      : none yet"; fi
 
@@ -288,9 +290,8 @@ require_solution() {
   if ! SLN=$(find_solution); then
     say "Nothing to build yet"
     note "No .slnx or .sln in $REPO."
-    note "Stream 0 package S0.1 creates the solution; until it lands there is"
-    note "nothing here to build, and that is the expected state rather than a"
-    note "broken checkout. 'scripts/lorefetch.sh doctor' still works."
+    note "This checkout has no solution file, so there is nothing to build."
+    note "'scripts/lorefetch.sh doctor' still works."
     exit 0
   fi
 }
@@ -328,6 +329,11 @@ cmd_test() {
     say "Test ($CONFIG, no filter)"
     note "dotnet test $SLN -c $CONFIG --no-build"
     set -- test "$SLN" -c "$CONFIG" --no-build
+  fi
+
+  if [ -n "$RESULTS_DIR" ]; then
+    note "results and coverage -> $RESULTS_DIR"
+    set -- "$@" --logger trx --collect "XPlat Code Coverage" --results-directory "$RESULTS_DIR"
   fi
 
   log=$(mktemp "${TMPDIR:-/tmp}/lorefetch.XXXXXX")
@@ -378,8 +384,8 @@ cmd_test() {
 
   if [ -n "$empty" ]; then
     printf '\n'
-    note "NOTE: these test projects matched no tests. Expected while a stream is"
-    note "unstarted; suspicious once it is done."
+    note "NOTE: these test projects matched no tests. Expected only while a new"
+    note "project is empty; otherwise check the filter and the test adapter."
     printf '%s\n' "$empty" | sed 's/^/      /'
   fi
 
@@ -390,7 +396,7 @@ cmd_run() {
   require_solution
   if ! APP=$(find_app); then
     say "No app to run yet"
-    note "No executable project under $REPO/src. S0.1 creates LoreFetch.App."
+    note "No executable project under $REPO/src."
     exit 0
   fi
   say "Run ($CONFIG)"

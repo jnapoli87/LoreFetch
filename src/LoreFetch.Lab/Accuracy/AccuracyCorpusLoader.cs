@@ -1,4 +1,4 @@
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using OpenCvSharp;
 
 namespace LoreFetch.Lab.Accuracy;
@@ -6,7 +6,7 @@ namespace LoreFetch.Lab.Accuracy;
 /// What fraction of the ground truth this run actually had fixture files
 /// for, and which (height, layout, rung, mat) combinations that subset
 /// covers -- printed alongside every report so a partial-corpus run can
-/// never be read as the full result (stream-b-identification.md
+/// never be read as the full result (docs/design/identification.md
 /// Fallbacks: the same point made about a 5k index -- "label any such
 /// table with its index size" -- applies just as much to a partial
 /// fixture corpus).
@@ -31,7 +31,7 @@ public sealed record CorpusCoverage(
 /// relative to the repo root, resolves every frame's `ResolvedGroundTruthRow`s
 /// against the loaded index, and splits frames into "found on disk" (the
 /// harness actually runs these) vs. "missing" (H3's corpus is delivered in
-/// batches -- CLAUDE.md's own "run on whatever subset exists" requirement).
+/// batches -- DECISIONS.md's own "run on whatever subset exists" requirement).
 /// Never writes to `ground-truth.csv` -- read-only, per this package's
 /// brief.
 public static class AccuracyCorpusLoader

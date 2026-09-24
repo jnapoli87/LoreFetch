@@ -78,11 +78,11 @@ public sealed record RoundTripThresholdsDocument
     public required int MarginMax { get; init; }
 
     /// The ship architecture's own `ArchitectureProvenance.CurrentToken()`
-    /// form -- CLAUDE.md "Platform": "Ship `win-x64` binary only." Any
+    /// form -- DECISIONS.md "Platform": "Ship `win-x64` binary only." Any
     /// measurement taken on this token is the shipping measurement, not a
     /// placeholder; any measurement taken on a different token (e.g. this
     /// package's own development history on `arm64-darwin`) is provisional
-    /// until re-measured here, per CLAUDE.md "The one gate that matters
+    /// until re-measured here, per DECISIONS.md "The one gate that matters
     /// most" / Real risk #2 (`INTER_AREA` is not bit-exact across
     /// x86-64/ARM64).
     internal const string ShipArchitectureToken = "x64-windows";
@@ -100,7 +100,7 @@ public sealed record RoundTripThresholdsDocument
     /// deterministically, regardless of which machine actually runs the
     /// test suite -- `RoundTripThresholdsDocumentTests` covers both this
     /// way. `internal` via `LoreFetch.Lab`'s own `InternalsVisibleTo`
-    /// grant to `LoreFetch.Tests.StreamB` (`RepoPaths.cs`).
+    /// grant to `LoreFetch.Tests.Lab` (`RepoPaths.cs`).
     internal static RoundTripThresholdsDocument FromStatistics(
         RoundTripGateStatistics stats, string indexSha256, int indexArtworkCount, DateTimeOffset measuredAt,
         string architectureToken, string architectureDetail)
@@ -157,13 +157,13 @@ public sealed record RoundTripThresholdsDocument
     private static string BuildNotes(RoundTripGateStatistics stats, bool isShipArchitecture, string architectureDetail)
     {
         var provenance = isShipArchitecture
-            ? $"Measured on {architectureDetail}, the win-x64 ship architecture (CLAUDE.md \"Platform\") -- " +
+            ? $"Measured on {architectureDetail}, the win-x64 ship architecture (DECISIONS.md \"Platform\") -- " +
               "referenceFloor and the margin statistics below are the shipping measurement, not provisional."
             : $"PROVISIONAL -- measured on {architectureDetail}, NOT the win-x64 ship architecture. " +
               "INTER_AREA is not bit-exact across x86-64/ARM64 (OpenCV #24163 confirmed, #22477 closed won't-fix; " +
-              "CLAUDE.md \"The one gate that matters most\", Real risk #2), and that includes the QUERY side's own " +
+              "DECISIONS.md \"The one gate that matters most\", Real risk #2), and that includes the QUERY side's own " +
               "32x32 resize -- so referenceFloor and the margin statistics below must be RE-MEASURED on win-x64 " +
-              "(orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds.";
+              "(docs/history/orchestration-plan.md \"Machine split\" rule 4) before being treated as the shipping thresholds.";
 
         return provenance + " " +
             "goodDistance/okDistance are NOT YET SET -- that is B6's job, calibrated from the real fixture corpus " +
@@ -183,7 +183,7 @@ public static class RoundTripThresholdsWriter
     };
 
     /// Writes `path` atomically -- temp file in the SAME directory (never
-    /// the system temp dir: CLAUDE.md's own store-write trap, "%TEMP%
+    /// the system temp dir: DECISIONS.md's own store-write trap, "%TEMP%
     /// silently degrades the rename to copy+delete"), then
     /// `File.Move(overwrite: true)`. `seed` is threaded through separately
     /// from `RoundTripThresholdsDocument.FromStatistics` because

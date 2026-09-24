@@ -39,7 +39,7 @@ public sealed class ImageDownloadOptions
 
     /// Cheap OpenCvSharp decode of each finished download to log a count
     /// of images that aren't the expected 488x680 `normal` size. Never
-    /// fails the download on its own -- see stream-b-identification.md B4.
+    /// fails the download on its own -- see docs/design/identification.md B4.
     public bool CheckImageSize { get; init; } = true;
     public int ExpectedWidth { get; init; } = 488;
     public int ExpectedHeight { get; init; } = 680;
@@ -158,7 +158,7 @@ public sealed class ImageDownloader
         // Checked before any request is sent -- the manifest should never
         // carry a non-`normal` URL, but this is the last line of defence
         // against silently hashing a `small` render into the index (see
-        // CLAUDE.md's "Pull normal, not small").
+        // DECISIONS.md's "Pull normal, not small").
         if (!entry.ImageUriNormal.Contains("/normal/", StringComparison.Ordinal))
         {
             return new ImageDownloadOutcome(
@@ -305,7 +305,7 @@ public sealed class ImageDownloader
     /// cheaply, via OpenCvSharp -- decodes to the expected 488x680. The
     /// size check is diagnostic only: a decode failure or an unexpected
     /// size is counted, never treated as a download failure, per
-    /// stream-b-identification.md B4 ("at least log a count of unexpected
+    /// docs/design/identification.md B4 ("at least log a count of unexpected
     /// sizes rather than failing").
     private static (bool Ok, string? Reason, bool UnexpectedSize) ValidateDownloadedFile(
         string path,

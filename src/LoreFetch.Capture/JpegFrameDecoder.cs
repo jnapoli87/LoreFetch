@@ -12,7 +12,7 @@ namespace LoreFetch.Capture;
 /// source's fixed rotation on the way. This is C2a ("FlashCap does not
 /// decode MJPEG... this stream must") and C3 ("apply the rotation here, so
 /// everything downstream sees an already-upright frame") from
-/// docs/stream-c-capture.md. Internal — only the FlashCap-facing shim and
+/// docs/design/capture.md. Internal — only the FlashCap-facing shim and
 /// its tests ever hold one of these; the scan pipeline only ever sees the
 /// `CameraFrame` that comes out the other end.
 ///
@@ -26,7 +26,7 @@ internal sealed class JpegFrameDecoder
     /// and rolled up into an Information-level summary every this many
     /// frames (about 5 s at the C920's 30 fps), so a sustained run doesn't
     /// spam Information with 30 lines a second while still surfacing the
-    /// number CLAUDE.md calls out as unmeasured: "30 × 1080p JPEG
+    /// number DECISIONS.md calls out as unmeasured: "30 × 1080p JPEG
     /// decodes/sec on the CPU."
     internal const int DecodeSummaryIntervalFrames = 150;
 
@@ -46,7 +46,7 @@ internal sealed class JpegFrameDecoder
     /// and `IFrameSource.Geometry` is a plain property consumers may
     /// cache, so the delivered dimensions must not change mid-stream: a
     /// rotation change takes effect on the next source, not the next frame
-    /// (stream-c-capture.md C3).
+    /// (docs/design/capture.md C3).
     ///
     /// Throws `ArgumentOutOfRangeException` for anything other than 0, 90,
     /// 180 or 270 — `Cv2.Rotate` has exactly three non-identity

@@ -6,7 +6,7 @@ namespace LoreFetch.App.ViewModels;
 /// Wraps one <see cref="CollectionRow"/> for the collection <c>DataGrid</c>
 /// (A10-fix bug 3). <see cref="CollectionRow"/> is a frozen record struct in
 /// <c>Core/Abstractions</c> and stores <see cref="CollectionRow.LastScannedAt"/>
-/// in UTC (CLAUDE.md's storage contract — the file itself never changes);
+/// in UTC (DECISIONS.md's storage contract — the file itself never changes);
 /// this wrapper adds a display-only local-time projection so the grid can
 /// show something unambiguous without touching the stored value at all.
 /// </summary>
@@ -14,7 +14,7 @@ namespace LoreFetch.App.ViewModels;
 /// <see cref="LastScannedLocalText"/> takes the display time zone as a
 /// constructor parameter (defaulting to <see cref="TimeZoneInfo.Local"/>)
 /// specifically so a unit test can pin a fixed zone rather than depend on
-/// the machine running the test — CLAUDE.md's chaos-testing standard needs a
+/// the machine running the test — DECISIONS.md's chaos-testing standard needs a
 /// deterministic assertion, and "whatever this machine's local zone happens
 /// to be" is not one.
 /// </remarks>

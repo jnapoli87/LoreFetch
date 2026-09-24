@@ -90,7 +90,8 @@ fi
 # DENYING is a separate question, and the first version got it wrong. It
 # searched the WHOLE command for a force flag, so any `-f` belonging to any
 # other command denied the call: `git commit -F msg && git push; rm -f tmp`
-# was refused as a force-push. The claim recorded in CLAUDE.md — that a
+# was refused as a force-push. The claim once recorded in CLAUDE.md (now in
+# docs/history/CLAUDE-v0.1.md) — that a
 # false-positive push match "can only ever produce a warning, because the deny
 # additionally requires a force flag" — was simply wrong. Both halves were
 # loose, so the conjunction was loose too, and `rm -f` was enough to block a

@@ -2,7 +2,7 @@ namespace LoreFetch.Lab.Images;
 
 /// Refuses to run the image download against a cache directory that
 /// resolves inside the repository (or a linked worktree of it). The
-/// image cache holds Scryfall artwork -- WotC IP that `CLAUDE.md` says
+/// image cache holds Scryfall artwork -- WotC IP that `DECISIONS.md` says
 /// must never be committed -- so a cache path under source control is a
 /// mistake worth stopping the run for, not a warning.
 public static class CacheDirectoryGuard

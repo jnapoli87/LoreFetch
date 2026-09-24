@@ -22,7 +22,7 @@ public sealed class CropScaleExperimentOptions
 {
     public required string CacheDir { get; init; }
 
-    /// Non-land artworks only (CLAUDE.md's "Ladder": "Measure accuracy on
+    /// Non-land artworks only (DECISIONS.md's "Ladder": "Measure accuracy on
     /// normal cards only" -- every basic land collapses to the same name,
     /// so it would inflate rank-1 without saying anything about crop
     /// sensitivity).
@@ -62,7 +62,7 @@ public sealed class CropScaleExperimentOptions
 /// per level in `CropScaleExperimentOptions.Levels`. Each sampled artwork's
 /// JPEG is decoded exactly ONCE and reused across every level -- only the
 /// (cheap) crop-scale transform and the (already-brute-force-cheap)
-/// identify call repeat per level, matching CLAUDE.md's measured per-query
+/// identify call repeat per level, matching DECISIONS.md's measured per-query
 /// cost.
 public static class CropScaleExperimentRunner
 {

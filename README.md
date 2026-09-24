@@ -62,7 +62,7 @@ Each card is found by contour (63:88 aspect ratio, minimum area), perspective-co
 
 The hash is a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause). Finding the cards is ours — CardSpotter identifies a card you click on.
 
-Details: [`docs/stream-b-identification.md`](docs/stream-b-identification.md).
+Details: [`docs/design/identification.md`](docs/design/identification.md).
 
 ## Accuracy
 
@@ -96,7 +96,7 @@ The collection is a plain CSV you own — UTF-8 with BOM, so Excel opens accente
 > [!IMPORTANT]
 > **Upload it under Collection, not as a decklist.** Use the CSV upload at [moxfield.com/collection](https://moxfield.com/collection). The decklist box on Moxfield's home page will not ingest the file correctly.
 
-ManaBox, Archidekt, Deckbox and Dragon Shield are not in v1 — each either needs a set or printing id we can't supply, or has no first-party import spec to target. Reasons in [`docs/stream-d-export.md`](docs/stream-d-export.md).
+ManaBox, Archidekt, Deckbox and Dragon Shield are not in v1 — each either needs a set or printing id we can't supply, or has no first-party import spec to target. Reasons in [`docs/design/collection.md`](docs/design/collection.md).
 
 ## Cameras
 
@@ -114,7 +114,7 @@ Using something else? Open an issue with the camera, resolution and OS and it ge
 
 Roughly in order: a worth-sleeving flag for bulk sorting · in-app card data updates · foils · set and printing detection from the collector number · double-faced cards · a supported macOS release · the 3D-printed mount.
 
-Reasoning in [`docs/PLAN.md`](docs/PLAN.md#stretch-goals--after-v010).
+Reasoning in [`docs/history/PLAN.md`](docs/history/PLAN.md#stretch-goals--after-v010).
 
 ## Building
 
@@ -133,16 +133,17 @@ Clones from before 2026-09-21 no longer match — the history was rewritten that
 
 | Document | Contents |
 |---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Every settled decision, and why each rejected alternative stays rejected |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute: issue → branch → PR, and what CI checks |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every settled decision, and why each rejected alternative stays rejected |
 | [`docs/accuracy.md`](docs/accuracy.md) | Accuracy: corpora, method, every recorded run |
-| [`docs/orchestration-plan.md`](docs/orchestration-plan.md) | The build log — every ruling in order, including open bugs |
-| [`docs/PLAN.md`](docs/PLAN.md) | Build sequencing |
+| [`docs/history/orchestration-plan.md`](docs/history/orchestration-plan.md) | The build log — every ruling in order, including open bugs |
+| [`docs/history/PLAN.md`](docs/history/PLAN.md) | Build sequencing |
 | [`docs/CONTRACTS.md`](docs/CONTRACTS.md) | The interface seam between components |
 | [`docs/TESTING.md`](docs/TESTING.md) | Test strategy across five levels |
-| [`docs/stream-a-ui.md`](docs/stream-a-ui.md) | Avalonia UI |
-| [`docs/stream-b-identification.md`](docs/stream-b-identification.md) | Hashing, indexing, detection, accuracy measurement |
-| [`docs/stream-c-capture.md`](docs/stream-c-capture.md) | Webcam capture |
-| [`docs/stream-d-export.md`](docs/stream-d-export.md) | Export formats |
+| [`docs/design/app.md`](docs/design/app.md) | Avalonia UI |
+| [`docs/design/identification.md`](docs/design/identification.md) | Hashing, indexing, detection, accuracy measurement |
+| [`docs/design/capture.md`](docs/design/capture.md) | Webcam capture |
+| [`docs/design/collection.md`](docs/design/collection.md) | Export formats |
 
 ## Licence
 

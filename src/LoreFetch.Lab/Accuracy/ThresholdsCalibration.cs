@@ -7,7 +7,7 @@ namespace LoreFetch.Lab.Accuracy;
 /// exist, but deliberately never called anywhere in this package's own CLI
 /// command against synthetic data, and never invoked by any test. Those two
 /// values must be calibrated from the REAL H3 fixture corpus
-/// (`AccuracyHarnessOptions`'s own doc comment; CLAUDE.md's Machine-split
+/// (`AccuracyHarnessOptions`'s own doc comment; DECISIONS.md's Machine-split
 /// rule 4), which does not exist yet -- writing them from a synthetic self-
 /// test run would silently plant a fabricated threshold that reads as a
 /// real measurement. `Suggest` is exposed publicly (and unit-tested) so its

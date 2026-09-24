@@ -2,7 +2,7 @@ using LoreFetch.Core.Abstractions;
 
 namespace LoreFetch.Lab.Accuracy;
 
-/// The two requirements orchestration-plan.md's H3 note block flags as
+/// The two requirements docs/history/orchestration-plan.md's H3 note block flags as
 /// "most likely to produce a silently wrong result" for B6, both enforced
 /// structurally here rather than left to caller discipline:
 ///
@@ -30,7 +30,7 @@ namespace LoreFetch.Lab.Accuracy;
 /// order rows top-to-bottom, then order each row's members left-to-right.
 /// The tolerance is derived from the quads' OWN measured heights (real
 /// cards, and therefore real row spacing, are far larger at 15in
-/// (~216x303px) than at 20in (~165x235px) -- CLAUDE.md's "px/inch = 1360 /
+/// (~216x303px) than at 20in (~165x235px) -- DECISIONS.md's "px/inch = 1360 /
 /// height_inches" -- so a fixed pixel tolerance would be wrong at one
 /// height or the other), at half a card height: real row spacing is about
 /// one full card height, so half a card height bands same-row jitter

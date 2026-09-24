@@ -22,7 +22,7 @@ public static class AccuracyFrameRunner
     /// `maxCards` passed to `Detect` is exactly `frame.Layout` -- the
     /// harness asks the detector for precisely as many cards as the ground
     /// truth says are present, matching how the app itself would drive
-    /// auto-capture's "expected count" (CLAUDE.md "Interaction"). One
+    /// auto-capture's "expected count" (DECISIONS.md "Interaction"). One
     /// consequence, worth stating explicitly: `ICardDetector.Detect`'s own
     /// contract is "at most maxCards", so `detected.Count` can NEVER
     /// exceed `frame.Layout` through this call -- an under-count reachable

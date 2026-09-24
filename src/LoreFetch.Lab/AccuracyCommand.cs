@@ -1,5 +1,5 @@
+using LoreFetch.Core.Detection;
 using LoreFetch.Core.Identification;
-using LoreFetch.Core.Imaging;
 using LoreFetch.Core.Scanning;
 using LoreFetch.Lab.Accuracy;
 using Microsoft.Extensions.Logging;
@@ -61,7 +61,7 @@ public static class AccuracyCommand
         // resolved from -- never the index default (still repoRoot-derived
         // above) or ResolveOkDistance's thresholds-file lookup (still
         // repoRoot-derived too). This exists because `test-images/` is
-        // gitignored per-checkout (CLAUDE.md "Never commit card imagery"),
+        // gitignored per-checkout (DECISIONS.md "Never commit card imagery"),
         // so a linked worktree's own `test-images/` is a separate, possibly
         // stale copy from the main checkout's -- and `RepoPaths.TryFindRepoRoot`
         // resolves to whichever checkout the running exe's own bin/ (or cwd)
@@ -70,7 +70,7 @@ public static class AccuracyCommand
         // working directory (AppContext.BaseDirectory is tried first). Pass
         // `--images-root <path-to-a-checkout>` to point this run's corpus
         // resolution at a DIFFERENT checkout's `test-images/` without
-        // rebuilding or copying imagery anywhere (CLAUDE.md: imagery is
+        // rebuilding or copying imagery anywhere (DECISIONS.md: imagery is
         // never copied into a worktree).
         var imagesRoot = parsed.ImagesRoot ?? repoRoot!;
 
@@ -78,7 +78,7 @@ public static class AccuracyCommand
         if (!File.Exists(groundTruthPath))
         {
             Console.WriteLine($"accuracy: no ground-truth corpus yet at \"{groundTruthPath}\" -- nothing to run. " +
-                "This is expected until H3 delivers fixtures; the harness itself is exercised by the synthetic tests in Tests/StreamB.");
+                "This is expected until H3 delivers fixtures; the harness itself is exercised by the synthetic tests in Tests/Lab.");
             return 0;
         }
 
@@ -168,7 +168,7 @@ public static class AccuracyCommand
 
     /// `--ok-distance` wins when given. Otherwise, the committed
     /// `data/index/thresholds.json`'s own `okDistance` (B6's calibrated
-    /// value, real-corpus-derived) -- CLAUDE.md/CONTRACTS.md: "nothing may
+    /// value, real-corpus-derived) -- DECISIONS.md/CONTRACTS.md: "nothing may
     /// hardcode a distance; the thresholds file is the one source of
     /// truth." Falls back to `AccuracyHarnessOptions.Default.OkDistance`
     /// (the documented CardSpotter-prior placeholder, 270) only when the

@@ -1,24 +1,24 @@
 # LoreFetch.Capture
 
-The FlashCap → `IFrameSource` adapter: opens the webcam, negotiates a format and yields `CameraFrame`s. Owned by **Stream C** (worktree `stream-c`), exclusive over this project and `Tests/StreamC/**` — see [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries).
+The FlashCap → `IFrameSource` adapter: opens the webcam, negotiates a format and yields `CameraFrame`s. The Capture domain in the [domain map](../../docs/CONTRACTS.md#domain-map).
 
 ## Dependencies
 
-References `LoreFetch.Core` (for `Abstractions`, notably `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`, `ScanSettings`) and is the **only project that references FlashCap** — no other project may depend on it. It also references OpenCvSharp4, but only for MJPEG decode (`Cv2.ImDecode`) and rotation; card detection and rectification stay in `Core/Imaging` (stream B). Per [`../../docs/CONTRACTS.md`](../../docs/CONTRACTS.md#stream-boundaries), this stream must not touch `App` or any other `Core` folder.
+References `LoreFetch.Core` (for `Abstractions`, notably `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`, `ScanSettings`) and is the **only project that references FlashCap** — no other project may depend on it. It also references OpenCvSharp4, but only for MJPEG decode (`Cv2.ImDecode`) and rotation; card detection and rectification stay in `Core/Detection`.
 
-Grants `InternalsVisibleTo` to `LoreFetch.Tests.StreamC` for its internal capture stage.
+Grants `InternalsVisibleTo` to `LoreFetch.Tests.Capture` for its internal capture stage.
 
 ## Concrete name fixed for integration
 
-`LoreFetch.Capture.WebcamFrameSourceFactory : IFrameSourceFactory`, constructed with `(ILoggerFactory)` — see [`../../docs/orchestration-plan.md`](../../docs/orchestration-plan.md) §4. The App wires this in at integration; nothing outside this project may construct it before then.
+`LoreFetch.Capture.WebcamFrameSourceFactory : IFrameSourceFactory`, constructed with `(ILoggerFactory)` — see [`../../docs/history/orchestration-plan.md`](../../docs/history/orchestration-plan.md) §4. The App wires this in at integration; nothing outside this project may construct it before then.
 
 ## The C920 trap
 
-USB 2.0 bandwidth, DSHOW-over-MSMF backend preference — see [`../../CLAUDE.md`](../../CLAUDE.md#the-c920-trap) for the bandwidth arithmetic. What this project actually does about it is **not** `VideoCapture`'s "set `FourCC` before width/height, then read the properties back and assert" — that's the fallback path for if FlashCap itself doesn't work out (see `docs/stream-c-capture.md`'s *Fallbacks*). The shipped path is FlashCap's own explicit negotiation: `FlashCapDeviceCatalog.Enumerate` calls `EnumerateDescriptors()` and logs every backend's full characteristic list, then `CaptureDeviceSelector.SelectDevice` picks the one `VideoCharacteristics` matching exactly `1920x1080`, `PixelFormats.JPEG`, `>= 30 fps` — preferring DirectShow, falling back to Media Foundation, never Video for Windows — **or throws with that full enumerated list in the message** rather than silently opening a lower mode. There is no `set()`-and-hope call to get wrong in the first place.
+USB 2.0 bandwidth, DSHOW-over-MSMF backend preference — see [`../../docs/DECISIONS.md`](../../docs/DECISIONS.md#stack-with-the-traps) for the bandwidth arithmetic. What this project actually does about it is **not** `VideoCapture`'s "set `FourCC` before width/height, then read the properties back and assert" — that's the fallback path for if FlashCap itself doesn't work out (see `docs/design/capture.md`'s *Fallbacks*). The shipped path is FlashCap's own explicit negotiation: `FlashCapDeviceCatalog.Enumerate` calls `EnumerateDescriptors()` and logs every backend's full characteristic list, then `CaptureDeviceSelector.SelectDevice` picks the one `VideoCharacteristics` matching exactly `1920x1080`, `PixelFormats.JPEG`, `>= 30 fps` — preferring DirectShow, falling back to Media Foundation, never Video for Windows — **or throws with that full enumerated list in the message** rather than silently opening a lower mode. There is no `set()`-and-hope call to get wrong in the first place.
 
 ## Testing
 
-Unit-tested in `../../Tests/StreamC`. Hardware verification (live device, sustained memory, negotiated format) is manual on the Windows PC — see [`../../docs/TESTING.md`](../../docs/TESTING.md).
+Unit-tested in `../../Tests/Capture`. Hardware verification (live device, sustained memory, negotiated format) is manual on the Windows PC — see [`../../docs/TESTING.md`](../../docs/TESTING.md).
 
 ## Internals
 
@@ -28,7 +28,7 @@ FlashCap is confined to two files: `FlashCapDeviceCatalog` (enumeration) and `We
 FlashCap capture callback (OnFrameArrived, in WebcamFrameSourceFactory)
   → JpegFrameChannel.Push        — copies FlashCap's scope-limited ArraySegment into an
                                     ArrayPool<byte>.Shared-rented buffer (never .Create() —
-                                    see CLAUDE.md's C920 trap table on why that silently
+                                    see DECISIONS.md's C920 trap table on why that silently
                                     stops pooling anything this size), then offers it to a
                                     capacity-1, BoundedChannelFullMode.DropOldest channel
                                     whose itemDropped callback disposes (and thus returns

@@ -44,6 +44,14 @@
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.0" />
+
+    <!-- Architecture rules (Tests/Architecture). Core package only; the
+         xUnitV3 adapter drags in legacy netstandard-era shims. -->
+    <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
+
+    <!-- Code coverage for the CI metrics ratchet (scripts/Metrics.cs). Added
+         to every test project by Tests/Directory.Build.props. -->
+    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
   </ItemGroup>
 
 </Project>

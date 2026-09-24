@@ -1,5 +1,5 @@
 using LoreFetch.Core.Abstractions;
-using LoreFetch.Core.Imaging;
+using LoreFetch.Core.Detection;
 using OpenCvSharp;
 
 namespace LoreFetch.Lab.Synthetic;
@@ -25,7 +25,7 @@ public sealed record MultiCardFrameOptions
 
     public int JpegQuality { get; init; } = 90;
 
-    /// A light mat by default -- CLAUDE.md's own "safest default for
+    /// A light mat by default -- DECISIONS.md's own "safest default for
     /// detection" (B5b's real-capture evidence: 4/4 detected and correct on
     /// white/light backgrounds). B6's tests are not re-litigating mat
     /// contrast (Risk 3/4 are B5's own), so there is no reason to default

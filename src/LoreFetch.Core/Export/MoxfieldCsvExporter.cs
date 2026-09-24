@@ -24,7 +24,7 @@ namespace LoreFetch.Core.Export;
 /// <para>
 /// No BOM: Moxfield's importer demands exact header matching "including case"
 /// and warns about stray characters around headers — a UTF-8 BOM prepended
-/// to <c>Count</c> is a plausible break. (docs/stream-d-export.md §Fallbacks).
+/// to <c>Count</c> is a plausible break. (docs/design/collection.md §Fallbacks).
 /// The native format keeps its BOM because it is what users open in Excel;
 /// this adapter serves an importer, not a human reader, so BOM-less UTF-8 is
 /// the safer default.
@@ -113,7 +113,7 @@ public sealed class MoxfieldCsvExporter : ICollectionExporter
         // never assess. Empty is honest; a guessed field looks authoritative
         // and is wrong.
         //
-        // Oracle names are written verbatim, never sanitised (CLAUDE.md:
+        // Oracle names are written verbatim, never sanitised (DECISIONS.md:
         // "+2 Mace is a real card; don't prefix it"). NativeCsvCodec.QuoteField
         // is the shared RFC 4180 implementation — one quoting path for every
         // format, never two that can drift.

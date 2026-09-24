@@ -35,7 +35,7 @@ public sealed class NativeCsvExporter : ICollectionExporter
         Notes: null);
 
     /// <summary>
-    /// Writes UTF-8 <b>with</b> BOM — CLAUDE.md §Storage: this is the file
+    /// Writes UTF-8 <b>with</b> BOM — DECISIONS.md §Storage: this is the file
     /// a user opens directly in Excel, which mangles non-ASCII card names
     /// without one. Never disposes <paramref name="destination"/>; the
     /// caller opened it and owns its lifetime (CONTRACTS.md's mechanic 1 —
