@@ -52,7 +52,7 @@ Each domain has its own test project, and the end-to-end suite lives in `Tests/I
 
 | Level | What it covers | Where it lives | Live from | Runs in CI? |
 |---|---|---|---|---|
-| **Unit** | Pure logic: trigger state machine, tile state transitions, hash invariants, CSV store, quad filtering, escaping | `Tests/Stream<X>/`, plus Stream 0 for the pipeline | as written | ✅ |
+| **Unit** | Pure logic: trigger state machine, tile state transitions, hash invariants, CSV store, quad filtering, escaping | The domain test projects (`Tests/App`, `Tests/Detection`, …), plus `Tests/Integration/Unit` for the pipeline | as written | ✅ |
 | **Integration (fakes)** | Frame source → detect → rectify → identify → cohort → commit → CSV, all through stubs | Stream 0 | **end of Stream 0** | ✅ |
 | **Integration (real)** | The *same* tests with real implementations injected | Stream 0, impls swapped in | skips until the artifact exists | ✅ (skips, never red) |
 | **Accuracy** | Real fixture corpus: correct@1 / wrong@1 / no-match × height × difficulty | stream B, **local only** | when fixtures captured | ❌ images can't be committed |

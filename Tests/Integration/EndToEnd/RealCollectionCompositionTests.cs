@@ -211,7 +211,7 @@ public class RealCollectionCompositionTests
     /// A single included tile, built through `CohortTile`'s real public
     /// constructor (frozen `Core/Abstractions`) rather than a fake, so a
     /// store/exporter test exercises the exact same state machine the
-    /// pipeline does. Mirrors `Tests/StreamD/CohortSupport.IncludedTile`,
+    /// pipeline does. Mirrors `Tests/Collection/CohortSupport.IncludedTile`,
     /// which this project cannot reference (a sibling test assembly).
     private static Cohort SingleTileCohort(string oracleId, string oracleName, int distance)
     {

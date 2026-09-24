@@ -255,7 +255,7 @@ public static class AppComposition
     /// Resolves <c>LOREFETCH_MODE</c> into a <see cref="CompositionMode"/>.
     /// Takes the raw env var value as a parameter, rather than reading
     /// <see cref="Environment.GetEnvironmentVariable"/> itself, so the
-    /// resolution logic is a pure function `Tests/StreamA` can exercise
+    /// resolution logic is a pure function `Tests/App` can exercise
     /// without mutating process-global state (the same shape as
     /// <see cref="ChooseFrameFolder"/>).
     /// </summary>
@@ -579,7 +579,7 @@ public static class AppComposition
     /// <summary>
     /// Resolves the collection file's path. Takes the raw env var value as a
     /// parameter (see <see cref="ResolveCompositionMode"/> for why), so
-    /// <c>Tests/StreamA</c> can exercise the whole resolution — including the
+    /// <c>Tests/App</c> can exercise the whole resolution — including the
     /// "create the directory if missing" step — against a temp path, never the
     /// real Documents folder.
     /// </summary>
@@ -733,7 +733,7 @@ public static class AppComposition
     /// </returns>
     /// <remarks>
     /// Factored out of <see cref="BuildFakesPipelinePieces"/> so
-    /// <c>Tests/StreamA</c> can exercise the three code paths — user
+    /// <c>Tests/App</c> can exercise the three code paths — user
     /// folder with images, user folder with no images, and env var unset —
     /// without launching the full composition stack.
     /// </remarks>
@@ -775,7 +775,7 @@ public static class AppComposition
         return (DemoFrames.CreateFolder(), isTempFolder: true);
     }
 
-    /// The testable core of composition, factored out so Tests/StreamA can
+    /// The testable core of composition, factored out so Tests/App can
     /// substitute a counting `IFrameSourceFactory` (and trivial detector /
     /// rectifier / identifier / trigger doubles) without touching a real
     /// folder on disk or the real fakes. Opens the frame source, builds the

@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Design record from v0.1.** Written as the hackathon's Stream A spec. Code comments cite its section IDs (A0, A1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
 >
-> Code: `src/LoreFetch.App`, `src/LoreFetch.Core/Trigger`. Tests: `Tests/StreamA`.
+> Code: `src/LoreFetch.App`, `src/LoreFetch.Core/Trigger`. Tests: `Tests/App`.
 
 Consumes: `Core/Abstractions` and `Core/Scanning` (see [`CONTRACTS.md`](../CONTRACTS.md)), the **seven** fakes (`FolderFrameSource`, `StubCardDetector`, `StubRectifier`, `StubCardIdentifier`, `StubOracleCatalog`, `StubCollectionStore`, `StubCollectionExporter`), `ScanPipelineFactory`, and every registered `ICollectionExporter`
 

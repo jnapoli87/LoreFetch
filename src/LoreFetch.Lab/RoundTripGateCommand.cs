@@ -14,7 +14,7 @@ namespace LoreFetch.Lab;
 /// (CLAUDE.md). This command is what an implementer runs BY HAND, once,
 /// against the real Scryfall image cache and the real committed index, and
 /// commits the result; it deliberately does NOT run as part of the normal
-/// test suite (`Tests/StreamB/RoundTrip/RoundTripGateTests.cs` performs the
+/// test suite (`Tests/Lab/RoundTrip/RoundTripGateTests.cs` performs the
 /// SAME measurement every real run, for verification, but never writes to
 /// the committed file itself -- see that test's own doc comment for why).
 /// This mirrors B4d's own precedent: the committed index is likewise built

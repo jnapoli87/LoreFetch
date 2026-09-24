@@ -7,7 +7,7 @@
 > [!NOTE]
 > **Design record from v0.1.** Written as the hackathon's Stream C spec. Code comments cite its section IDs (C0, C1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
 >
-> Code: `src/LoreFetch.Capture`. Tests: `Tests/StreamC`.
+> Code: `src/LoreFetch.Capture`. Tests: `Tests/Capture`.
 
 > [!NOTE]
 > **Reconciled 2026-09-21.** Every proposal and open question below has been ruled on; the contract surface in [`CONTRACTS.md`](../CONTRACTS.md) is now final and the rulings are recorded in [`RECONCILIATION.md`](../RECONCILIATION.md). The *Plan review findings* section is kept as the review record — **read the disposition notes before acting on any recommendation there.** What changed for this stream:

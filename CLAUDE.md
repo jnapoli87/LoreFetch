@@ -269,5 +269,5 @@ The owner is learning this codebase and works on it at a slow pace. Favour small
 - **GitHub Issues are the work queue.** Claude drafts an issue's text and files it with `gh` only after the owner approves it. Decisions that come out of an issue land in the repo (this file, `docs/CONTRACTS.md`, a design doc); the issue links to them.
 - **One branch per issue**, `fix/<n>-<slug>` or `feat/<n>-<slug>`, off `main`. Never commit directly to `main`.
 - **Every change reaches `main` through a PR** whose description says `Fixes #<n>`. CI must be green on both legs.
-- **Every bug fix carries a regression test**, chaos-tested as above.
+- **Every bug fix carries a regression test**, chaos-tested as above, in the test project of the domain it touches: `Tests/App`, `Tests/Detection`, `Tests/Identification`, `Tests/Lab`, `Tests/Capture`, `Tests/Collection`, or `Tests/Integration` for the seams. See the [domain map](docs/CONTRACTS.md#domain-map).
 - **Plans are scratch.** Plan-mode files stay local and are not committed. Anything in a plan worth keeping becomes an issue, a commit message, or a line in the docs.

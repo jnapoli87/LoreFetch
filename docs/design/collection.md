@@ -5,7 +5,7 @@
 > [!NOTE]
 > **Design record from v0.1.** Written as the hackathon's Stream D spec. Code comments cite its section IDs (D0, D1, …), so they stay stable. The parallel-build rules (exclusive ownership, "must not touch") were dropped after v0.1; the original is at tag `v0.1.0`.
 >
-> Code: `src/LoreFetch.Core/Collection`, `src/LoreFetch.Core/Export`. Tests: `Tests/StreamD`.
+> Code: `src/LoreFetch.Core/Collection`, `src/LoreFetch.Core/Export`. Tests: `Tests/Collection`.
 
 Consumes: `Core/Abstractions` — `Cohort`, `CohortTile`, `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, **`OracleEntry`**, **`TileState`**, **`RowSource`**, **`CollectionStoreException`** (see [`CONTRACTS.md`](../CONTRACTS.md))
 Implements: `ICollectionStore`, and every `ICollectionExporter`

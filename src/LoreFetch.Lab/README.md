@@ -16,7 +16,7 @@ The Scryfall bulk-data cache and downloaded renders live **outside this reposito
 
 ## Testing
 
-Unit- and synthetic-integration-tested in `../../Tests/StreamB`. Accuracy runs are local-only, reported as a committed table rather than pass/fail — see [`../../docs/TESTING.md`](../../docs/TESTING.md#the-five-levels).
+Unit- and synthetic-integration-tested in `../../Tests/Lab`. Accuracy runs are local-only, reported as a committed table rather than pass/fail — see [`../../docs/TESTING.md`](../../docs/TESTING.md#the-five-levels).
 
 ## Diagnostic-only code
 
@@ -45,10 +45,10 @@ Run `dotnet run --project src/LoreFetch.Lab -- <command>` with no arguments, or 
 
 ## Test gating
 
-Most of `Tests/StreamB`'s Lab-facing tests need real Scryfall renders on disk and are gated on an environment variable rather than a mock: `LOREFETCH_SCRYFALL_CACHE` (default `~/LoreFetchData/scryfall-cache`; on the Windows PC that's `C:\LoreFetchData\scryfall-cache`). If the variable isn't set, or the directory it names doesn't exist, those tests **skip silently** rather than fail — a machine whose cache lives somewhere else just runs a smaller suite, with no red to flag it. Set the variable explicitly rather than assuming the default matches your machine.
+Most of `Tests/Lab`'s tests need real Scryfall renders on disk and are gated on an environment variable rather than a mock: `LOREFETCH_SCRYFALL_CACHE` (default `~/LoreFetchData/scryfall-cache`; on the Windows PC that's `C:\LoreFetchData\scryfall-cache`). If the variable isn't set, or the directory it names doesn't exist, those tests **skip silently** rather than fail — a machine whose cache lives somewhere else just runs a smaller suite, with no red to flag it. Set the variable explicitly rather than assuming the default matches your machine.
 
 `LOREFETCH_REQUIRE_REAL=1` flips that default: with it set, a cache-gated test **fails** instead of skipping when the cache is missing, so CI (or a deliberate local run) can assert the real-data tests actually ran rather than silently passed by skipping all of them.
 
 Real-capture regression tests additionally need `test-images/` (gitignored, never committed — see [`../../CLAUDE.md`](../../CLAUDE.md#card-imagery-is-enforced-in-two-layers-not-just-documented)): `test-images/ad-hoc/` for individual detector fixtures, `test-images/fixtures/<height>in/<layout>/` plus `test-images/ground-truth.csv` for the accuracy harness. Those also skip, not fail, when absent.
 
-Golden hashes (`Tests/StreamB`'s committed 1024-bit expected values) carry `[Trait("Category","WindowsOnly")]` and are filtered out on the `macos-latest` CI leg, because `INTER_AREA` is not bit-exact across x86-64 and ARM64 — see [`../../CLAUDE.md`](../../CLAUDE.md#the-one-gate-that-matters-most). The committed index and the goldens are both generated on `win-x64` only.
+Golden hashes (`Tests/Identification`'s committed 1024-bit expected values) carry `[Trait("Category","WindowsOnly")]` and are filtered out on the `macos-latest` CI leg, because `INTER_AREA` is not bit-exact across x86-64 and ARM64 — see [`../../CLAUDE.md`](../../CLAUDE.md#the-one-gate-that-matters-most). The committed index and the goldens are both generated on `win-x64` only.

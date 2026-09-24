@@ -18,7 +18,7 @@ Avalonia 12.1.2, `Avalonia.Controls.DataGrid` as a separate package, `CommunityT
 
 ## Testing
 
-Unit-tested in `../../Tests/StreamA` (view-model logic, trigger state). Exercised end-to-end, via fakes, in `../../Tests/Integration`. UI rendering itself is verified manually, not headlessly — see [`../../docs/TESTING.md`](../../docs/TESTING.md#things-deliberately-not-tested-automatically).
+Unit-tested in `../../Tests/App` (view-model logic, trigger state). Exercised end-to-end, via fakes, in `../../Tests/Integration`. UI rendering itself is verified manually, not headlessly — see [`../../docs/TESTING.md`](../../docs/TESTING.md#things-deliberately-not-tested-automatically).
 
 ## Internals
 

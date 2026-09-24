@@ -78,7 +78,7 @@ public static class AccuracyCommand
         if (!File.Exists(groundTruthPath))
         {
             Console.WriteLine($"accuracy: no ground-truth corpus yet at \"{groundTruthPath}\" -- nothing to run. " +
-                "This is expected until H3 delivers fixtures; the harness itself is exercised by the synthetic tests in Tests/StreamB.");
+                "This is expected until H3 delivers fixtures; the harness itself is exercised by the synthetic tests in Tests/Lab.");
             return 0;
         }
 

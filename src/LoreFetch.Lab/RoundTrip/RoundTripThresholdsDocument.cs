@@ -100,7 +100,7 @@ public sealed record RoundTripThresholdsDocument
     /// deterministically, regardless of which machine actually runs the
     /// test suite -- `RoundTripThresholdsDocumentTests` covers both this
     /// way. `internal` via `LoreFetch.Lab`'s own `InternalsVisibleTo`
-    /// grant to `LoreFetch.Tests.StreamB` (`RepoPaths.cs`).
+    /// grant to `LoreFetch.Tests.Lab` (`RepoPaths.cs`).
     internal static RoundTripThresholdsDocument FromStatistics(
         RoundTripGateStatistics stats, string indexSha256, int indexArtworkCount, DateTimeOffset measuredAt,
         string architectureToken, string architectureDetail)

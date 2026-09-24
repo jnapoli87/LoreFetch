@@ -175,7 +175,7 @@ public class QuadOrderingTests
     /// **Real-capture regression.** Centroids and quad size for the first
     /// row are lifted directly from a real captured 3x3 frame, as pinned in
     /// stream B's independently-built inference at
-    /// `Tests/StreamB/Accuracy/SlotMapperTests.cs`
+    /// `Tests/Lab/Accuracy/SlotMapperTests.cs`
     /// (`SortRowMajor_RealCapturedTopRowWithYJitter_StillOrdersByXAscending`):
     /// three real detected centroids, (593,92), (839,99), (1109,96), each
     /// ~216x303 px -- card size at the ~15in height that frame was shot at,

@@ -6,7 +6,7 @@ The FlashCap → `IFrameSource` adapter: opens the webcam, negotiates a format a
 
 References `LoreFetch.Core` (for `Abstractions`, notably `IFrameSource`, `IFrameSourceFactory`, `FrameSourceException`, `ScanSettings`) and is the **only project that references FlashCap** — no other project may depend on it. It also references OpenCvSharp4, but only for MJPEG decode (`Cv2.ImDecode`) and rotation; card detection and rectification stay in `Core/Imaging`.
 
-Grants `InternalsVisibleTo` to `LoreFetch.Tests.StreamC` for its internal capture stage.
+Grants `InternalsVisibleTo` to `LoreFetch.Tests.Capture` for its internal capture stage.
 
 ## Concrete name fixed for integration
 
@@ -18,7 +18,7 @@ USB 2.0 bandwidth, DSHOW-over-MSMF backend preference — see [`../../CLAUDE.md`
 
 ## Testing
 
-Unit-tested in `../../Tests/StreamC`. Hardware verification (live device, sustained memory, negotiated format) is manual on the Windows PC — see [`../../docs/TESTING.md`](../../docs/TESTING.md).
+Unit-tested in `../../Tests/Capture`. Hardware verification (live device, sustained memory, negotiated format) is manual on the Windows PC — see [`../../docs/TESTING.md`](../../docs/TESTING.md).
 
 ## Internals
 

@@ -23,9 +23,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Stream C's internal stage is visible only to its own test project. -->
+    <!-- Capture's internal stage is visible only to its own test project. -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>LoreFetch.Tests.StreamC</_Parameter1>
+      <_Parameter1>LoreFetch.Tests.Capture</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 

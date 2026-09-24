@@ -566,11 +566,12 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 
 | Domain | Code | Tests | Consumes from the contract surface |
 |---|---|---|---|
-| **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/StreamA` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
-| **Detection and identification** | `Core/Imaging`, `Core/Identification` | `Tests/StreamB` | Abstractions; implements `ICardDetector`, `IRectifier`, `ICardIdentifier`, `IOracleCatalog` |
-| **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/StreamB` | Abstractions, detection and identification, the local fixture corpus |
-| **Capture** | `src/LoreFetch.Capture` | `Tests/StreamC` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |
-| **Collection and export** | `Core/Collection`, `Core/Export` | `Tests/StreamD` | `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, `OracleEntry`, `TileState`, `RowSource`, `CollectionStoreException` |
+| **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/App` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
+| **Detection** | `Core/Imaging`: `ContourCardDetector`, `PerspectiveRectifier`, `QuadExpansion` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
+| **Identification** | `Core/Identification`, plus the hash pipeline still in `Core/Imaging` (`CardHasher`, `QueryTransform`, `ReferenceTransform`) | `Tests/Identification` | Abstractions; implements `ICardIdentifier`, `IOracleCatalog` |
+| **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/Lab` | Abstractions, Detection, Identification, the local fixture corpus |
+| **Capture** | `src/LoreFetch.Capture` | `Tests/Capture` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |
+| **Collection and export** | `Core/Collection`, `Core/Export` | `Tests/Collection` | `CollectionRow`, `ICollectionStore`, `ICollectionExporter`, `ExportFormat`, `Cohort`, `CohortTile`, `OracleEntry`, `TileState`, `RowSource`, `CollectionStoreException` |
 | **Contract surface** | `Core/Abstractions`, `Core/Scanning`, `Core/Fakes` | `Tests/Integration` | — |
 
 `Tests/Integration` holds the end-to-end suite, parameterised over the fakes and the real implementations, plus the contract surface's own unit tests. It is the one suite that would catch a broken seam, so a PR that weakens it should say why.

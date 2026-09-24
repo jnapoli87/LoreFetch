@@ -4,12 +4,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenCvSharp;
 
-// Lets `Tests/StreamB` exercise `ContourCardDetector`'s internal seams
-// directly (`OrderCorners`, `IsNestedOrDuplicate`, `DedupeAndTakeTopN`)
-// without touching the frozen `LoreFetch.Core.csproj` -- this is a C#
-// attribute, not a project-file edit. Same pattern as
-// `LoreFetch.Lab.RepoPaths`'s own `InternalsVisibleTo` for the same reason.
-[assembly: InternalsVisibleTo("LoreFetch.Tests.StreamB")]
+// Lets `Tests/Detection` exercise `ContourCardDetector`'s internal seams
+// directly (`OrderCorners`, `IsNestedOrDuplicate`, `DedupeAndTakeTopN`).
+[assembly: InternalsVisibleTo("LoreFetch.Tests.Detection")]
 
 namespace LoreFetch.Core.Imaging;
 

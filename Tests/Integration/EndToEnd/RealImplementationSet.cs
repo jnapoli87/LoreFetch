@@ -397,7 +397,7 @@ public sealed class RealImplementationSet : IImplementationSet
             return (new RealFixtures { Identifier = identifier, SampleCardBgr = sampleCardBgr }, null);
         }
 
-        /// A copy of `Tests/StreamB/RoundTrip/RoundTripGateTests.ResolveCacheDir`'s
+        /// A copy of `Tests/Lab/RoundTrip/RoundTripGateTests.ResolveCacheDir`'s
         /// resolution order — that method is internal to a sibling test
         /// assembly this project cannot reference, so this is a small,
         /// deliberate duplicate rather than a new production seam:

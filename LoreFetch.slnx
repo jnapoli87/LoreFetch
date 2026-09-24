@@ -6,19 +6,25 @@
     <Project Path="src/LoreFetch.Lab/LoreFetch.Lab.csproj" />
   </Folder>
   <Folder Name="/Tests/" />
+  <Folder Name="/Tests/App/">
+    <Project Path="Tests/App/LoreFetch.Tests.App.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Capture/">
+    <Project Path="Tests/Capture/LoreFetch.Tests.Capture.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Collection/">
+    <Project Path="Tests/Collection/LoreFetch.Tests.Collection.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Detection/">
+    <Project Path="Tests/Detection/LoreFetch.Tests.Detection.csproj" />
+  </Folder>
+  <Folder Name="/Tests/Identification/">
+    <Project Path="Tests/Identification/LoreFetch.Tests.Identification.csproj" />
+  </Folder>
   <Folder Name="/Tests/Integration/">
     <Project Path="Tests/Integration/LoreFetch.Tests.Integration.csproj" />
   </Folder>
-  <Folder Name="/Tests/StreamA/">
-    <Project Path="Tests/StreamA/LoreFetch.Tests.StreamA.csproj" />
-  </Folder>
-  <Folder Name="/Tests/StreamB/">
-    <Project Path="Tests/StreamB/LoreFetch.Tests.StreamB.csproj" />
-  </Folder>
-  <Folder Name="/Tests/StreamC/">
-    <Project Path="Tests/StreamC/LoreFetch.Tests.StreamC.csproj" />
-  </Folder>
-  <Folder Name="/Tests/StreamD/">
-    <Project Path="Tests/StreamD/LoreFetch.Tests.StreamD.csproj" />
+  <Folder Name="/Tests/Lab/">
+    <Project Path="Tests/Lab/LoreFetch.Tests.Lab.csproj" />
   </Folder>
 </Solution>

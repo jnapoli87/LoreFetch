@@ -1,10 +1,9 @@
 using System.Runtime.CompilerServices;
 
-// Lets `Tests/StreamB` exercise the internal, testable overload of
+// Lets `Tests/Lab` exercise the internal, testable overload of
 // `TryFindRepoRoot` below (arbitrary start directories, not the real
-// process ones) without touching the frozen .csproj -- this is a C#
-// attribute, not a project-file edit.
-[assembly: InternalsVisibleTo("LoreFetch.Tests.StreamB")]
+// process ones), and `RoundTripThresholdsDocument`'s internal overload.
+[assembly: InternalsVisibleTo("LoreFetch.Tests.Lab")]
 
 namespace LoreFetch.Lab;
 
@@ -53,7 +52,7 @@ public static class RepoPaths
         TryFindRepoRoot([AppContext.BaseDirectory, Environment.CurrentDirectory], out repoRoot);
 
     /// The same search over caller-supplied start directories, tried in
-    /// order -- `internal` purely so `Tests/StreamB` can drive it against
+    /// order -- `internal` purely so `Tests/Lab` can drive it against
     /// throwaway temp directories instead of the real process paths, which
     /// a unit test cannot control.
     internal static bool TryFindRepoRoot(IEnumerable<string> candidateStartDirectories, out string? repoRoot)
