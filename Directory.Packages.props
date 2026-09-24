@@ -49,6 +49,11 @@
          xUnitV3 adapter drags in legacy netstandard-era shims. -->
     <PackageVersion Include="TngTech.ArchUnitNET" Version="0.13.4" />
 
+    <!-- FakeTimeProvider for FrameWatchdogTests (Tests/Capture), so the
+         watchdog's timeouts run on a clock the test moves by hand instead
+         of on real timers a loaded CI runner can stall. -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+
     <!-- Code coverage for the CI metrics ratchet (scripts/Metrics.cs). Added
          to every test project by Tests/Directory.Build.props. -->
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
