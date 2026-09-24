@@ -41,12 +41,13 @@ Other references: `CONTEXT.md` is the glossary (use its terms). `docs/design/*.m
 
 ## Working on LoreFetch
 
-The owner is learning this codebase and works on it at a slow pace. Favour small, explained changes over sweeping ones, and say *why* in commit messages and PR descriptions. The reasoning is the part worth keeping.
+The owner is learning this codebase and works on it at a slow pace. Favour small, explained changes over sweeping ones, and put the *why* in commit messages. The reasoning is the part worth keeping.
 
-- **GitHub Issues are the work queue.** Claude drafts an issue's text and files it with `gh` only after the owner approves it. Decisions that come out of an issue land in the repo (`docs/DECISIONS.md`, `docs/CONTRACTS.md`, a design doc), and the issue links to them.
-- **One branch per issue**, `fix/<n>-<slug>` or `feat/<n>-<slug>`, off `main`. Every change reaches `main` through a PR whose description says `Fixes #<n>`.
-- **CI must be green**: both build legs, `contract-check`, and the `metrics` ratchet. Their override labels (`contract-change`, `tests-removed`, `coverage-drop`) are for deliberate changes, and the PR description says why (`docs/TESTING.md`, *CI*).
-- **Every bug fix carries a regression test, chaos-tested**: re-apply the bug, watch the new test fail for the right reason, revert. The test goes in the test project of the domain it touches: `Tests/App`, `Detection`, `Identification`, `Lab`, `Capture`, `Collection`, or `Integration` for the seams.
+**Follow [`CONTRIBUTING.md`](CONTRIBUTING.md)** for every change: issue → branch → PR → green CI → squash-merge, with terse issues and PRs. On top of it:
+
+- **File the issue before opening the branch or PR**, so the branch name and `Fixes #<n>` both carry the issue's number (a PR opened first takes that number itself).
+- **Draft issue and PR text for the owner's approval before posting it.** Terse: symptom and evidence for an issue; `Fixes #<n>`, the change and its verification for a PR. Decisions that come out of an issue land in the repo (`docs/DECISIONS.md`, `docs/CONTRACTS.md`, a design doc), and the issue links to them.
+- **Chaos-test for real:** the planted bug must make the new test fail on the assertion that guards it. A plant that still passes proves nothing.
 - **A failing `Tests/Architecture` rule** means either the change is wrong or a decision is changing. In the second case, update the rule and the doc it cites together.
 - **The README changes in the same PR as the behaviour it describes.**
 - **Plans are scratch.** Plan-mode files stay local. Anything in a plan worth keeping becomes an issue, a commit message, or a line in the docs.

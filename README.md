@@ -133,6 +133,7 @@ Clones from before 2026-09-21 no longer match — the history was rewritten that
 
 | Document | Contents |
 |---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute: issue → branch → PR, and what CI checks |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Every settled decision, and why each rejected alternative stays rejected |
 | [`docs/accuracy.md`](docs/accuracy.md) | Accuracy: corpora, method, every recorded run |
 | [`docs/history/orchestration-plan.md`](docs/history/orchestration-plan.md) | The build log — every ruling in order, including open bugs |
