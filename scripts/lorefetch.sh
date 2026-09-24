@@ -355,6 +355,19 @@ cmd_test() {
   fi
 
   if [ "$status" -ne 0 ]; then
+    # The failed tests first: xUnit prints each one's name, message and stack
+    # as it happens, usually far above the last 60 lines, and a CI log that
+    # can't say which test failed can't be diagnosed. A block starts at a
+    # "Failed <test>" line (not the "Failed!" summary) and ends at the next
+    # result, runner line or blank line.
+    failures=$(awk '
+      /^[[:space:]]*Failed [^!]/ { p = 1; print; next }
+      p && (/^[[:space:]]*(Passed|Skipped|Failed)[ !]/ || /^\[xUnit/ || /^[[:space:]]*$/) { p = 0 }
+      p { print }
+    ' "$log" | head -300)
+    if [ -n "$failures" ]; then
+      printf '\n--- failed tests ---\n%s\n' "$failures"
+    fi
     printf '\n--- dotnet test failed (exit %s); last 60 lines ---\n' "$status"
     tail -60 "$log"; rm -f "$log"; exit "$status"
   fi
