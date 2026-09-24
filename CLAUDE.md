@@ -6,7 +6,7 @@ LoreFetch turns a webcam into an offline Magic: The Gathering collection scanner
 
 ## Commands
 
-Build, test and run through **`scripts/lorefetch.sh`** (`doctor`, `setup`, `build`, `test`, `run`; `--help` for options). It applies the same test filter CI does and fails when zero tests ran, which a bare `dotnet test` reports as success. The `lorefetch-run` skill covers calling it from a tool.
+Build, test and run through **`scripts/lorefetch.sh`** (`doctor`, `setup`, `build`, `test`, `lint`, `run`; `--help` for options). It applies the same test filter CI does and fails when zero tests ran, which a bare `dotnet test` reports as success. The `lorefetch-run` skill covers calling it from a tool.
 
 - **One project or one test:** `dotnet test Tests/Detection/LoreFetch.Tests.Detection.csproj -c Release --filter "Category!=Hardware&FullyQualifiedName~ContourCardDetectorTests"`.
 - **Real-data tests** skip when the Scryfall cache (`LOREFETCH_SCRYFALL_CACHE`) or `test-images/` is missing. `LOREFETCH_REQUIRE_REAL=1` turns those skips into failures, which proves they ran. `Tests/Support/README.md` explains the gates.

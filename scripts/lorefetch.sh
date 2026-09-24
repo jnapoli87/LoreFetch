@@ -13,6 +13,8 @@
 #   scripts/lorefetch.sh pull
 #   scripts/lorefetch.sh build
 #   scripts/lorefetch.sh test
+#   scripts/lorefetch.sh lint         # formatting check, as CI runs it
+#   scripts/lorefetch.sh lint --fix   # apply the formatting instead
 #   scripts/lorefetch.sh run -- --demo   # everything after -- goes to the app
 #
 # Options
@@ -22,6 +24,7 @@
 #   --filter <expr>    override the test filter entirely
 #   --hardware         include Category=Hardware tests (needs the C920)
 #   --all-tests        no category filter at all
+#   --fix              lint: apply formatting instead of checking it
 #   --results <dir>    also write TRX results and code coverage to <dir>
 #                      (what scripts/Metrics.cs reads; CI's Windows leg)
 #   -v, --verbose      show full dotnet output instead of the tail
@@ -47,6 +50,7 @@ FILTER=""
 INCLUDE_HARDWARE=0
 NO_FILTER=0
 RESULTS_DIR=""
+FIX=0
 CMD=""
 APP_ARGS=""
 
@@ -59,7 +63,7 @@ note() { printf '    %s\n' "$1"; }
 # --------------------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
-    all|pull|build|test|run|doctor|setup)
+    all|pull|build|test|lint|run|doctor|setup)
       [ -n "$CMD" ] && die "two commands given: $CMD and $1"
       CMD=$1 ;;
     --no-pull)     DO_PULL=no ;;
@@ -70,6 +74,7 @@ while [ $# -gt 0 ]; do
     --all-tests)   NO_FILTER=1 ;;
     -v|--verbose)  VERBOSE=1 ;;
     --filter)      shift; [ $# -gt 0 ] || die "--filter needs a value"; FILTER=$1 ;;
+    --fix)         FIX=1 ;;
     --results)     shift; [ $# -gt 0 ] || die "--results needs a directory"; RESULTS_DIR=$1 ;;
     --)            shift; APP_ARGS="$*"; break ;;
     -h|--help)     sed -n '3,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -81,7 +86,7 @@ done
 [ -n "$CMD" ] || CMD=all
 case "$CMD" in
   all)                        [ "$DO_PULL" = auto ] && DO_PULL=yes ;;
-  build|test|run|doctor|setup) [ "$DO_PULL" = auto ] && DO_PULL=no ;;
+  build|test|lint|run|doctor|setup) [ "$DO_PULL" = auto ] && DO_PULL=no ;;
 esac
 
 # --------------------------------------------------------------------------
@@ -296,6 +301,18 @@ require_solution() {
   fi
 }
 
+# Formatting, per .editorconfig. `dotnet format` covers whitespace, code style
+# and analyzer rules; --verify-no-changes makes it a check that fails instead
+# of editing, which is what CI runs.
+cmd_lint() {
+  require_solution
+  if [ "$FIX" -eq 1 ]; then
+    run_dotnet "Format (applying)" format "$SLN"
+  else
+    run_dotnet "Lint" format "$SLN" --verify-no-changes
+  fi
+}
+
 cmd_build() {
   require_solution
   run_dotnet "Restore" restore "$SLN"
@@ -431,6 +448,7 @@ case "$CMD" in
   pull)   cmd_pull ;;
   build)  [ "$DO_PULL" = yes ] && cmd_pull; cmd_build ;;
   test)   [ "$DO_PULL" = yes ] && cmd_pull; cmd_build; cmd_test ;;
+  lint)   [ "$DO_PULL" = yes ] && cmd_pull; cmd_lint ;;
   run)    [ "$DO_PULL" = yes ] && cmd_pull; cmd_build; cmd_run ;;
   all)    [ "$DO_PULL" = yes ] && cmd_pull; cmd_build; cmd_test; cmd_run ;;
 esac

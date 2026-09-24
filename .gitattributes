@@ -1,3 +1,9 @@
+# Line endings: LF in the repository AND in every checkout, on every OS.
+# `dotnet format` checks line endings, so a checkout whose endings depend on
+# the platform (core.autocrlf) makes the lint check disagree between Windows
+# and CI. Every tracked text file was already stored as LF.
+* text=auto eol=lf
+
 # core.autocrlf is on, and this repo had no .gitattributes at all — the
 # committed hash index survived its first round trip only because git's
 # NUL-byte heuristic happened to guess binary. Pin it explicitly so a
