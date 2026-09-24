@@ -113,8 +113,15 @@ jobs:
   # same entry point as a local `scripts/lorefetch.sh lint`. One Linux leg is
   # enough; .gitattributes pins LF, so the result does not depend on the OS.
   # To fix a failure locally: scripts/lorefetch.sh lint --fix.
+  #
+  # PRs only, like `guards` below. main's ruleset requires both on a branch
+  # that is up to date with main and merges by squash, so a push to main
+  # carries exactly the tree its PR already passed; re-checking it would only
+  # catch a newer SDK formatting differently, which the next PR catches anyway.
+  # build-and-test is different: its push-to-main run is metrics' baseline.
   lint:
     name: lint
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -133,6 +140,7 @@ jobs:
   # holds. One file, so the hook and CI cannot disagree.
   guards:
     name: guards
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
