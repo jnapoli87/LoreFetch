@@ -6,10 +6,10 @@
 # apply the same filter and the same guards.
 #
 #   scripts/lorefetch.sh              # pull, build, test, then run the app
-#   scripts/lorefetch.sh setup        # wire this checkout's guards (do this first
+#   scripts/lorefetch.sh setup        # wire the pre-commit hook (do this first
 #                                     # in any fresh clone — see doctor)
-#   scripts/lorefetch.sh doctor       # environment report + guard verdict; fails
-#                                     # if the guards are not live
+#   scripts/lorefetch.sh doctor       # environment report + hook verdict; fails
+#                                     # if the hook is not wired
 #   scripts/lorefetch.sh pull
 #   scripts/lorefetch.sh build
 #   scripts/lorefetch.sh test
@@ -30,8 +30,7 @@
 #   -v, --verbose      show full dotnet output instead of the tail
 #
 # POSIX sh on purpose: on Windows this runs under Git Bash, which is already
-# required by hooks/pre-commit and .claude/hooks/*.sh. Do not reach for bash
-# builtins here.
+# required by hooks/pre-commit. Do not reach for bash builtins here.
 
 set -eu
 
@@ -163,55 +162,31 @@ run_dotnet() {  # $1 = label, rest = args
 # --------------------------------------------------------------------------
 # doctor
 # --------------------------------------------------------------------------
-NOREPLY_RE='^([0-9]+\+)?jnapoli87@users\.noreply\.github\.com$'
-
-# The three pieces of repo-LOCAL config that make this repo's guards real.
-# None of them clone: `hooks/pre-commit` is tracked so the FILE survives a
-# fresh clone, but `core.hooksPath` is config, so the WIRING does not — and
-# `user.email` falls back to the global default, which on these machines is a
-# work address. A fresh clone therefore commits under the WORK identity with
-# the guard that exists to prevent that switched off. Verified on a real clone
-# 2026-09-21.
-guard_problems() {
-  problems=""
-  [ "$(git -C "$REPO" config core.hooksPath 2>/dev/null || true)" = "hooks" ] \
-    || problems="$problems core.hooksPath"
-  email=$(git -C "$REPO" var GIT_AUTHOR_IDENT 2>/dev/null | sed 's/.*<//; s/>.*//' || true)
-  printf '%s' "$email" | grep -Eq "$NOREPLY_RE" || problems="$problems identity"
-  printf '%s' "$problems"
+# `hooks/pre-commit` is tracked, so the FILE survives a fresh clone, but
+# `core.hooksPath` is config, and config does not clone. Until setup runs, the
+# hook silently never fires. CI runs the same checks as the `guards` job, so an
+# unwired hook can no longer let imagery reach main; wiring it just moves the
+# failure to before the push instead of after.
+hooks_wired() {
+  [ "$(git -C "$REPO" config core.hooksPath 2>/dev/null || true)" = "hooks" ]
 }
 
 cmd_setup() {
   say "Setup — repo-local config only, never global"
-  note "The global git identity on these machines is a work address, so this is"
-  note "set per-repo on purpose. Nothing here touches your global config."
-
-  git -C "$REPO" config --local user.name  jnapoli87
-  git -C "$REPO" config --local user.email jnapoli87@users.noreply.github.com
   git -C "$REPO" config --local core.hooksPath hooks
-  note "user.name       = jnapoli87"
-  note "user.email      = jnapoli87@users.noreply.github.com  (noreply: commits"
-  note "                  publish whatever address they carry, and public"
-  note "                  history is hard to rewrite)"
-  note "core.hooksPath  = hooks  (so the TRACKED pre-commit hook actually runs)"
-
-  key="$HOME/.ssh/id_ed25519_personal"
-  if [ -f "$key" ]; then
-    git -C "$REPO" config --local core.sshCommand "ssh -i $key -o IdentitiesOnly=yes"
-    note "core.sshCommand = pinned to id_ed25519_personal"
-  else
-    note "core.sshCommand : SKIPPED — $key not found. GitHub will not accept one"
-    note "                  key on two accounts, so pushing may use the wrong"
-    note "                  identity until that key exists here."
-  fi
-
   chmod +x "$REPO/hooks/pre-commit" 2>/dev/null || true
+  note "core.hooksPath  = hooks  (so the TRACKED pre-commit hook actually runs)"
+  note ""
+  note "Commit identity is yours to set; setup leaves it alone. Commits publish"
+  note "whatever email they carry, so consider your GitHub noreply address:"
+  note "  git config user.email <id>+<username>@users.noreply.github.com"
+  note "author: $(git -C "$REPO" var GIT_AUTHOR_IDENT 2>/dev/null | sed 's/>.*/>/' || echo '?')"
 
-  if [ -n "$(guard_problems)" ]; then
+  if ! hooks_wired; then
     note "STILL MISCONFIGURED after setup — run 'doctor' and read the output."
     exit 1
   fi
-  note "Guards are live. 'doctor' will confirm."
+  note "Hook is wired. 'doctor' will confirm."
 }
 
 cmd_doctor() {
@@ -236,19 +211,10 @@ cmd_doctor() {
     note "MISSING: dotnet is not on PATH."
   fi
 
-  say "Git identity and guard wiring"
+  say "Git identity and hook wiring"
   note "author   : $(git -C "$REPO" var GIT_AUTHOR_IDENT 2>/dev/null || echo '?')"
   note "committer: $(git -C "$REPO" var GIT_COMMITTER_IDENT 2>/dev/null || echo '?')"
   note "hooksPath: $(git -C "$REPO" config core.hooksPath 2>/dev/null || echo '(UNSET — the tracked pre-commit hook does NOT run)')"
-
-  say "Claude Code guards"
-  if command -v jq >/dev/null 2>&1; then
-    note "jq       : $(jq --version)"
-  else
-    note "jq       : MISSING — .claude/hooks/guard-bash.sh fails OPEN without it,"
-    note "           so force-push and unwired-commit checks are off. Install it and"
-    note "           start a new shell so PATH picks it up."
-  fi
 
   say "Solution"
   if sln=$(find_solution); then note "solution : $sln"; else
@@ -256,24 +222,18 @@ cmd_doctor() {
   if app=$(find_app); then note "app      : $app"; else
     note "app      : none yet"; fi
 
-  # A verdict, not just a report. Two of these values being wrong means every
-  # commit from this checkout carries a work address into a PUBLIC repo with
-  # the guard against exactly that switched off — so doctor FAILS on it rather
-  # than mentioning it among a dozen other lines nobody reads to the bottom of.
-  problems=$(guard_problems)
-  if [ -n "$problems" ]; then
-    printf '\n\033[31m%s\033[0m\n' "==> GUARDS ARE NOT LIVE IN THIS CHECKOUT:$problems"
+  # A verdict, not just a report: an unwired hook is silent, so doctor FAILS
+  # on it rather than mentioning it among a dozen lines nobody reads.
+  if ! hooks_wired; then
+    printf '\n\033[31m%s\033[0m\n' "==> THE PRE-COMMIT HOOK IS NOT WIRED IN THIS CHECKOUT"
     note "Run:  scripts/lorefetch.sh setup"
     note ""
-    note "Neither piece survives a clone. hooks/pre-commit is tracked so the"
-    note "FILE arrives, but core.hooksPath is config and config is never"
-    note "cloned — and with user.email unset, git falls back to the global"
-    note "identity, which on these machines is the work address. So a fresh"
-    note "clone commits under the work identity, into a public repo, with the"
-    note "hook that exists to refuse that not running at all."
+    note "hooks/pre-commit is tracked so the FILE arrives, but core.hooksPath is"
+    note "config and config is never cloned. CI's 'guards' check still catches"
+    note "imagery and attribution problems, but only after you push."
     exit 1
   fi
-  printf '\n\033[32m%s\033[0m\n' "==> Guards are live: tracked hook wired, identity is the noreply address."
+  printf '\n\033[32m%s\033[0m\n' "==> Hook is wired: hooks/pre-commit runs on every commit."
 }
 
 # --------------------------------------------------------------------------
