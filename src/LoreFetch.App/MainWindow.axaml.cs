@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -664,12 +665,66 @@ public partial class MainWindow : Window
     /// <summary>
     /// Left-click (Tapped) on a tile's outer Grid → toggle the X opt-out.
     /// </summary>
+    /// <remarks>
+    /// Issue #18: a click inside the type-ahead overlay's own inner TextBox
+    /// bubbles <c>Tapped</c> up to this Grid — the TextBox is a template part
+    /// realised inside the <see cref="AutoCompleteBox"/>, which sits fully
+    /// inside the tile's own visual tree — so without a guard, clicking into
+    /// the box to position the caret or select typed text also toggled the
+    /// tile's X. <see cref="TileViewModel.IsTypeAheadOpen"/> is NOT a
+    /// sufficient guard on its own: picking a dropdown item closes the
+    /// overlay (<see cref="OnTypeAheadSelectionChanged"/> sets it false)
+    /// before <c>Tapped</c> finishes bubbling here, so by the time this
+    /// handler would run for that click the box already reads as closed.
+    /// Walking <paramref name="e"/>'s LOGICAL ancestors from its
+    /// <c>Source</c> catches both: the in-box case (ordinary visual-tree
+    /// bubbling) and, in principle, a click on a dropdown item, since a
+    /// popup's content keeps the control that opened it as its LOGICAL
+    /// parent even though the popup itself renders through a separate visual
+    /// root — crossing exactly the boundary a visual-tree-only check would
+    /// miss.
+    /// <para>
+    /// Empirically verified only for the in-box case: a chaos test (remove
+    /// this check, click the inner TextBox's own coordinates BEFORE any text
+    /// is typed) reproduces the bug — <c>IsExcluded</c> flips to
+    /// <c>true</c> — and the fix stops it. The click has to land before the
+    /// dropdown opens: once <c>IsDropDownOpen</c> is true, Avalonia's own
+    /// <c>LightDismissOverlayLayer</c> covers the whole window and
+    /// <c>InputHitTest</c> at the TextBox's own coordinates resolves to that
+    /// overlay instead (confirmed empirically — neither
+    /// <c>PointerPressed</c>/<c>PointerReleased</c> nor <c>Tapped</c> reach
+    /// the TextBox at all while its own dropdown is open), so this is also
+    /// the only coordinate-clickable window for a real user. The
+    /// dropdown-ITEM case could not be driven through a real, hit-tested
+    /// pointer click at all: <c>TopLevel.GetTopLevel(item)</c> on a realised
+    /// <c>ListBoxItem</c> inside the open popup returns <c>null</c>, so there
+    /// is no coordinate space to click into. Directly raising a synthetic
+    /// <c>Tapped</c> on that item (bypassing hit-testing) did not bubble to
+    /// this Grid either way — with or without this guard — showing
+    /// Avalonia's own routed-event bubbling walks the VISUAL tree and a
+    /// headless popup's content is not visually attached to the owning
+    /// window's tree at all, so this specific path is not exercisable
+    /// headlessly by any technique tried. The guard is kept regardless — it
+    /// is cheap, provably correct for the verified in-box case, and
+    /// consistent with the documented live-app mechanism for the
+    /// dropdown-item case — but that second case is unverified. See
+    /// <c>ManualSetContextMenuTests</c>'s chaos-test notes.
+    /// </para>
+    /// </remarks>
     private void OnTileTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Grid { DataContext: TileViewModel vm })
+        if (sender is not Grid { DataContext: TileViewModel vm })
         {
-            vm.ToggleExcludedFromUi();
+            return;
         }
+
+        if (e.Source is ILogical sourceLogical &&
+            (sourceLogical is AutoCompleteBox || sourceLogical.GetLogicalAncestors().OfType<AutoCompleteBox>().Any()))
+        {
+            return;
+        }
+
+        vm.ToggleExcludedFromUi();
     }
 
     /// <summary>
@@ -740,6 +795,18 @@ public partial class MainWindow : Window
             acb.AsyncPopulator = vm.TypeAheadPopulator;
             acb.MinimumPrefixLength = 2;
             acb.MinimumPopulateDelay = TimeSpan.FromMilliseconds(150);
+
+            // AsyncPopulator already returns the exact ranked matches (prefix
+            // tier, then substring-elsewhere tier — TileViewModel.BuildPopulator).
+            // The control's own default FilterMode is StartsWith, which would
+            // re-filter that list against the raw typed text and silently drop
+            // every substring-elsewhere match the populator deliberately
+            // included — "holding" would then show nothing for "Bag of
+            // Holding". None disables that second filter pass so the
+            // populator's own ordering and membership are what the dropdown
+            // actually displays.
+            acb.FilterMode = AutoCompleteFilterMode.None;
+
             acb.PropertyChanged += OnTypeAheadPropertyChanged;
         }
     }
