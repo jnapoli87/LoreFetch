@@ -70,11 +70,13 @@ public class QuadOverlayGeometryTests
     /// The mirror case: a window shape WIDE relative to its main-content box
     /// height (box aspect &gt; the 16:9 frame's aspect), so the frame's
     /// HEIGHT binds and the content pillarboxes left/right instead — proves
-    /// the fix isn't one-axis-only.
+    /// the fix isn't one-axis-only. The preview shares the width with the
+    /// cohort panel roughly half and half (#17), so the window has to be
+    /// very wide for the preview cell itself to be wider than 16:9.
     [AvaloniaFact]
     public async Task QuadOverlay_PillarboxedWindow_PolygonLandsExactlyOnFrameCorners()
     {
-        await AssertOverlayMatchesTransform(windowWidth: 1600, windowHeight: 900, letterboxed: false);
+        await AssertOverlayMatchesTransform(windowWidth: 2600, windowHeight: 900, letterboxed: false);
     }
 
     /// The detector's corners wobble by a pixel or two on a card lying
