@@ -104,6 +104,12 @@ Accepted costs: full-file rewrite per commit (~300 KB at 10k rows, microseconds)
 
 Dedup identity is **`OracleId` + condition** → increment quantity; the name is display only, because keying on it breaks the first time Scryfall renames a card. **Condition is blank in v1** — the camera can't grade a card and nothing in the scan loop asks, and a column that always says "NM" would be false precision. Blank is a value like any other for dedup. The header row's exact column set is the format version; a reader seeing unknown or missing columns must **fail loudly rather than mis-parse**. Keep a `.bak` of the previous write.
 
+**One file per run, not one forever-file** (issue #20). The user's collection lives in the tool they export to (Moxfield); a LoreFetch file is the batch they scan, export and upload. Each launch starts a new run named after the time, `Documents/LoreFetch/Runs/2026-10-02 14-30.csv`, written only at its first commit. File → Open / Open recent continues an earlier run, and commits merge into it exactly as before. Why:
+- One growing file is the wrong unit to upload: every upload carries all the earlier cards again.
+- A file silently reopened on every launch surprised the user. The grid showed nothing until the first commit, then every earlier card at once.
+
+Only native files open; an export is a lossy, one-way projection, and the header check refuses it. Switching runs is refused while a cohort is pending, so a cohort never commits to a run it wasn't captured for. Recent runs are a listing of the runs folder, not a stored list. `LOREFETCH_COLLECTION` pins one file at startup, for tests and replays. The seam stayed put: `RunStore` is an `ICollectionStore` in the App that delegates to a `CsvCollectionStore` per file, so the contract did not change.
+
 **Revisit when v2 adds printings, prices or scan history** — at that point SQLite earns its place. `ICollectionStore` is the seam, so that swap stays contained. That containment is the argument for starting simple, not a reason to pre-build for v2.
 
 ## Scope
