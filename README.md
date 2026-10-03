@@ -71,7 +71,7 @@ The **Dist** column is how many of the 1024 fingerprint bits differ from the clo
 
 Perceptual hash, not OCR — at overhead height the card name is about five pixels tall, so nothing reads text.
 
-Each card is found by contour (63:88 aspect ratio, minimum area), perspective-corrected, reduced to a 32×32 thumbnail, and turned into a 1024-bit fingerprint matched by Hamming distance against **47,418 artworks** indexed from Scryfall. Detection would rather find nothing than guess: a rejected contour is logged with its reason instead of being hashed.
+Each card is found by contour (63:88 aspect ratio, minimum area), perspective-corrected, reduced to a 32×32 thumbnail, and turned into a 1024-bit fingerprint matched by Hamming distance against **47,480 artworks** indexed from Scryfall. Detection would rather find nothing than guess: a rejected contour is logged with its reason instead of being hashed.
 
 The hash is a port of [CardSpotter](https://github.com/relgin/cardspotter) (BSD-3-Clause). Finding the cards is ours — CardSpotter identifies a card you click on.
 
@@ -100,7 +100,7 @@ Method and every recorded run: [`docs/accuracy.md`](docs/accuracy.md). The numbe
 - **Leave a finger-width gap.** Cards touching edge-to-edge merge into one contour and are never split apart.
 - **Basic lands** all resolve to the same name, whatever the art.
 - **Dark mats hurt detection.** A black-bordered card on a black mat has no edge to find.
-- **New sets need a new index.** Rebuild it with the Lab tool (`bulk` → `images` → `build-index`; ~5 GB on the first run), or download an updated index from the releases page.
+- **New sets need a new index.** Each release ships the index current when it was built. To rebuild it yourself, see [Refreshing the index](src/LoreFetch.Lab/README.md#refreshing-the-index) (~5 GB of card images on the first run).
 - **Windows x64 only.** The code is portable and CI runs on macOS, but macOS camera capture is broken upstream ([FlashCap #182](https://github.com/kekyo/FlashCap/issues/182)) — build from source, unsupported.
 
 ## Export
