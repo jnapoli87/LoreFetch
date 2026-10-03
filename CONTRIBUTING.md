@@ -28,7 +28,7 @@ The reasoning goes in commit messages and code comments, where it stays with the
 
 The version lives in one place, the tag. CI builds the zip from it (`.github/workflows/release.yml`), so no local build ever ships.
 
-1. **Notes PR.** Add `docs/release-notes/vX.Y.Z.md`: what changed for someone using the app, and anything they must do differently. Merge it like any other PR. The release workflow refuses a tag that has no notes file.
+1. **Notes PR.** Add `docs/release-notes/vX.Y.Z.md`: what changed for someone using the app, and anything they must do differently. It is the one PR that needs no issue first: branch `docs/release-notes-vX.Y.Z`, and CI and squash-merge as usual. The release workflow refuses a tag that has no notes file.
 2. **Tag `main` and push the tag:**
    ```bash
    git fetch origin && git tag -a vX.Y.Z origin/main -m "LoreFetch vX.Y.Z" && git push origin vX.Y.Z
