@@ -33,6 +33,10 @@ public sealed class CollectionViewModel : ObservableObject
     private readonly ICollectionStore? _store;
     private readonly TimeZoneInfo _displayTimeZone;
 
+    // Bumped by every LoadAsync; a load whose read finishes after a newer
+    // load started drops its rows (see LoadAsync). UI thread only.
+    private int _loadGeneration;
+
     /// <param name="store">
     /// Collection store to read from. When <c>null</c>, <see cref="LoadAsync"/>
     /// and <see cref="ExportToStreamAsync"/> are no-ops (empty rows).
@@ -65,8 +69,37 @@ public sealed class CollectionViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(HasRows));
+            OnPropertyChanged(nameof(CardCount));
+            OnPropertyChanged(nameof(HeaderText));
         };
     }
+
+    private string? _runName;
+
+    /// <summary>
+    /// The open run's name (issue #20), shown in <see cref="HeaderText"/> so
+    /// the panel always says which file it is showing. Null when there is no
+    /// run file (Fakes mode).
+    /// </summary>
+    public string? RunName
+    {
+        get => _runName;
+        set
+        {
+            if (SetProperty(ref _runName, value))
+                OnPropertyChanged(nameof(HeaderText));
+        }
+    }
+
+    /// <summary>
+    /// Cards in <see cref="Rows"/>, counting quantities: nine Forests are
+    /// nine cards, matching what a commit reports.
+    /// </summary>
+    public int CardCount => Rows.Sum(r => r.Quantity);
+
+    /// <summary>The panel header, e.g. "Run: 2026-10-02 14-30 · 37 cards".</summary>
+    public string HeaderText =>
+        $"{(RunName is null ? "Collection" : "Run: " + RunName)} · {CardCount} {(CardCount == 1 ? "card" : "cards")}";
 
     /// <summary>
     /// Rows from the collection store, bound to the DataGrid. Populated by
@@ -101,13 +134,23 @@ public sealed class CollectionViewModel : ObservableObject
     /// cross a thread boundary while the DataGrid observes them.
     /// Returns immediately when no store is wired.
     /// </summary>
+    /// <remarks>
+    /// When loads overlap, the one started last wins. The store can be
+    /// pointed at another run between two loads (issue #20): a reload
+    /// started for the old run that finishes after the switch must not
+    /// show the old run's rows under the new run's name.
+    /// </remarks>
     public async Task LoadAsync(CancellationToken ct)
     {
         if (_store is null) return;
 
+        var generation = ++_loadGeneration;
+
         // No ConfigureAwait(false) — continuation stays on the UI thread so
         // Rows.Clear() / Rows.Add() run there and the DataGrid binding is safe.
         var rows = await _store.ListAsync(ct);
+        if (generation != _loadGeneration) return;
+
         Rows.Clear();
         foreach (var row in rows)
             Rows.Add(new CollectionRowItem(row, _displayTimeZone));

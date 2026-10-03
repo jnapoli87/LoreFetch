@@ -30,13 +30,13 @@ Video of one full pass — open the app, scan, export, import into Moxfield — 
 
 | Environment variable | Effect |
 |---|---|
-| `LOREFETCH_COLLECTION` | Where the collection CSV is written |
+| `LOREFETCH_COLLECTION` | Open this run file at startup instead of starting a new run |
 | `LOREFETCH_FRAMES_DIR` | Read a folder of images instead of the camera |
 | `LOREFETCH_MODE=fakes` | Stand-in pipeline for UI testing — never reports a real match |
 
 ## Using it
 
-One window: live preview with card outlines on the left, the capture grid on the right, your collection docked below.
+One window: live preview with card outlines on the left, the capture grid on the right, the open run docked below.
 
 | Key / action | Effect |
 |---|---|
@@ -51,6 +51,18 @@ The happy path is space, enter, space, enter — no mouse. Capture only fills th
 **Tile borders:** none = confident · amber = low confidence, worth a look · red = unresolved, right-click to set · grey with ✕ = excluded · blue with **M** = set by hand.
 
 **Auto mode** captures on its own once the expected count (1, 3 or 9) holds still for 500 ms. It fires once per scene, then waits for the count to change — so swapping one card for another won't re-fire. Press Space for that.
+
+**Runs.** Each launch starts a new, empty run: one CSV per scanning batch, named after the time it started and saved to `Documents\LoreFetch\Runs\` as you commit. Nothing is written until the first Enter. The title bar and the panel header name the open run.
+
+| File menu | Effect |
+|---|---|
+| **New run** (Ctrl+N) | Start another empty run. |
+| **Open…** (Ctrl+O) / **Open recent** | Continue an earlier run; new cards merge into it. Only LoreFetch runs open, not exports. |
+| **Rename run…** | Rename the open run's file. |
+| **Show in folder** | Open the folder holding the run. |
+| **Export** | Same as the export panel. |
+
+Commit or discard a pending capture before switching runs.
 
 The **Dist** column is how many of the 1024 fingerprint bits differ from the closest card in the index. Lower is better. Sort by it to audit your own worst matches.
 
@@ -91,7 +103,7 @@ Method and every recorded run: [`docs/accuracy.md`](docs/accuracy.md). The numbe
 
 ## Export
 
-The collection is a plain CSV you own — UTF-8 with BOM, so Excel opens accented card names intact. It exports as itself, or as **Moxfield**, verified by a real import on 2026-09-22.
+Each run is a plain CSV you own — UTF-8 with BOM, so Excel opens accented card names intact. It exports as itself, or as **Moxfield**, verified by a real import on 2026-09-22. Your collection lives in Moxfield: export each run and upload it there.
 
 > [!IMPORTANT]
 > **Upload it under Collection, not as a decklist.** Use the CSV upload at [moxfield.com/collection](https://moxfield.com/collection). The decklist box on Moxfield's home page will not ingest the file correctly.

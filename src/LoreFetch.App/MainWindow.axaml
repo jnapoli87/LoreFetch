@@ -19,6 +19,31 @@
     </Border>
 
     <!--
+      Issue #20: the File menu. A run is one native CSV per scanning batch;
+      these switch which one the window writes to. The run commands are
+      disabled in code-behind when the session has no run file (Fakes mode).
+      Open recent and Export are filled in code-behind: recent runs are
+      listed fresh each time File opens, and exporters come from the
+      session, never named here.
+      HotKey (not a window KeyBinding) for Ctrl+N / Ctrl+O; the scan keys
+      stay with the tunnel handler (docs/design/app.md A6 warning).
+    -->
+    <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="#2D2D2D">
+      <MenuItem x:Name="FileMenu" Header="_File" SubmenuOpened="OnFileMenuOpened">
+        <MenuItem x:Name="NewRunMenuItem" Header="_New run"
+                  InputGesture="Ctrl+N" HotKey="Ctrl+N" Click="OnNewRunClick" />
+        <MenuItem x:Name="OpenRunMenuItem" Header="_Open…"
+                  InputGesture="Ctrl+O" HotKey="Ctrl+O" Click="OnOpenRunClick" />
+        <MenuItem x:Name="RecentRunsMenuItem" Header="Open _recent" />
+        <Separator />
+        <MenuItem x:Name="RenameRunMenuItem" Header="Re_name run…" Click="OnRenameRunClick" />
+        <MenuItem x:Name="ShowRunInFolderMenuItem" Header="_Show in folder" Click="OnShowRunInFolderClick" />
+        <Separator />
+        <MenuItem x:Name="ExportMenuItem" Header="_Export" />
+      </MenuItem>
+    </Menu>
+
+    <!--
       A4: expected-count selector (1 / 3 / 9) and auto-capture toggle.
       DataContext is set in code-behind to a MainViewModel — never
       bound here by name, because the root window is the DataContext
@@ -130,12 +155,37 @@
     </Border>
 
     <!--
+      Issue #20: notice banner. Says why a File-menu action was refused or
+      failed (a pending cohort, a file that isn't a run). Dismissed by hand
+      and cleared by the next successful run switch.
+    -->
+    <Border x:Name="NoticeBanner"
+            DockPanel.Dock="Top"
+            Background="#24425E"
+            Padding="8,5"
+            IsVisible="{Binding HasNotice}"
+            x:DataType="vm:MainViewModel">
+      <DockPanel>
+        <Button DockPanel.Dock="Right"
+                Content="Dismiss"
+                Click="OnNoticeDismissClick"
+                Margin="8,0,0,0" />
+        <TextBlock x:Name="NoticeText"
+                   Text="{Binding NoticeMessage}"
+                   Foreground="White"
+                   FontSize="12"
+                   VerticalAlignment="Center"
+                   TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
+
+    <!--
       A8: Collection DataGrid and export picker.
       DataContext is set in code-behind to a CollectionViewModel.
       Docked Bottom BEFORE the scan Grid so the scan area fills remaining space.
 
       Layout:
-        Row 0 — header bar: "Collection" label, Refresh button
+        Row 0 — header bar: run name and card count, Refresh button
         Row 1 — split: DataGrid (left) | export sidebar (right)
 
       The export sidebar shows a ListBox (not a ComboBox) so all items are
@@ -161,7 +211,9 @@
                   Content="Refresh"
                   Click="OnRefreshCollectionClick"
                   Margin="0,0,4,0" />
-          <TextBlock Text="Collection"
+          <!-- Issue #20: names the open run and its card count. -->
+          <TextBlock x:Name="CollectionHeaderText"
+                     Text="{Binding HeaderText}"
                      Foreground="#AAAAAA"
                      FontWeight="SemiBold"
                      VerticalAlignment="Center" />
