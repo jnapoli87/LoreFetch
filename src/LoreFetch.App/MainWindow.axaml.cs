@@ -245,18 +245,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// "Export…" button click — opens a save-file dialog and writes the
-    /// collection via the selected exporter. The dialog supplies the stream;
+    /// File > Export entry click — opens a save-file dialog and writes the
+    /// collection via that entry's exporter. The dialog supplies the stream;
     /// the actual write is delegated to
     /// <see cref="CollectionViewModel.ExportToStreamAsync"/> so tests can
     /// call that method directly with a <see cref="MemoryStream"/>.
     /// </summary>
-    private void OnExportClick(object? sender, RoutedEventArgs e)
-    {
-        if (ExporterList.SelectedItem is not ExporterItem item) return;
-        _ = ExportAsync(item.Exporter);
-    }
-
     private async Task ExportAsync(ICollectionExporter exporter)
     {
         var topLevel = GetTopLevel(this);
@@ -323,16 +317,18 @@ public partial class MainWindow : Window
         Title = _runs is null ? "LoreFetch" : $"LoreFetch — {_runs.Name}";
     }
 
-    /// One Export entry per session exporter, the same list the sidebar
-    /// shows. Built here rather than bound in XAML so the window, like the
-    /// sidebar, never names a format.
+    /// One Export entry per session exporter. Built here rather than bound in
+    /// XAML so the window never names a format. An exporter never proven by a
+    /// real import says so in its entry (collection.md "Fallbacks": marked
+    /// unverified in the UI picker).
     private void BuildExportMenu()
     {
         ExportMenuItem.Items.Clear();
         foreach (var item in _collectionVm.ExporterItems)
         {
             var exporter = item.Exporter;
-            var menuItem = new MenuItem { Header = PlainHeader(item.DisplayName) };
+            var label = item.IsUnverified ? $"{item.DisplayName} (unverified)" : item.DisplayName;
+            var menuItem = new MenuItem { Header = PlainHeader(label) };
             menuItem.Click += (_, _) => _ = ExportAsync(exporter);
             ExportMenuItem.Items.Add(menuItem);
         }

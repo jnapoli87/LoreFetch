@@ -180,20 +180,18 @@
     </Border>
 
     <!--
-      A8: Collection DataGrid and export picker.
+      A8: Collection DataGrid.
       DataContext is set in code-behind to a CollectionViewModel.
       Docked Bottom BEFORE the scan Grid so the scan area fills remaining space.
 
       Layout:
         Row 0 — header bar: run name and card count, Refresh button
-        Row 1 — split: DataGrid (left) | export sidebar (right)
+        Row 1 — DataGrid, full width
 
-      The export sidebar shows a ListBox (not a ComboBox) so all items are
-      always instantiated in the visual tree — which lets the visual-tree test
-      confirm the "unverified" badge without opening a dropdown.
+      Export lives in File > Export only. The panel used to carry its own
+      export sidebar; it duplicated the menu and cost the grid 210px.
 
       CollectionGrid is named so visual-tree tests can find it directly.
-      ExporterList is named so code-behind reads SelectedItem on export.
     -->
     <Grid DockPanel.Dock="Bottom"
           RowDefinitions="Auto, 165"
@@ -220,23 +218,21 @@
         </DockPanel>
       </Border>
 
-      <!-- Row 1: DataGrid + export sidebar -->
-      <Grid Grid.Row="1" ColumnDefinitions="*, 210">
+      <!-- Row 1: DataGrid -->
+      <Grid Grid.Row="1">
 
         <!--
-          Column 0: DataGrid over ICollectionStore rows.
+          DataGrid over ICollectionStore rows.
           CanUserSortColumns="True" — DataGrid sorts natively when the column
           header is clicked; no custom sort comparer needed for simple fields.
           IsReadOnly="True" — v1 never edits rows through the UI.
 
           A9: EmptyCollectionHint overlays the DataGrid and is only visible
-          when Rows is empty (IsEmpty=true). Grid stacking (all children
-          in cell 0,0) means the DataGrid and the placeholder coexist in
-          the same column; ZIndex is not needed because the DataGrid is
-          transparent when empty.
+          when Rows is empty (IsEmpty=true). Grid stacking (both children
+          in the one cell) means the DataGrid and the placeholder coexist;
+          ZIndex is not needed because the DataGrid is transparent when empty.
         -->
         <DataGrid x:Name="CollectionGrid"
-                  Grid.Column="0"
                   ItemsSource="{Binding Rows}"
                   Background="#181818"
                   RowBackground="#181818"
@@ -284,13 +280,12 @@
 
         <!--
           A9: Empty-collection placeholder. Overlaid on the DataGrid
-          (same Grid.Column="0") and visible only when Rows is empty.
+          (same Grid cell) and visible only when Rows is empty.
           When rows are present the DataGrid is populated and this
           TextBlock is hidden. IsHitTestVisible="False" so it never
           intercepts clicks intended for the DataGrid.
         -->
         <TextBlock x:Name="EmptyCollectionHint"
-                   Grid.Column="0"
                    Text="No cards yet — start scanning"
                    IsVisible="{Binding IsEmpty}"
                    IsHitTestVisible="False"
@@ -298,71 +293,6 @@
                    VerticalAlignment="Center"
                    Foreground="#555555"
                    FontSize="13" />
-
-        <!--
-          Column 1: export picker sidebar.
-          ExporterList shows one row per ICollectionExporter with a
-          visible "unverified" badge on any whose IsVerified is false.
-          The badge is a Border whose IsVisible is bound to IsUnverified so
-          the visual-tree test can find it by walking the tree.
-          No per-format code exists here — the UI iterates ExporterItems
-          generically and never names any concrete exporter or format.
-        -->
-        <DockPanel Grid.Column="1"
-                   Background="#202020"
-                   LastChildFill="True">
-
-          <!-- Export button anchored to the bottom -->
-          <Button DockPanel.Dock="Bottom"
-                  Content="Export…"
-                  Click="OnExportClick"
-                  HorizontalAlignment="Stretch"
-                  Margin="8,4" />
-
-          <!-- "Export Format" label at the top -->
-          <TextBlock DockPanel.Dock="Top"
-                     Text="Export Format"
-                     Foreground="#888888"
-                     FontSize="10"
-                     Margin="8,6,8,2" />
-
-          <!--
-            ListBox (not ComboBox): all items are in the visual tree at all
-            times, so the test can confirm the "unverified" badge without
-            needing to open a dropdown.
-          -->
-          <ListBox x:Name="ExporterList"
-                   ItemsSource="{Binding ExporterItems}"
-                   SelectionMode="Single"
-                   Background="Transparent">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:ExporterItem">
-                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding DisplayName}"
-                             Foreground="#CCCCCC"
-                             FontSize="11"
-                             VerticalAlignment="Center" />
-                  <!--
-                    Unverified badge: IsVisible is bound to IsUnverified on the
-                    Border itself so the visual-tree test can filter on Border.IsVisible
-                    (the TextBlock child does NOT duplicate the binding — searching
-                    for the Border is more specific and unambiguous).
-                  -->
-                  <Border Background="#883333"
-                          CornerRadius="2"
-                          Padding="3,1"
-                          IsVisible="{Binding IsUnverified}"
-                          VerticalAlignment="Center">
-                    <TextBlock Text="unverified"
-                               Foreground="White"
-                               FontSize="9" />
-                  </Border>
-                </StackPanel>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-
-        </DockPanel>
       </Grid>
     </Grid>
 
