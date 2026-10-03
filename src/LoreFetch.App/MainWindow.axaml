@@ -428,7 +428,11 @@
                     IsExcluded      → grey border + dark overlay + ✕ text
                     IsManuallySet   → blue border + M badge
                 -->
-                <Grid Width="80" Height="141" Margin="4,4,0,0"
+                <!-- x:Name="CohortTile": lets tests find this Grid by name
+                     rather than by its literal Width/Height, which is about
+                     to change in #17 (tile widening) and would otherwise
+                     silently break every test that looked it up by size. -->
+                <Grid x:Name="CohortTile" Width="80" Height="141" Margin="4,4,0,0"
                       Tapped="OnTileTapped">
                   <!--
                     A6: Context menu — two items as specified:
@@ -545,14 +549,26 @@
                     predictable than explicit C# assignment.
 
                     Loaded="OnTypeAheadLoaded"     — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
-                    SelectionChanged="…"           — calls SetManuallyFromUi + closes overlay
+                    SelectionChanged / DropDownClosed — pick the selected entry once the
+                                                     dropdown is closed (arrowing only highlights)
+                  -->
+                  <!--
+                    Issue #18: HorizontalAlignment="Stretch" so the box spans
+                    the full tile width over the name strip rather than
+                    sizing to its (empty) content — a content-sized box left
+                    almost no room to type or to see the dropdown's own text.
+                    Minimal on purpose: #17 widens the whole tile, and this
+                    box should keep spanning it once that lands, not be
+                    redesigned twice.
                   -->
                   <AutoCompleteBox IsVisible="{Binding IsTypeAheadOpen}"
                                    PlaceholderText="Set card manually…"
+                                   HorizontalAlignment="Stretch"
                                    VerticalAlignment="Bottom"
                                    ZIndex="200"
                                    Loaded="OnTypeAheadLoaded"
-                                   SelectionChanged="OnTypeAheadSelectionChanged" />
+                                   SelectionChanged="OnTypeAheadSelectionChanged"
+                                   DropDownClosed="OnTypeAheadDropDownClosed" />
 
                 </Grid>
               </DataTemplate>

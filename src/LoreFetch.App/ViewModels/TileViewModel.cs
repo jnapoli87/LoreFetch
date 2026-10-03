@@ -243,11 +243,14 @@ public sealed class TileViewModel : ObservableObject
     /// <remarks>
     /// The populator:
     /// <list type="bullet">
-    ///   <item>Yields to a background thread before scanning.</item>
+    ///   <item>Runs the scan on a thread-pool thread via <c>Task.Run</c>, so the
+    ///   33k-entry catalog scan never blocks UI renders.</item>
     ///   <item>Honours the <see cref="CancellationToken"/> — keystroke N cancels N−1.</item>
-    ///   <item>Returns <see cref="CohortTile.Candidates"/> runners-up first, then
-    ///   <see cref="IOracleCatalog.All"/> matches, deduped by OracleId.</item>
-    ///   <item>Filters by <c>StartsWithOrdinal</c> (no culture work).</item>
+    ///   <item>Matches <c>OrdinalIgnoreCase</c> (no culture work) in two tiers:
+    ///   names that start with the typed text, then names that merely contain
+    ///   it elsewhere. Within each tier, <see cref="CohortTile.Candidates"/>
+    ///   runners-up are scanned before <see cref="IOracleCatalog.All"/>, deduped
+    ///   by OracleId.</item>
     ///   <item>Caps results at 20 regardless of catalog size.</item>
     ///   <item>Returns an empty sequence — never throws — when the catalog is null.</item>
     /// </list>
@@ -257,47 +260,76 @@ public sealed class TileViewModel : ObservableObject
     private static Func<string?, CancellationToken, Task<IEnumerable<object>>> BuildPopulator(
         CohortTile tile, IOracleCatalog? catalog)
     {
-        return async (prefix, ct) =>
+        return (prefix, ct) =>
         {
             if (string.IsNullOrEmpty(prefix) || prefix.Length < 2)
             {
-                return Array.Empty<object>();
+                return Task.FromResult<IEnumerable<object>>(Array.Empty<object>());
             }
 
-            // Filter off the UI thread so the 33k scan never blocks renders.
-            await Task.Yield();
-            ct.ThrowIfCancellationRequested();
-
-            var results = new List<CatalogItem>(20);
-            var seen = new HashSet<string>(StringComparer.Ordinal); // dedupe by OracleId
-
-            // --- Runners-up first: the identifier's ranked candidate list ---
-            foreach (var c in tile.Candidates)
+            // Run the scan on a thread-pool thread (not Task.Yield — on the UI
+            // thread that resumes back on the UI thread, which defeated the
+            // original "filter off the UI thread" intent for the 33k catalog).
+            return Task.Run<IEnumerable<object>>(() =>
             {
                 ct.ThrowIfCancellationRequested();
-                if (c.OracleName.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(c.OracleId))
-                {
-                    results.Add(new CatalogItem(c.OracleId, c.OracleName));
-                    if (results.Count >= 20) return results;
-                }
-            }
 
-            // --- Then catalog matches, deduped against the runners-up already in results ---
-            if (catalog != null)
-            {
-                foreach (var e in catalog.All)
+                var results = new List<CatalogItem>(20);
+                var seen = new HashSet<string>(StringComparer.Ordinal); // dedupe by OracleId
+
+                // Two tiers — prefix matches, then substring-elsewhere matches —
+                // so "holding" still finds "Bag of Holding", ranked after any
+                // name that actually starts with what was typed. Within each
+                // tier, the tile's own runners-up come before the wider catalog.
+                AddMatches(tile.Candidates.Select(c => (c.OracleId, c.OracleName)), prefix, startsWith: true, results, seen, ct);
+                if (catalog != null)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    if (e.OracleName.StartsWith(prefix, StringComparison.Ordinal) && seen.Add(e.OracleId))
+                    AddMatches(catalog.All.Select(e => (e.OracleId, e.OracleName)), prefix, startsWith: true, results, seen, ct);
+                }
+                if (results.Count < 20)
+                {
+                    AddMatches(tile.Candidates.Select(c => (c.OracleId, c.OracleName)), prefix, startsWith: false, results, seen, ct);
+                    if (catalog != null && results.Count < 20)
                     {
-                        results.Add(new CatalogItem(e.OracleId, e.OracleName));
-                        if (results.Count >= 20) return results;
+                        AddMatches(catalog.All.Select(e => (e.OracleId, e.OracleName)), prefix, startsWith: false, results, seen, ct);
                     }
                 }
-            }
 
-            return results;
+                return results;
+            }, ct);
         };
+    }
+
+    /// <summary>
+    /// Scans <paramref name="entries"/> for names matching <paramref name="text"/>
+    /// — either <c>StartsWith</c> or a plain <c>Contains</c> elsewhere in the
+    /// name, both <c>OrdinalIgnoreCase</c> — appending new (deduped, capped at
+    /// 20) matches to <paramref name="results"/>. Called twice per tier (tile
+    /// candidates, then catalog) so the caller controls ordering without
+    /// duplicating the scan loop four times.
+    /// </summary>
+    private static void AddMatches(
+        IEnumerable<(string OracleId, string OracleName)> entries,
+        string text,
+        bool startsWith,
+        List<CatalogItem> results,
+        HashSet<string> seen,
+        CancellationToken ct)
+    {
+        foreach (var (oracleId, oracleName) in entries)
+        {
+            if (results.Count >= 20) return;
+            ct.ThrowIfCancellationRequested();
+
+            var isMatch = startsWith
+                ? oracleName.StartsWith(text, StringComparison.OrdinalIgnoreCase)
+                : oracleName.Contains(text, StringComparison.OrdinalIgnoreCase);
+
+            if (isMatch && seen.Add(oracleId))
+            {
+                results.Add(new CatalogItem(oracleId, oracleName));
+            }
+        }
     }
 
     // ------------------------------------------------------------------

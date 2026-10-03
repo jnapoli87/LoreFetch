@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -61,12 +62,13 @@ public class ManualSetContextMenuTests
     }
 
     /// <summary>
-    /// Finds the tile's outer Grid (80×141, per the DataTemplate in
-    /// MainWindow.axaml), right-clicks it via the real headless pointer
-    /// pipeline to open its ContextMenu, finds the real "Set card manually…"
-    /// MenuItem inside that open menu and raises its real Click event — then
-    /// asserts the type-ahead AutoCompleteBox becomes visible AND focused,
-    /// and that choosing an entry sets the tile to ManuallySet.
+    /// Finds the tile's outer Grid by its x:Name ("CohortTile" — not its
+    /// literal Width/Height, which #17 will change), right-clicks it via the
+    /// real headless pointer pipeline to open its ContextMenu, finds the real
+    /// "Set card manually…" MenuItem inside that open menu and raises its
+    /// real Click event — then asserts the type-ahead AutoCompleteBox becomes
+    /// visible AND focused, and that choosing an entry sets the tile to
+    /// ManuallySet.
     /// </summary>
     [AvaloniaFact]
     public void RightClick_SetCardManually_OpensFocusedTypeAhead_AndSelectionSetsManuallySet()
@@ -85,7 +87,7 @@ public class ManualSetContextMenuTests
 
         var tileGrid = window.GetVisualDescendants()
             .OfType<Grid>()
-            .FirstOrDefault(g => g.Width == 80 && g.Height == 141);
+            .FirstOrDefault(g => g.Name == "CohortTile");
         Assert.NotNull(tileGrid);
 
         var contextMenu = tileGrid!.ContextMenu;
@@ -215,7 +217,7 @@ public class ManualSetContextMenuTests
 
         var tileGrid = window.GetVisualDescendants()
             .OfType<Grid>()
-            .FirstOrDefault(g => g.Width == 80 && g.Height == 141);
+            .FirstOrDefault(g => g.Name == "CohortTile");
         Assert.NotNull(tileGrid);
 
         var contextMenu = tileGrid!.ContextMenu;
@@ -272,6 +274,367 @@ public class ManualSetContextMenuTests
             $"steals it back first; actual focus: {focused?.GetType().Name ?? "null"}");
 
         window.Close();
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #18: "Set card manually…" didn't work by typing — these tests
+    // drive REAL text input (window.KeyTextInput), REAL keyboard navigation
+    // (window.KeyPressQwerty) and REAL pointer clicks through the box's own
+    // TextBox, never TileViewModel or AutoCompleteBox.Text/SelectedItem set
+    // directly — exactly the gap that let this regress twice while headless
+    // tests passed (see the type-level remarks above and CLAUDE.md's issue
+    // description). Chaos-test results are at the bottom of this file.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Typing a lowercase, mixed-case prefix ("bag o") must find "Bag of
+    /// Holding" (stored title-cased) in what the dropdown actually DISPLAYS,
+    /// and picking it with the keyboard must set the tile — all without
+    /// Enter ever reaching <see cref="MainWindow.OnEnterAsync"/> and
+    /// committing the whole pending cohort.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_TypingCaseInsensitivePrefix_FindsCardInDropdown_AndKeyboardPickSetsManuallySet()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+            new OracleEntry("oracle-decoy1", "Decoy Card One"),
+            new OracleEntry("oracle-decoy2", "Decoy Card Two"),
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        // Real text input, lowercase and mid-word-cased against the stored
+        // "Bag of Holding" — the exact case-sensitivity gap this issue fixes.
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+
+        // Assert against what the dropdown actually DISPLAYS — the
+        // control's own FilterMode is one of the three fixed causes, so the
+        // populator returning the right thing is not enough on its own.
+        var displayed = DisplayedDropdownNames(acb);
+        Assert.Contains("Bag of Holding", displayed);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(TileState.ManuallySet, tileVm.State);
+        Assert.Equal("Bag of Holding", tileVm.DisplayName);
+        Assert.False(tileVm.IsExcluded);
+
+        // Enter went to the focused box, so the window's tunnel handler bailed
+        // and OnEnterAsync never ran — the cohort is still loaded.
+        Assert.Single(vm.Tiles);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Arrow keys move the dropdown's highlight; they must not pick. Found
+    /// live: the first ArrowDown set the tile to the top entry and closed the
+    /// list, so only the first match was ever reachable by keyboard. Enter
+    /// picks the highlighted entry.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_ArrowKeysOnlyHighlight_EnterPicksTheHighlightedEntry()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+            new OracleEntry("oracle-bot", "Bag of Tricks"),
+            new OracleEntry("oracle-bod", "Bag of Devouring"),
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+        var third = DisplayedDropdownNames(acb)[2];
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(tileVm.IsManuallySet, "Arrow keys must only move the highlight, not pick an entry.");
+        Assert.True(tileVm.IsTypeAheadOpen, "The overlay must stay open while arrowing through the list.");
+        Assert.True(acb.IsDropDownOpen, "The dropdown must stay open while arrowing through the list.");
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(TileState.ManuallySet, tileVm.State);
+        Assert.Equal(third, tileVm.DisplayName);
+        Assert.False(tileVm.IsTypeAheadOpen, "Overlay must close after Enter picks an entry.");
+        Assert.Single(vm.Tiles); // Enter went to the box, not to the cohort commit
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Escape abandons the dropdown without picking, even with an entry
+    /// highlighted.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_EscapeWithAnEntryHighlighted_LeavesTheTileUnchanged()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+            new OracleEntry("oracle-bot", "Bag of Tricks"),
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(tileVm.IsManuallySet, "Escape must not pick the highlighted entry.");
+        Assert.Equal("Lightning Bolt", tileVm.DisplayName);
+        Assert.Single(vm.Tiles); // Escape in the box must not clear the cohort
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Typing text that matches the MIDDLE of one name and the START of
+    /// another must surface both, with the prefix match ranked first — the
+    /// two-tier ranking <see cref="TileViewModel"/>'s populator now applies.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_TypingSubstring_FindsBothMatches_PrefixRankedBeforeSubstring()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-hc", "Holding Cell"),    // starts with "Holding"
+            new OracleEntry("oracle-boh", "Bag of Holding"), // contains "Holding" only in the middle
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        window.KeyTextInput("holding");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+
+        var displayed = DisplayedDropdownNames(acb);
+        Assert.Contains("Holding Cell", displayed);
+        Assert.Contains("Bag of Holding", displayed);
+        Assert.True(
+            displayed.IndexOf("Holding Cell") < displayed.IndexOf("Bag of Holding"),
+            $"Expected the prefix match ('Holding Cell') before the substring-elsewhere match " +
+            $"('Bag of Holding'); displayed order was: {string.Join(", ", displayed)}");
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// A real pointer click inside the box's own <c>TextBox</c> part (e.g.
+    /// positioning the caret before typing) must not toggle the tile's X. A
+    /// pointer pick of a dropdown item must set the tile and must also not
+    /// toggle the X.
+    /// </summary>
+    /// <remarks>
+    /// The TextBox click is sent before any text is typed. Once the dropdown
+    /// is open, Avalonia's light-dismiss overlay covers the window and a
+    /// click at the TextBox's coordinates never reaches it. The dropdown item
+    /// can't be hit-tested headlessly (the popup has no top level), so
+    /// <see cref="ClickDropdownItem"/> raises the press and release on the
+    /// item directly; the box's own selection adapter still handles them.
+    /// </remarks>
+    [AvaloniaFact]
+    public async Task TypeAhead_PointerClickInTextBox_DoesNotToggleExcluded_AndSelectingItemSetsManuallySet()
+    {
+        var catalog = new InlineOracleCatalog([new OracleEntry("oracle-boh", "Bag of Holding")]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+        Assert.False(acb.IsDropDownOpen, "Precondition: dropdown must still be closed for the click below to be hit-testable.");
+
+        // Real pointer click inside the box's own TextBox part, before
+        // typing. This bubbles Tapped up through the AutoCompleteBox to the
+        // tile Grid (both are fully inside the window's own visual tree).
+        var innerTextBox = acb.GetVisualDescendants().OfType<TextBox>().First();
+        var tbCenter = innerTextBox.TranslatePoint(
+            new Point(innerTextBox.Bounds.Width / 2, innerTextBox.Bounds.Height / 2), window);
+        Assert.NotNull(tbCenter);
+        window.MouseDown(tbCenter!.Value, MouseButton.Left);
+        window.MouseUp(tbCenter!.Value, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(tileVm.IsExcluded, "Clicking inside the type-ahead TextBox must not toggle the X.");
+
+        // Now type to open the dropdown, then pick an item.
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+
+        var popup = acb.GetVisualDescendants().OfType<Popup>().First();
+        var item = popup.Child!.GetVisualDescendants().OfType<ListBoxItem>().First();
+        ClickDropdownItem(item);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(TileState.ManuallySet, tileVm.State);
+        Assert.Equal("Bag of Holding", tileVm.DisplayName);
+        Assert.False(tileVm.IsExcluded, "Selecting a dropdown item must not toggle the X.");
+
+        window.Close();
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared helpers for the typing/pointer tests above
+    // -----------------------------------------------------------------------
+
+    /// <summary>Finds the single cohort tile's outer Grid by its x:Name.</summary>
+    private static Grid FindTileGrid(MainWindow window)
+    {
+        var tileGrid = window.GetVisualDescendants().OfType<Grid>().FirstOrDefault(g => g.Name == "CohortTile");
+        Assert.NotNull(tileGrid);
+        return tileGrid!;
+    }
+
+    /// <summary>
+    /// Right-clicks <paramref name="tileGrid"/> to open its real
+    /// <c>ContextMenu</c>, raises the real "Set card manually…"
+    /// <c>MenuItem.Click</c>, closes the menu and returns the tile's
+    /// <c>AutoCompleteBox</c> — the same opening sequence the tests above use.
+    /// </summary>
+    private static AutoCompleteBox OpenTypeAhead(MainWindow window, Grid tileGrid)
+    {
+        var contextMenu = tileGrid.ContextMenu;
+        Assert.NotNull(contextMenu);
+
+        var center = tileGrid.TranslatePoint(
+            new Point(tileGrid.Bounds.Width / 2, tileGrid.Bounds.Height / 2), window);
+        Assert.NotNull(center);
+
+        window.MouseDown(center!.Value, MouseButton.Right);
+        window.MouseUp(center!.Value, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+
+        var menuItem = contextMenu!.Items
+            .OfType<MenuItem>()
+            .FirstOrDefault(mi => mi.Header?.ToString() == "Set card manually…");
+        Assert.NotNull(menuItem);
+
+        menuItem!.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        contextMenu.Close();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = window.GetVisualDescendants().OfType<AutoCompleteBox>().FirstOrDefault(a => a.DataContext == tileVm);
+        Assert.NotNull(acb);
+        return acb!;
+    }
+
+    /// <summary>
+    /// Clicks a dropdown entry. The headless popup has no coordinate space to
+    /// click into, so this raises the pointer press and release a real click
+    /// produces on the item itself, which is what the box's selection adapter
+    /// listens to.
+    /// </summary>
+    private static void ClickDropdownItem(ListBoxItem item)
+    {
+        var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+        var pressed = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+        var released = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+
+        item.RaiseEvent(new PointerPressedEventArgs(item, pointer, item, default, 0, pressed, KeyModifiers.None));
+        item.RaiseEvent(new PointerReleasedEventArgs(item, pointer, item, default, 0, released, KeyModifiers.None, MouseButton.Left));
+    }
+
+    /// <summary>
+    /// The names the dropdown's own popup actually shows, in display order —
+    /// found by walking the realised <c>Popup.Child</c>'s visual tree for
+    /// <c>TextBlock</c>s, never the populator's return value. The populator
+    /// is only half the fix (cause 1); the control's own <c>FilterMode</c>
+    /// (cause 2) can still drop or reorder what it returns.
+    /// </summary>
+    private static List<string?> DisplayedDropdownNames(AutoCompleteBox acb)
+    {
+        var popup = acb.GetVisualDescendants().OfType<Popup>().FirstOrDefault();
+        Assert.NotNull(popup);
+        Assert.NotNull(popup!.Child);
+        return popup.Child!.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+    }
+
+    /// <summary>
+    /// Pumps the dispatcher until <paramref name="condition"/> holds or
+    /// <paramref name="timeout"/> elapses. The populator now runs via
+    /// <c>Task.Run</c> and the box's 150 ms populate delay is a real timer,
+    /// so a single <c>RunJobs()</c> right after typing is not enough — see
+    /// <c>A10CohortScreenshotTests.WaitUntilAsync</c> for the same pattern.
+    /// </summary>
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (!condition())
+        {
+            Dispatcher.UIThread.RunJobs();
+            if (condition())
+            {
+                return;
+            }
+
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException("Condition not met within timeout.");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -341,4 +704,68 @@ public class ManualSetContextMenuTests
  * cannot see the race: it closes the ContextMenu with no steal-back in
  * between, so there is nothing for the old synchronous Focus() call to lose
  * against.
+ *
+ * Issue #18 session, 2026-10-02 — chaos-testing the three typing-search causes:
+ *
+ * Cause (a) — TileViewModel.BuildPopulator reverted to ordinal,
+ * case-sensitive, prefix-only matching (StartsWith(text, Ordinal), substring
+ * branch forced to false):
+ *   - Populator_CaseInsensitive_MatchesRegardlessOfTypedCase: FAILED —
+ *     `Assert.Contains() Failure: Filter not matched in collection /
+ *     Collection: []` ("bag o" no longer matches "Bag of Holding").
+ *   - Populator_SubstringMatch_IsIncluded_RankedAfterPrefixMatch: FAILED —
+ *     `Collection: [Bolt]` ("Lightning Bolt" dropped entirely).
+ *   - TypeAhead_TypingCaseInsensitivePrefix_FindsCardInDropdown_...: FAILED —
+ *     `System.TimeoutException: Condition not met within timeout` waiting for
+ *     `acb.IsDropDownOpen` — with zero matches, the control never opens the
+ *     dropdown at all, which is itself exactly the live symptom ("typing
+ *     does nothing").
+ *   - TypeAhead_TypingSubstring_FindsBothMatches_...: FAILED the same way
+ *     (timeout — "holding" matches nothing case/prefix-exact).
+ *   Reverted; all four pass again.
+ *
+ * Cause (b) — MainWindow.OnTypeAheadLoaded's `acb.FilterMode =
+ * AutoCompleteFilterMode.None;` line commented out (left at the control's
+ * default, StartsWith):
+ *   - TypeAhead_TypingSubstring_FindsBothMatches_PrefixRankedBeforeSubstring:
+ *     FAILED — `Assert.Contains() Failure: Item not found in collection /
+ *     Collection: ["Holding Cell"] / Not found: "Bag of Holding"` — the
+ *     control's own default filter re-applied StartsWith to the populator's
+ *     already-correct two-tier result and silently dropped the
+ *     substring-elsewhere match.
+ *   - TypeAhead_TypingCaseInsensitivePrefix_...: still PASSED — "bag o" is a
+ *     true (case-insensitive) prefix of "Bag of Holding", and the default
+ *     FilterMode's own comparison is already case-insensitive, so this test
+ *     alone cannot see cause (b); that is exactly why the substring test
+ *     above exists as a separate case.
+ *   Reverted; the substring test passes again.
+ *
+ * Cause (c) — MainWindow.OnTileTapped's logical-ancestor guard commented out:
+ *   - TypeAhead_PointerClickInTextBox_DoesNotToggleExcluded_...: FAILED —
+ *     "Clicking inside the type-ahead TextBox must not toggle the X." A
+ *     diagnostic spike with handlers attached directly to the inner TextBox
+ *     confirmed the mechanism precisely: `tileGrid.Tapped` fires with
+ *     `source=TextPresenter` (a part inside the TextBox), and with the guard
+ *     removed `tileVm.IsExcluded` becomes `true`; with the guard restored,
+ *     the same Tapped still reaches `tileGrid.Tapped` (so the test is not
+ *     vacuous — it is exercising real bubbling) but `IsExcluded` stays
+ *     `false`.
+ *   - The dropdown-item half of the guard could not be chaos-tested: under
+ *     headless, the popup's content is not visually attached to the window,
+ *     so a Tapped raised on an item never reaches the tile Grid with or
+ *     without the guard. That half is untested, not vacuously tested.
+ *   Reverted; the test passes again.
+ *
+ * Cause (d), found in the live app after the above — ArrowDown picked the
+ * first entry and closed the list. Re-planted by removing the
+ * `{ IsDropDownOpen: false }` condition in OnTypeAheadSelectionChanged, so
+ * every highlight change picks again:
+ *   - TypeAhead_ArrowKeysOnlyHighlight_EnterPicksTheHighlightedEntry: FAILED —
+ *     "Arrow keys must only move the highlight, not pick an entry."
+ *   - TypeAhead_EscapeWithAnEntryHighlighted_LeavesTheTileUnchanged: FAILED —
+ *     "Escape must not pick the highlighted entry."
+ *   - TypeAhead_TypingCaseInsensitivePrefix_...: FAILED too (it now picks
+ *     with ArrowDown + Enter).
+ *   Both new tests also failed against the code before the fix, on the same
+ *   assertions. Restored; all pass again.
  */

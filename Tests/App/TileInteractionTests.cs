@@ -255,22 +255,93 @@ public class TileInteractionTests
     }
 
     [Fact]
-    public async Task Populator_StartsWithOrdinal_SubstringOnlyMatchIsExcluded()
+    public async Task Populator_SubstringMatch_IsIncluded_RankedAfterPrefixMatch()
     {
-        // "Bolt" is a substring of "Lightning Bolt" but does NOT start with "Bolt".
-        // StartsWithOrdinal means only entries whose name starts with the prefix
-        // are returned.
+        // Issue #18: a substring-elsewhere match ("Lightning Bolt" contains
+        // "Bolt" but doesn't start with it) used to be dropped entirely
+        // (StartsWithOrdinal only). It must now appear, but ranked AFTER any
+        // name that actually starts with the typed text.
         var tile = new CohortTile(MakeTestCard(), [Candidate("Lightning Bolt", 50)], Good, Ok);
         var catalog = new InlineOracleCatalog([
-            new OracleEntry("oracle-bolt", "Bolt"),     // starts with "Bolt" ✓
-            new OracleEntry("oracle-lb", "Lightning Bolt"), // does NOT start with "Bolt"
+            new OracleEntry("oracle-bolt", "Bolt"),         // starts with "Bolt"
+            new OracleEntry("oracle-lb", "Lightning Bolt"), // contains "Bolt" elsewhere
         ]);
 
         var vm = new TileViewModel(tile, catalog);
         var results = await CallPopulator(vm.TypeAheadPopulator, "Bolt", TestContext.Current.CancellationToken);
 
-        // Only "Bolt" should appear; "Lightning Bolt" contains "Bolt" but doesn't start with it.
-        Assert.All(results, r => Assert.StartsWith("Bolt", r.OracleName, StringComparison.Ordinal));
+        Assert.Contains(results, r => r.OracleName == "Bolt");
+        Assert.Contains(results, r => r.OracleName == "Lightning Bolt");
+        var boltIndex = results.ToList().FindIndex(r => r.OracleName == "Bolt");
+        var lbIndex = results.ToList().FindIndex(r => r.OracleName == "Lightning Bolt");
+        Assert.True(boltIndex < lbIndex, "The prefix match ('Bolt') must rank before the substring-elsewhere match ('Lightning Bolt').");
+    }
+
+    [Fact]
+    public async Task Populator_CaseInsensitive_MatchesRegardlessOfTypedCase()
+    {
+        // Issue #18: matching was StringComparison.Ordinal (case-sensitive),
+        // so typing "bag o" never found "Bag of Holding". Must now be
+        // OrdinalIgnoreCase.
+        var tile = new CohortTile(MakeTestCard(), [Candidate("Other", 50)], Good, Ok);
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+        ]);
+
+        var vm = new TileViewModel(tile, catalog);
+        var results = await CallPopulator(vm.TypeAheadPopulator, "bag o", TestContext.Current.CancellationToken);
+
+        Assert.Contains(results, r => r.OracleName == "Bag of Holding");
+    }
+
+    [Fact]
+    public async Task Populator_PrefixTier_BeatsSourceOrder_EvenAgainstARunnerUp()
+    {
+        // Tier (prefix vs. substring-elsewhere) outranks the "runners-up
+        // before catalog" rule, not just the reverse: a CATALOG entry that
+        // starts with the typed text must still rank ahead of a tile
+        // CANDIDATE (runner-up) whose name contains it only in the middle.
+        var tileWithMidCandidate = new CohortTile(
+            MakeTestCard(),
+            [Candidate("Stronghold", 80)], // "Stronghold" contains "hold" but doesn't start with it
+            Good, Ok);
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-hc", "Holding Cell"), // starts with "Hold"
+        ]);
+
+        var vm = new TileViewModel(tileWithMidCandidate, catalog);
+        var results = await CallPopulator(vm.TypeAheadPopulator, "Hold", TestContext.Current.CancellationToken);
+
+        Assert.Contains(results, r => r.OracleName == "Holding Cell");
+        Assert.Contains(results, r => r.OracleName == "Stronghold");
+        var catalogIndex = results.ToList().FindIndex(r => r.OracleName == "Holding Cell");
+        var candidateIndex = results.ToList().FindIndex(r => r.OracleName == "Stronghold");
+        Assert.True(
+            catalogIndex < candidateIndex,
+            "A catalog prefix match must rank before a runner-up's substring-elsewhere match — tier beats source order.");
+    }
+
+    [Fact]
+    public async Task Populator_SubstringTier_RunnersUpStillRankBeforeCatalog()
+    {
+        // Within the SAME tier (both entries are substring-elsewhere
+        // matches), the "runners-up before catalog" rule still applies.
+        var tile = new CohortTile(
+            MakeTestCard(),
+            [Candidate("Stronghold", 80)],   // runner-up, contains "hold" elsewhere
+            Good, Ok);
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-th", "Threshold"), // catalog, contains "hold" elsewhere
+        ]);
+
+        var vm = new TileViewModel(tile, catalog);
+        var results = await CallPopulator(vm.TypeAheadPopulator, "hold", TestContext.Current.CancellationToken);
+
+        Assert.Contains(results, r => r.OracleName == "Stronghold");
+        Assert.Contains(results, r => r.OracleName == "Threshold");
+        var runnerUpIndex = results.ToList().FindIndex(r => r.OracleName == "Stronghold");
+        var catalogIndex = results.ToList().FindIndex(r => r.OracleName == "Threshold");
+        Assert.True(runnerUpIndex < catalogIndex, "Within the same tier, the runner-up must still rank before the catalog entry.");
     }
 
     [Fact]
@@ -386,11 +457,12 @@ public class TileInteractionTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        // Find the tile's outer Grid (Width=80, Height=141) — the one that
-        // the DataTemplate produces. WrapPanel children are Grids.
+        // Find the tile's outer Grid by its x:Name (not its literal
+        // Width/Height — #17 will widen the tile, and a size-based lookup
+        // would silently break the moment that lands).
         var tileGrid = window.GetVisualDescendants()
             .OfType<Grid>()
-            .FirstOrDefault(g => g.Width == 80 && g.Height == 141);
+            .FirstOrDefault(g => g.Name == "CohortTile");
 
         Assert.NotNull(tileGrid);
 
