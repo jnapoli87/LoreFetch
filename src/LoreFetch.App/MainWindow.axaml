@@ -307,16 +307,26 @@
       the Image — never baked into pixels. IsHitTestVisible="False" keeps
       the overlay from stealing input.
 
-      A5: cohort grid on the right. WrapPanel so all items are instantiated
-      (no virtualisation), which lets the visual-tree test walk all tiles.
-      The DataTemplate renders four tile states with per-state overlays:
+      A5: cohort grid on the right. The DataTemplate renders four tile
+      states with per-state overlays:
         Included    — no marker
         Excluded    — dark overlay + ✕ text + grey border
         Unresolved  — red border, no name shown
         ManuallySet — blue border + M badge, distinct from a machine match
       IsLowConfidence adds an amber border on top of the Included appearance.
+
+      #17: validating a capture means reading each tile's proposed name
+      against the title printed on the card, so the cohort gets about half
+      the width (the preview a bit less than before) and a GridSplitter lets
+      the user move the divider. Both columns are star-sized, so they grow
+      with the window; the MinWidths keep three readable names across.
     -->
-    <Grid ColumnDefinitions="*, 280">
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="240" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" MinWidth="360" />
+      </Grid.ColumnDefinitions>
 
       <!-- Column 0: preview + quad overlay -->
       <Grid Grid.Column="0">
@@ -324,187 +334,204 @@
         <Canvas x:Name="QuadOverlayCanvas" IsHitTestVisible="False" />
       </Grid>
 
-      <!-- Column 1: cohort grid -->
-      <Border Grid.Column="1" Background="#181818" x:DataType="vm:MainViewModel">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
-          <ItemsControl x:Name="CohortGrid" ItemsSource="{Binding Tiles}" Padding="4">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <!--
-                  WrapPanel (not a virtualising VirtualizingStackPanel): all
-                  tile containers are realised immediately after Show(), so
-                  the visual-tree test can walk them without scrolling.
-                -->
-                <WrapPanel Orientation="Horizontal" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:TileViewModel">
-                <!--
-                  Tile card: 80 × 141 px. Children are stacked (Grid default
-                  cell 0,0) and positioned by alignment. Hit-test-invisible
-                  border overlays sit on top without intercepting clicks — A6
-                  attaches its handlers to the outermost Grid.
+      <!-- Column 1: draggable divider between preview and cohort -->
+      <GridSplitter x:Name="CohortSplitter"
+                    Grid.Column="1"
+                    Width="5"
+                    ResizeDirection="Columns"
+                    Background="#2D2D2D" />
 
-                  A6 interactions:
-                    Left-click (Tapped)     → OnTileTapped → ToggleExcludedFromUi
-                    Right-click ContextMenu → "Set card manually…" / "Clear"
-                    AutoCompleteBox overlay → shown when IsTypeAheadOpen is true
+      <!-- Column 2: cohort grid -->
+      <Border x:Name="CohortPanel" Grid.Column="2" Background="#181818" x:DataType="vm:MainViewModel">
+        <ItemsControl x:Name="CohortGrid" ItemsSource="{Binding Tiles}" Padding="4"
+                      VerticalAlignment="Top"
+                      Grid.IsSharedSizeScope="True">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <!--
+                #17: a fixed 3-column UniformGrid, so a 3 × 3 capture shows
+                as 3 × 3, a 3 × 1 as one row, and a single card as one cell.
+                Each cell is a third of the panel's width; the thumbnail, not
+                the name, shrinks to fit the height, so all nine tiles stay
+                visible without scrolling. It realises every tile (no
+                virtualisation), which the visual-tree tests rely on.
+              -->
+              <UniformGrid Columns="3" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:TileViewModel">
+              <!--
+                Tile card: the proposed name on top, the thumbnail below it.
+                The name sits at the top because that is where the card's own
+                printed title is, and checking one against the other is what
+                the user does before Enter. Hit-test-invisible border overlays
+                sit on top without intercepting clicks; A6 attaches its
+                handlers to the outermost Grid, which tests find by its name.
 
-                  State visuals:
-                    IsLowConfidence → amber border (on Included tiles)
-                    IsUnresolved    → red border, blank DisplayName
-                    IsExcluded      → grey border + dark overlay + ✕ text
-                    IsManuallySet   → blue border + M badge
+                A6 interactions:
+                  Left-click (Tapped)     → OnTileTapped → ToggleExcludedFromUi
+                  Right-click ContextMenu → "Set card manually…" / "Clear"
+                  AutoCompleteBox overlay → shown when IsTypeAheadOpen is true
+
+                State visuals:
+                  IsLowConfidence → amber border (on Included tiles)
+                  IsUnresolved    → red border, blank DisplayName
+                  IsExcluded      → grey border + dark overlay + ✕ text
+                  IsManuallySet   → blue border + M badge
+              -->
+              <Grid x:Name="CohortTile" Margin="3"
+                    Tapped="OnTileTapped">
+                <!--
+                  A6: Context menu — two items as specified:
+                    1. "Set card manually…" → opens the type-ahead overlay (IsTypeAheadOpen = true)
+                    2. "Clear"              → reverts a manual pick to the hash's own proposal
+                  The Click handlers read the VM from the MenuItem's own
+                  inherited DataContext (see OnTileSetManuallyClick).
                 -->
-                <!-- x:Name="CohortTile": lets tests find this Grid by name
-                     rather than by its literal Width/Height, which is about
-                     to change in #17 (tile widening) and would otherwise
-                     silently break every test that looked it up by size. -->
-                <Grid x:Name="CohortTile" Width="80" Height="141" Margin="4,4,0,0"
-                      Tapped="OnTileTapped">
+                <Grid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Set card manually…" Click="OnTileSetManuallyClick" />
+                    <MenuItem Header="Clear" Click="OnTileClearClick" />
+                  </ContextMenu>
+                </Grid.ContextMenu>
+
+                <!-- Base card background -->
+                <Border Background="#2D2D2D" CornerRadius="3" />
+
+                <!--
+                  #17: the name row shares one height across every tile
+                  (SharedSizeGroup, scoped on CohortGrid), so a name that
+                  wraps makes every strip that tall and the thumbnails stay
+                  level instead of the wrapped tile's card dropping lower.
+                -->
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" SharedSizeGroup="TileNameStrip" />
+                    <RowDefinition Height="*" />
+                  </Grid.RowDefinitions>
+
                   <!--
-                    A6: Context menu — two items as specified:
-                      1. "Set card manually…" → opens the type-ahead overlay (IsTypeAheadOpen = true)
-                      2. "Clear"              → reverts a manual pick to the hash's own proposal
-                    PlacementTarget is implicitly the Grid that owns this ContextMenu, whose
-                    DataContext is the TileViewModel — so the Click handlers find the VM via
-                    ((MenuItem)sender).Parent as ContextMenu → PlacementTarget.DataContext.
+                    #17: the name strip. Large, wrapping and never trimmed —
+                    a long or split name ("Sagu Wildling // Roost Seek") takes
+                    more lines rather than ending in "…", because a name that
+                    can't be read can't be checked.
                   -->
-                  <Grid.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Set card manually…" Click="OnTileSetManuallyClick" />
-                      <MenuItem Header="Clear" Click="OnTileClearClick" />
-                    </ContextMenu>
-                  </Grid.ContextMenu>
-
-                  <!-- Base card background -->
-                  <Border Background="#2D2D2D" CornerRadius="3" />
-
-                  <!-- Thumbnail image (top 111 px); null-safe — Thumbnail is
-                       null in plain unit tests where Avalonia is not initialised. -->
-                  <Image Source="{Binding Thumbnail}" Stretch="UniformToFill"
-                         VerticalAlignment="Top" Height="111" ClipToBounds="True" />
-
-                  <!-- Excluded: dark grey overlay across the thumbnail area -->
-                  <Rectangle Fill="#80000000" VerticalAlignment="Top" Height="111"
-                             IsVisible="{Binding IsExcluded}" />
-
-                  <!-- Name + distance at the bottom (30 px) -->
-                  <Border VerticalAlignment="Bottom" Height="30"
-                          Background="#CC000000" CornerRadius="0,0,3,3"
-                          Padding="3,2">
+                  <Border Grid.Row="0" Padding="6,4"
+                          Background="#CC000000" CornerRadius="3,3,0,0">
                     <StackPanel>
-                      <TextBlock Text="{Binding DisplayName}"
-                                 Foreground="White" FontSize="9"
-                                 TextTrimming="CharacterEllipsis" />
+                      <TextBlock x:Name="TileName"
+                                 Text="{Binding DisplayName}"
+                                 Foreground="White" FontSize="15" FontWeight="SemiBold"
+                                 TextWrapping="Wrap" />
                       <TextBlock Text="{Binding DistanceText}"
-                                 Foreground="#888888" FontSize="8" />
+                                 Foreground="#888888" FontSize="11" />
                     </StackPanel>
                   </Border>
 
-                  <!-- Excluded: large ✕ marker centred on thumbnail area -->
-                  <TextBlock Text="✕" FontSize="40" FontWeight="Bold"
-                             Foreground="#CC4444"
-                             HorizontalAlignment="Center" VerticalAlignment="Top"
-                             Margin="0,22,0,0"
-                             IsVisible="{Binding ShowExcludedMarker}" />
-
-                  <!-- ManuallySet: small "M" badge at top-left -->
-                  <Border Background="#2244AA" CornerRadius="2" Padding="2,1"
-                          Margin="3,3,0,0"
-                          HorizontalAlignment="Left" VerticalAlignment="Top"
-                          IsVisible="{Binding IsManuallySet}">
-                    <TextBlock Text="M" Foreground="White"
-                               FontSize="8" FontWeight="Bold" />
-                  </Border>
-
                   <!--
-                    State border overlays — IsHitTestVisible="False" so
-                    they never eat clicks that A6 wires to the outer Grid.
-                    Only one is visible at a time (states are mutually
-                    exclusive), except low-confidence which overlaps Included.
+                    Thumbnail area: fills what the name strip leaves. Uniform
+                    (not UniformToFill) so the whole card shows, its printed
+                    title included. Thumbnail is null in plain unit tests
+                    where Avalonia is not initialised.
                   -->
-                  <!-- Low-confidence: amber border (Included tiles only) -->
-                  <Border BorderThickness="3" CornerRadius="3"
-                          BorderBrush="#FFA500"
-                          IsVisible="{Binding IsLowConfidence}"
-                          IsHitTestVisible="False" />
-                  <!-- Unresolved: red border -->
-                  <Border BorderThickness="3" CornerRadius="3"
-                          BorderBrush="#FF4444"
-                          IsVisible="{Binding IsUnresolved}"
-                          IsHitTestVisible="False" />
-                  <!-- Excluded: grey border -->
-                  <Border BorderThickness="3" CornerRadius="3"
-                          BorderBrush="#666666"
-                          IsVisible="{Binding IsExcluded}"
-                          IsHitTestVisible="False" />
-                  <!-- ManuallySet: blue border -->
-                  <Border BorderThickness="3" CornerRadius="3"
-                          BorderBrush="#4488FF"
-                          IsVisible="{Binding IsManuallySet}"
-                          IsHitTestVisible="False" />
+                  <Grid Grid.Row="1">
+                    <Image x:Name="TileThumbnail"
+                           Source="{Binding Thumbnail}" Stretch="Uniform"
+                           Margin="4" />
 
-                  <!--
-                    A9: "Set manually" hint on Unresolved tiles (A9). Visible
-                    only when ShowSetManuallyHint is true, i.e. the tile is
-                    Unresolved. Directs the user to the right-click context menu
-                    so they don't assume the app is broken when a card goes
-                    unrecognised. IsHitTestVisible="False" — interaction still
-                    goes through the outer Grid's Tapped handler and ContextMenu.
-                  -->
-                  <TextBlock x:Name="SetManuallyHint"
-                             Text="Right-click to set"
-                             Foreground="#FF8888"
-                             FontSize="7"
-                             FontStyle="Italic"
-                             HorizontalAlignment="Center"
-                             VerticalAlignment="Center"
-                             Margin="0,0,0,32"
-                             IsVisible="{Binding ShowSetManuallyHint}"
-                             IsHitTestVisible="False" />
+                    <!-- Excluded: dark grey overlay across the thumbnail area -->
+                    <Rectangle Fill="#80000000"
+                               IsVisible="{Binding IsExcluded}" />
 
-                  <!--
-                    A6: Type-ahead overlay for "Set card manually…".
-                    Shown only when IsTypeAheadOpen = true (the "Set card manually…"
-                    ContextMenu item sets this). The AutoCompleteBox fits in the
-                    tile's name strip area; its dropdown popup extends outside the
-                    tile bounds. ZIndex=200 keeps it above all state-border overlays.
+                    <!-- Excluded: large ✕ marker centred on the thumbnail -->
+                    <TextBlock Text="✕" FontSize="48" FontWeight="Bold"
+                               Foreground="#CC4444"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                               IsVisible="{Binding ShowExcludedMarker}" />
 
-                    MinimumPrefixLength, MinimumPopulateDelay and AsyncPopulator are
-                    all set in code-behind via OnTypeAheadLoaded — setting them here
-                    would require XAML TypeSpan / delegate conversion that is less
-                    predictable than explicit C# assignment.
+                    <!--
+                      A9: "Set manually" hint on Unresolved tiles. Directs the
+                      user to the right-click context menu so they don't
+                      assume the app is broken when a card goes unrecognised.
+                    -->
+                    <TextBlock x:Name="SetManuallyHint"
+                               Text="Right-click to set"
+                               Foreground="#FF8888"
+                               FontSize="12"
+                               FontStyle="Italic"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding ShowSetManuallyHint}"
+                               IsHitTestVisible="False" />
 
-                    Loaded="OnTypeAheadLoaded"     — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
-                    SelectionChanged / DropDownClosed — pick the selected entry once the
-                                                     dropdown is closed (arrowing only highlights)
-                  -->
-                  <!--
-                    Issue #18: HorizontalAlignment="Stretch" so the box spans
-                    the full tile width over the name strip rather than
-                    sizing to its (empty) content — a content-sized box left
-                    almost no room to type or to see the dropdown's own text.
-                    Minimal on purpose: #17 widens the whole tile, and this
-                    box should keep spanning it once that lands, not be
-                    redesigned twice.
-                  -->
-                  <AutoCompleteBox IsVisible="{Binding IsTypeAheadOpen}"
-                                   PlaceholderText="Set card manually…"
-                                   HorizontalAlignment="Stretch"
-                                   VerticalAlignment="Bottom"
-                                   ZIndex="200"
-                                   Loaded="OnTypeAheadLoaded"
-                                   SelectionChanged="OnTypeAheadSelectionChanged"
-                                   DropDownClosed="OnTypeAheadDropDownClosed" />
-
+                    <!-- ManuallySet: "M" badge at the thumbnail's top-left -->
+                    <Border Background="#2244AA" CornerRadius="2" Padding="3,1"
+                            Margin="6,6,0,0"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            IsVisible="{Binding IsManuallySet}">
+                      <TextBlock Text="M" Foreground="White"
+                                 FontSize="11" FontWeight="Bold" />
+                    </Border>
+                  </Grid>
                 </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-        </ScrollViewer>
+
+                <!--
+                  State border overlays — IsHitTestVisible="False" so
+                  they never eat clicks that A6 wires to the outer Grid.
+                  Only one is visible at a time (states are mutually
+                  exclusive), except low-confidence which overlaps Included.
+                -->
+                <!-- Low-confidence: amber border (Included tiles only) -->
+                <Border BorderThickness="3" CornerRadius="3"
+                        BorderBrush="#FFA500"
+                        IsVisible="{Binding IsLowConfidence}"
+                        IsHitTestVisible="False" />
+                <!-- Unresolved: red border -->
+                <Border BorderThickness="3" CornerRadius="3"
+                        BorderBrush="#FF4444"
+                        IsVisible="{Binding IsUnresolved}"
+                        IsHitTestVisible="False" />
+                <!-- Excluded: grey border -->
+                <Border BorderThickness="3" CornerRadius="3"
+                        BorderBrush="#666666"
+                        IsVisible="{Binding IsExcluded}"
+                        IsHitTestVisible="False" />
+                <!-- ManuallySet: blue border -->
+                <Border BorderThickness="3" CornerRadius="3"
+                        BorderBrush="#4488FF"
+                        IsVisible="{Binding IsManuallySet}"
+                        IsHitTestVisible="False" />
+
+                <!--
+                  A6: Type-ahead overlay for "Set card manually…", shown only
+                  when IsTypeAheadOpen = true. It sits over the name strip at
+                  the top, so the corrected name lands where the proposed one
+                  was, and spans the tile's width (#18). Its dropdown popup
+                  extends outside the tile. ZIndex=200 keeps it above the
+                  state-border overlays.
+
+                  MinimumPrefixLength, MinimumPopulateDelay and AsyncPopulator
+                  are set in code-behind via OnTypeAheadLoaded — XAML can't
+                  reliably assign the delegate-typed populator.
+
+                  Loaded="OnTypeAheadLoaded"           — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
+                  SelectionChanged / DropDownClosed — pick the selected entry once the
+                                                      dropdown is closed (arrowing only highlights)
+                -->
+                <AutoCompleteBox IsVisible="{Binding IsTypeAheadOpen}"
+                                 PlaceholderText="Set card manually…"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Top"
+                                 ZIndex="200"
+                                 Loaded="OnTypeAheadLoaded"
+                                 SelectionChanged="OnTypeAheadSelectionChanged"
+                                 DropDownClosed="OnTypeAheadDropDownClosed" />
+
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
       </Border>
 
     </Grid>
