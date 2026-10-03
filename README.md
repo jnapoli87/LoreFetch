@@ -40,11 +40,11 @@ One window: live preview with card outlines on the left, the capture grid on the
 
 | Key / action | Effect |
 |---|---|
-| **Space** | Capture whatever is detected right now. Replaces any pending grid. |
+| **Space** | Capture whatever is detected right now. Replaces any pending grid, including one you're setting by hand. |
 | **Enter** | Commit every tile that isn't X'd. |
 | **Escape** | Discard. Nothing is written. |
 | **Left-click a tile** | Toggle its **X**. No X means included. |
-| **Right-click a tile** | Set the card by hand, or clear a manual pick. |
+| **Right-click a tile** | Set the card by hand, or clear a manual pick. From "Set card manually…" until Enter, Escape or Space, auto mode won't replace the grid. |
 
 The happy path is space, enter, space, enter — no mouse. Capture only fills the grid; Enter is the only thing that writes.
 

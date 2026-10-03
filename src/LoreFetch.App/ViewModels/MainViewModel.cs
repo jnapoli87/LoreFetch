@@ -158,9 +158,20 @@ public sealed partial class MainViewModel : ObservableObject
     /// <c>TypeAheadPopulator</c> can scan <see cref="IOracleCatalog.All"/>.
     /// Must be called on the UI thread.
     /// </summary>
+    /// <remarks>
+    /// An auto-capture is dropped while <see cref="IsCohortLocked"/>: it
+    /// would otherwise replace the grid under a user who is typing a card
+    /// name, or throw away the card they just picked. Space still replaces
+    /// the grid: it's the user asking for a fresh capture, so it overrides
+    /// the lock.
+    /// </remarks>
     public void LoadCohort(Cohort cohort)
     {
         ArgumentNullException.ThrowIfNull(cohort);
+
+        if (cohort.Reason == CaptureReason.AutoSettle && IsCohortLocked)
+            return;
+
         _currentCohort = cohort;
         _tiles.Clear();
         foreach (var tile in cohort.Tiles)
@@ -207,6 +218,13 @@ public sealed partial class MainViewModel : ObservableObject
     /// True when a cohort is loaded and waiting for Enter or Escape.
     /// </summary>
     public bool HasPendingCohort => _currentCohort is not null;
+
+    /// <summary>
+    /// True once the user has started setting a card by hand on any tile —
+    /// the type-ahead is open, or a pick has been made. Auto-captures are
+    /// dropped until Enter, Escape or Space (see <see cref="LoadCohort"/>).
+    /// </summary>
+    public bool IsCohortLocked => _tiles.Any(t => t.LocksCohort);
 
     // ------------------------------------------------------------------
     // A9: error-state properties — banners, no stack traces

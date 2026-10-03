@@ -98,6 +98,13 @@ public sealed class TileViewModel : ObservableObject
     /// </summary>
     public bool ShowSetManuallyHint => _tile.State == TileState.Unresolved;
 
+    /// <summary>
+    /// True while the user is setting this card by hand (type-ahead open)
+    /// or has set it. Locks the pending cohort against an auto-capture — see
+    /// <see cref="MainViewModel.IsCohortLocked"/>.
+    /// </summary>
+    public bool LocksCohort => IsTypeAheadOpen || IsManuallySet;
+
     // ------------------------------------------------------------------
     // Display text
     // ------------------------------------------------------------------
