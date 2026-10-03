@@ -52,6 +52,8 @@ The happy path is space, enter, space, enter — no mouse. Capture only fills th
 
 **Auto mode** captures on its own once the expected count (1, 3 or 9) holds still for 500 ms. It fires once per scene, then waits for the count to change — so swapping one card for another won't re-fire. Press Space for that.
 
+**Fixing a card by hand:** check the grid, then right-click any card that needs it and set it. From that point auto mode leaves the grid alone, so a stray capture can't wipe your work. Press Enter to commit or Escape to discard, and auto mode picks up again. Space still forces a fresh capture.
+
 **Runs.** Each launch starts a new, empty run: one CSV per scanning batch, named after the time it started and saved to `Documents\LoreFetch\Runs\` as you commit. Nothing is written until the first Enter. The title bar and the panel header name the open run.
 
 | File menu | Effect |
