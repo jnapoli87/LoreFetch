@@ -95,6 +95,7 @@ Method and every recorded run: [`docs/accuracy.md`](docs/accuracy.md). The numbe
 ## Limitations
 
 - **No set or printing.** Reprints share artwork, so the hash can't tell them apart. Oracle name only — and therefore no prices.
+- **Alternate frames match weakly.** The index holds one frame per artwork, usually the regular one, and the fingerprint covers the whole card. Extended-art, borderless and showcase versions of that art may come up amber or red, or not match at all. Set them by hand.
 - **Foils and sleeves depend on your lighting.** Neither is a supported case.
 - **Leave a finger-width gap.** Cards touching edge-to-edge merge into one contour and are never split apart.
 - **Basic lands** all resolve to the same name, whatever the art.
