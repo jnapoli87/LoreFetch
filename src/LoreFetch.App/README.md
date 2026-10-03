@@ -1,6 +1,6 @@
 # LoreFetch.App
 
-The Avalonia desktop app: camera preview, capture/cohort UI, collection view and export picker. The App domain also covers `Core/Trigger` (the `IAutoCaptureTrigger` implementation); see the [domain map](../../docs/CONTRACTS.md#domain-map).
+The Avalonia desktop app: camera preview, capture/cohort UI, collection view and the File menu (runs, export). The App domain also covers `Core/Trigger` (the `IAutoCaptureTrigger` implementation); see the [domain map](../../docs/CONTRACTS.md#domain-map).
 
 ## Dependencies
 

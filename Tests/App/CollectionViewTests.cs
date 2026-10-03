@@ -118,7 +118,7 @@ public class CollectionViewTests
     }
 
     // -----------------------------------------------------------------------
-    // Test 4 — Visual tree: CollectionGrid present + unverified badge visible
+    // Test 4 — Visual tree: CollectionGrid present + File > Export labels
     // -----------------------------------------------------------------------
 
     /// <summary>
@@ -126,13 +126,13 @@ public class CollectionViewTests
     /// <list type="bullet">
     ///   <item>A <see cref="DataGrid"/> named <c>CollectionGrid</c> is in the
     ///     visual tree.</item>
-    ///   <item>The "unverified" badge <see cref="Border"/> for the unverified
-    ///     exporter is visible (its own <c>IsVisible</c> is true — the badge
-    ///     is a Border bound to <c>IsUnverified</c>).</item>
+    ///   <item>File > Export has one entry per exporter, and only the
+    ///     unverified exporter's entry says "(unverified)" — the menu is the
+    ///     only export picker, so the label must live there.</item>
     /// </list>
     /// </summary>
     [AvaloniaFact]
-    public void VisualTree_CollectionGrid_PresentAndUnverifiedBadgeVisible()
+    public void VisualTree_CollectionGrid_PresentAndExportMenuLabelsUnverified()
     {
         var (verified, unverified) = MakeExporters();
         var store = new StubCollectionStore();
@@ -150,16 +150,18 @@ public class CollectionViewTests
             .FirstOrDefault(g => g.Name == "CollectionGrid");
         Assert.NotNull(dataGrid);
 
-        // 2. The unverified badge Border must be visible. The badge is a Border
-        // with IsVisible="{Binding IsUnverified}" and a TextBlock child whose
-        // text is "unverified". Only the unverified exporter's row has it visible.
-        // Search for Borders where IsVisible=true and the child TextBlock says "unverified".
-        var visibleBadges = window.GetVisualDescendants()
-            .OfType<Border>()
-            .Where(b => b.IsVisible && b.Child is TextBlock { Text: "unverified" })
+        // 2. File > Export lists both exporters; only the unverified one is
+        // labelled. Entries use TextBlock headers (PlainHeader), not strings.
+        var exportMenu = window.FindControl<MenuItem>("ExportMenuItem");
+        Assert.NotNull(exportMenu);
+        var labels = exportMenu.Items
+            .OfType<MenuItem>()
+            .Select(m => Assert.IsType<TextBlock>(m.Header).Text)
             .ToList();
 
-        Assert.NotEmpty(visibleBadges);
+        Assert.Equal(
+            ["Test Verified Export", "Test Unverified Export (unverified)"],
+            labels);
 
         window.Close();
     }
@@ -285,5 +287,12 @@ public class CollectionViewTests
  *   Affected test: RowsLoad_WithSeededStore_ExposesRows
  *   Result: FAILS — Assert.Equal(2, vm.Rows.Count) fails because Rows is empty.
  *     "Assert.Equal() Failure — Expected: 2, Actual: 0"
+ *   Conclusion: fails for the right reason. ✓
+ *
+ * Case 4 — Drop the "(unverified)" label from File > Export:
+ *   Mutation applied: BuildExportMenu used `item.DisplayName` as every label.
+ *   Affected test: VisualTree_CollectionGrid_PresentAndExportMenuLabelsUnverified
+ *   Result: FAILS — "Collections differ at index 1. Expected: Test Unverified
+ *     Export (unverified), Actual: Test Unverified Export".
  *   Conclusion: fails for the right reason. ✓
  */

@@ -60,7 +60,7 @@ The happy path is space, enter, space, enter — no mouse. Capture only fills th
 | **Open…** (Ctrl+O) / **Open recent** | Continue an earlier run; new cards merge into it. Only LoreFetch runs open, not exports. |
 | **Rename run…** | Rename the open run's file. |
 | **Show in folder** | Open the folder holding the run. |
-| **Export** | Same as the export panel. |
+| **Export** | Save the open run as a native CSV or a Moxfield upload. |
 
 Commit or discard a pending capture before switching runs.
 
