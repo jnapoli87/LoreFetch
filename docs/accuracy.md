@@ -1878,3 +1878,19 @@ for exploring factors other than the committed ones),
 doubled `Identify` call count), `Tests/StreamB/HashCardIdentifierPerformanceTests.cs`
 (new 18-call dual-hypothesis measurement), `Tests/Integration/EndToEnd/DualHypothesisIdentificationTests.cs`
 (new), `docs/accuracy.md` (this section).
+
+# Index refresh — Reality Fracture (2026-10-03, #38)
+
+Measured on win-x64. Same hash transforms; newer data. Built from Scryfall's `unique_artwork` bulk file of 2026-10-03 by the steps in [`src/LoreFetch.Lab/README.md`](../src/LoreFetch.Lab/README.md#refreshing-the-index).
+
+| | 2026-09-22 index | 2026-10-03 index |
+|---|---|---|
+| Artworks / oracle ids / basic lands | 47,418 / 32,743 / 1,852 | 47,480 / 32,743 / 1,857 |
+| SHA-256 | `b261cea1…` | `77c93191…` |
+| Round-trip rank-1 (200, seed 20260922) | 100% | 100% |
+| `referenceFloor` | 61 | 62 |
+| Margin min / median | 130 / 208 | 91 / 207 |
+
+- **What changed:** 62 artworks new to the filtered set, and 175 cached renders that Scryfall had replaced since the September download (118 of them on 2026-09-23), re-fetched. Reality Fracture (`fra`) was already fully present from preview scans; those are now the final scans. Of Reality Fracture Commander's (`frc`) 87 arts, the 18 new cards are in. The other 64 are reprints whose artwork `unique_artwork` represents with an earlier printing, so they were already recognised.
+- **The round-trip numbers are not like-for-like.** The seed samples index positions, so a changed index draws a different 200; both runs are 100%, which is the gate.
+- **Real-photo accuracy is unchanged.** `lab accuracy` over the current corpus (17 frames, 111 slots, 15in, light and dark mats) gave identical reports on both indexes: headline correct@1 84/100, wrong@1 0 at `okDistance` 240, gate PASS. `goodDistance`/`okDistance` stay as calibrated.
