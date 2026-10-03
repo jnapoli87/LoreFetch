@@ -567,7 +567,7 @@ With these, **stream A never needs anything real from B, C or D** — not at the
 | Domain | Code | Tests | Consumes from the contract surface |
 |---|---|---|---|
 | **App** (UI and auto-capture trigger) | `src/LoreFetch.App`, `Core/Trigger` | `Tests/App` | Abstractions, `Core/Scanning` (incl. `ScanPipelineFactory`), the fakes for demo mode |
-| **Detection** | `Core/Detection`: `ContourCardDetector`, `PerspectiveRectifier`, `FrameMat` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
+| **Detection** | `Core/Detection`: `ContourCardDetector`, `StabilizingCardDetector`, `PerspectiveRectifier`, `FrameMat` | `Tests/Detection` | Abstractions; implements `ICardDetector`, `IRectifier` |
 | **Identification** | `Core/Identification`: the hash pipeline (`ReferenceTransform`, `QueryTransform`, `CardHasher`, `CardHash`), `HashIndexFile`, `HashCardIdentifier` | `Tests/Identification` | Abstractions; implements `ICardIdentifier`, `IOracleCatalog` |
 | **Lab** (maintainer tooling: index build, accuracy) | `src/LoreFetch.Lab` | `Tests/Lab` | Abstractions, Detection, Identification, the local fixture corpus |
 | **Capture** | `src/LoreFetch.Capture` | `Tests/Capture` | Abstractions (incl. `IFrameSourceFactory`, `FrameSourceException`), `ScanSettings` |

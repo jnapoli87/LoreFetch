@@ -48,6 +48,10 @@ public partial class MainWindow : Window
     private readonly FrameHandoff _frameHandoff = new();
     private long _frameSequence;
 
+    // Keeps drawn borders still through the detector's 1-2 px corner jitter.
+    // Display only; touched in DrawQuadOverlay, on the UI thread.
+    private readonly QuadOverlayDeadband _overlayDeadband = new();
+
     // Fires once, on the UI thread, when the ~15 fps gate defers a render
     // rather than dropping it (see ScheduleRenderIfDue). Not a
     // DispatcherTimer because it is armed from the background thread.
@@ -449,7 +453,7 @@ public partial class MainWindow : Window
 
         var transform = FrameToControlTransform.Compute(frameWidth, frameHeight, bounds.Width, bounds.Height);
 
-        foreach (var quad in quads)
+        foreach (var quad in _overlayDeadband.Apply(quads))
         {
             var polygon = new Polygon
             {
