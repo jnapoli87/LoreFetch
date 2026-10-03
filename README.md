@@ -4,9 +4,6 @@ Turn any webcam into a Magic: The Gathering collection scanner. Fully offline, n
 
 Lay down up to nine cards; LoreFetch finds them, identifies them, and adds them to a CSV you own. Free and GPLv3, and it never touches the network after install.
 
-> [!NOTE]
-> **v0.1.0 is released** — see [Download and run](#download-and-run).
-
 ## Demo
 
 Video of one full pass — open the app, scan, export, import into Moxfield — goes here.
@@ -21,7 +18,7 @@ Video of one full pass — open the app, scan, export, import into Moxfield — 
 
 ## Download and run
 
-[**LoreFetch v0.1.0, Windows 10/11 x64**](https://github.com/jnapoli87/LoreFetch/releases/tag/v0.1.0) — one self-contained executable, ~86 MB zipped. No .NET install, no prerequisites.
+[**Latest release, Windows 10/11 x64**](https://github.com/jnapoli87/LoreFetch/releases/latest) — one self-contained executable, ~86 MB zipped. No .NET install, no prerequisites.
 
 1. Extract the zip anywhere.
 2. **Keep `data/index/` beside `LoreFetch.exe`.** That's the card fingerprint index; the app resolves it relative to the executable and won't start without it.

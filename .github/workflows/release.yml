@@ -1,0 +1,114 @@
+name: Release
+
+# Builds the win-x64 zip from a clean runner, so a release no longer depends
+# on the state of one PC (v0.1.0 was zipped by hand). Two triggers:
+#
+#   push of a vX.Y.Z tag  -> build, test, zip, and a DRAFT release whose body
+#                            is docs/release-notes/<tag>.md. The owner
+#                            downloads the zip, smoke-tests it, then publishes.
+#   workflow_dispatch     -> the same zip as a workflow artifact, no release.
+#
+# Not on every merge: nobody would use an unversioned build per merge.
+# The steps are in CONTRIBUTING.md "Releasing".
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # gh release create
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the "is it on main" check needs history
+
+      # Cheap checks first, so a bad tag fails in seconds, not after a build.
+      # The tag is the only place the version is written down: it names the
+      # zip, picks the notes file and stamps the exe (-p:Version below).
+      - name: Version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag=$GITHUB_REF_NAME
+            echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+              || { echo "::error::tag $tag is not vX.Y.Z"; exit 1; }
+            [ -f "docs/release-notes/$tag.md" ] \
+              || { echo "::error::docs/release-notes/$tag.md is missing; merge the notes before tagging"; exit 1; }
+            # main only takes squash-merged, CI-green PRs, so a tag on main is
+            # a tree that already passed. A tag anywhere else is a mistake.
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "::error::$tag is not on main"; exit 1; }
+            version=${tag#v}
+            name=LoreFetch-$tag-win-x64
+          else
+            version=0.0.0-dev
+            name=LoreFetch-dev-${GITHUB_SHA::7}-win-x64
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "NAME=$name" >> "$GITHUB_ENV"
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore LoreFetch.slnx
+
+      - name: Build
+        run: dotnet build LoreFetch.slnx -c Release --no-restore
+
+      # Through the script, as in ci.yml: bare `dotnet test` exits 0 having run
+      # nothing. A tag on main has passed CI already; this is the same suite on
+      # the exact commit being shipped, and costs a few minutes once a release.
+      - name: Test
+        run: bash scripts/lorefetch.sh test --no-pull
+
+      # The publish command from DECISIONS.md "Stack, with the traps".
+      - name: Publish
+        run: >
+          dotnet publish src/LoreFetch.App/LoreFetch.App.csproj -c Release
+          -r win-x64 --self-contained -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=$VERSION -o artifacts/publish
+
+      # The same layout as v0.1.0's hand-made zip. The project's exe is
+      # LoreFetch.App.exe; the README and release notes call it LoreFetch.exe,
+      # and renaming a single-file exe is safe. LICENSE and THIRD-PARTY-NOTICES
+      # ship with the binary because the licences require it (BSD-3 for the
+      # CardSpotter port among them). PDBs are left out: ~10 MB nobody runs.
+      - name: Zip
+        run: |
+          stage=artifacts/$NAME
+          mkdir -p "$stage"
+          cp artifacts/publish/LoreFetch.App.exe "$stage/LoreFetch.exe"
+          cp -r artifacts/publish/data "$stage/"
+          cp README.md LICENSE THIRD-PARTY-NOTICES "$stage/"
+          (cd "$stage" && 7z a -tzip "../$NAME.zip" . > /dev/null)
+          ls -l "artifacts/$NAME.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: artifacts/${{ env.NAME }}.zip
+          retention-days: 30
+
+      # A draft is invisible to the public. Publishing it is the owner's click.
+      - name: Draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" "artifacts/$NAME.zip"
+          --draft --verify-tag --title "LoreFetch $GITHUB_REF_NAME"
+          --notes-file "docs/release-notes/$GITHUB_REF_NAME.md"
