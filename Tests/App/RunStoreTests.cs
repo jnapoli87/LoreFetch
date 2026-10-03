@@ -186,6 +186,19 @@ public sealed class RunStoreTests : IDisposable
         Assert.Single(await runs.ListAsync(Ct));
     }
 
+    [Fact]
+    public async Task Rename_ToItsOwnName_LeavesTheFileWhereItIs()
+    {
+        var runs = NewRuns();
+        await runs.CommitCohortAsync(MakeCohort("Opt"), Ct);
+        var path = runs.Path;
+
+        runs.Rename(runs.Name);
+
+        Assert.Equal(path, runs.Path);
+        Assert.True(File.Exists(path));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
