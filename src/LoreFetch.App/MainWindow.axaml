@@ -414,7 +414,8 @@
       <!-- Column 2: cohort grid -->
       <Border x:Name="CohortPanel" Grid.Column="2" Background="#181818" x:DataType="vm:MainViewModel">
         <ItemsControl x:Name="CohortGrid" ItemsSource="{Binding Tiles}" Padding="4"
-                      VerticalAlignment="Top">
+                      VerticalAlignment="Top"
+                      Grid.IsSharedSizeScope="True">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <!--
@@ -468,14 +469,25 @@
                 <!-- Base card background -->
                 <Border Background="#2D2D2D" CornerRadius="3" />
 
-                <DockPanel>
+                <!--
+                  #17: the name row shares one height across every tile
+                  (SharedSizeGroup, scoped on CohortGrid), so a name that
+                  wraps makes every strip that tall and the thumbnails stay
+                  level instead of the wrapped tile's card dropping lower.
+                -->
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" SharedSizeGroup="TileNameStrip" />
+                    <RowDefinition Height="*" />
+                  </Grid.RowDefinitions>
+
                   <!--
                     #17: the name strip. Large, wrapping and never trimmed —
                     a long or split name ("Sagu Wildling // Roost Seek") takes
                     more lines rather than ending in "…", because a name that
                     can't be read can't be checked.
                   -->
-                  <Border DockPanel.Dock="Top" Padding="6,4"
+                  <Border Grid.Row="0" Padding="6,4"
                           Background="#CC000000" CornerRadius="3,3,0,0">
                     <StackPanel>
                       <TextBlock x:Name="TileName"
@@ -493,7 +505,7 @@
                     title included. Thumbnail is null in plain unit tests
                     where Avalonia is not initialised.
                   -->
-                  <Grid>
+                  <Grid Grid.Row="1">
                     <Image x:Name="TileThumbnail"
                            Source="{Binding Thumbnail}" Stretch="Uniform"
                            Margin="4" />
@@ -532,7 +544,7 @@
                                  FontSize="11" FontWeight="Bold" />
                     </Border>
                   </Grid>
-                </DockPanel>
+                </Grid>
 
                 <!--
                   State border overlays — IsHitTestVisible="False" so

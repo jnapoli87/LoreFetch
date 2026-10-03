@@ -82,6 +82,25 @@ public class CohortPanelLayoutTests
         window.Close();
     }
 
+    /// Found live: a name that wraps made its own strip taller and pushed
+    /// that card down, so a row of cards no longer lined up. Every strip
+    /// takes the height of the tallest, so all thumbnails start level.
+    [AvaloniaFact]
+    public void ThumbnailsStayLevel_WhenOneNameWraps()
+    {
+        var window = ShowWithCohort(MakeCohort(9, i => i == 0 ? LongNames[1] : "Plains"));
+
+        var offsets = FindTiles(window)
+            .Select(t => WindowRect(FindNamed<Image>(t, "TileThumbnail"), window).Y - WindowRect(t, window).Y)
+            .ToList();
+        Assert.True(
+            offsets.Max() - offsets.Min() < 0.5,
+            $"Every thumbnail must start the same distance below its tile's top; offsets were " +
+            $"{string.Join(", ", offsets.Select(o => o.ToString("F1")))}.");
+
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void LongNames_RenderInFull_AtAReadableSize()
     {
