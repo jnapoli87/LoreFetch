@@ -211,7 +211,7 @@ public class AppCompositionTests
     /// index/thresholds and collection store are still the real classes;
     /// only the frame source is redirected away from hardware.
     [Fact]
-    public async Task CreateAsync_RealMode_ComposesCsvCollectionStoreAndBothRealExporters()
+    public async Task CreateAsync_RealMode_ComposesTheRunAtTheCollectionPathAndBothRealExporters()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), $"lorefetch-streamA-real-{Guid.NewGuid():N}");
         var collectionPath = Path.Combine(tempDir, "collection.csv");
@@ -228,7 +228,12 @@ public class AppCompositionTests
                 NullLoggerFactory.Instance,
                 TestContext.Current.CancellationToken);
 
-            Assert.IsType<CsvCollectionStore>(session.Store);
+            // Issue #20: commits go through the run, which LOREFETCH_COLLECTION
+            // pins to this file. RunStoreTests drives a run over the real
+            // CsvCollectionStore.
+            var runs = Assert.IsType<RunStore>(session.Store);
+            Assert.Same(runs, session.Runs);
+            Assert.Equal(Path.GetFullPath(collectionPath), runs.Path);
             Assert.NotNull(session.Exporters);
             Assert.Equal(2, session.Exporters!.Count);
             Assert.Contains(session.Exporters, e => e is NativeCsvExporter);

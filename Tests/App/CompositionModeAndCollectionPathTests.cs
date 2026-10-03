@@ -12,10 +12,8 @@ namespace LoreFetch.Tests.App;
 /// <see cref="Environment.GetEnvironmentVariable"/> themselves (the same
 /// shape as the existing <see cref="AppComposition.ChooseFrameFolder"/>), so
 /// every case here is a pure function call — no process-global env var is
-/// ever mutated, and <see cref="ResolveCollectionPath_NoEnvVar_WouldUseMyDocuments_ButThisSuiteNeverExercisesThat"/>
-/// documents (without running) the one branch this suite deliberately never
-/// exercises, per the work package's "tests must never touch the real
-/// Documents folder" rule.
+/// ever mutated, and no case here touches the real Documents folder (the
+/// work package's "tests must never touch the real Documents folder" rule).
 public class CompositionModeAndCollectionPathTests : IDisposable
 {
     private readonly ILogger _nullLogger = NullLoggerFactory.Instance.CreateLogger("test");
@@ -102,15 +100,25 @@ public class CompositionModeAndCollectionPathTests : IDisposable
         Assert.True(Directory.Exists(dir));
     }
 
-    // Deliberately NOT tested here: AppComposition.ResolveCollectionPath(null/empty/
-    // whitespace, ...) falls back to "<MyDocuments>/LoreFetch/collection.csv" and
-    // creates that directory if missing — calling it with a falsy envVar in a unit
-    // test would create a real "LoreFetch" folder under the developer's own
-    // Documents folder, which is exactly what the work package's "tests must never
-    // touch the real Documents folder — always a temp path" rule forbids. That
-    // fallback branch is proven instead by the LOREFETCH_MODE=real smoke launch
-    // (which never sets LOREFETCH_COLLECTION) and by code review of the two-line
-    // ternary itself.
+    /// Issue #20: unset no longer means "reopen Documents/LoreFetch/collection.csv"
+    /// — the app starts a fresh run instead — and resolving it must not touch
+    /// the disk. Safe to run here because it returns before any path exists.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveCollectionPath_Unset_PinsNothing(string? envVar)
+    {
+        Assert.Null(AppComposition.ResolveCollectionPath(envVar, _nullLogger));
+    }
+
+    [Fact]
+    public void ResolveRunsFolder_IsUnderDocumentsLoreFetch()
+    {
+        var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+        Assert.Equal(Path.Combine(documents, "LoreFetch", "Runs"), AppComposition.ResolveRunsFolder());
+    }
 
     public void Dispose()
     {
