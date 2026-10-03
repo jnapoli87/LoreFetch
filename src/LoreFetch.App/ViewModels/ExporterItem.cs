@@ -6,7 +6,7 @@ namespace LoreFetch.App.ViewModels;
 /// View-model wrapper for one <see cref="ICollectionExporter"/> in the
 /// export picker. Exposes <see cref="DisplayName"/> and the
 /// <see cref="IsVerified"/> / <see cref="IsUnverified"/> pair for the
-/// unverified badge — no format-specific code lives here; the UI iterates
+/// unverified label — no format-specific code lives here; the UI iterates
 /// a generic list of these.
 /// </summary>
 public sealed class ExporterItem
@@ -27,9 +27,8 @@ public sealed class ExporterItem
     public bool IsVerified => Exporter.Format.IsVerified;
 
     /// <summary>
-    /// True when the format has NOT been verified with a live tool. Bound to
-    /// the visibility of the "unverified" badge in the export picker's item
-    /// template.
+    /// True when the format has NOT been verified with a live tool. Adds the
+    /// "(unverified)" label to the format's File > Export entry.
     /// </summary>
     public bool IsUnverified => !IsVerified;
 

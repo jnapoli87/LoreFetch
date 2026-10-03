@@ -48,6 +48,8 @@ One window: live preview with card outlines on the left, the capture grid on the
 
 The happy path is space, enter, space, enter — no mouse. Capture only fills the grid; Enter is the only thing that writes.
 
+**Checking a capture:** each tile shows the proposed name at the top, above the card, so you can read it against the printed title before pressing Enter. Drag the divider between the preview and the grid to give the tiles more room.
+
 **Tile borders:** none = confident · amber = low confidence, worth a look · red = unresolved, right-click to set · grey with ✕ = excluded · blue with **M** = set by hand.
 
 **Auto mode** captures on its own once the expected count (1, 3 or 9) holds still for 500 ms. It fires once per scene, then waits for the count to change — so swapping one card for another won't re-fire. Press Space for that.
@@ -62,7 +64,7 @@ The happy path is space, enter, space, enter — no mouse. Capture only fills th
 | **Open…** (Ctrl+O) / **Open recent** | Continue an earlier run; new cards merge into it. Only LoreFetch runs open, not exports. |
 | **Rename run…** | Rename the open run's file. |
 | **Show in folder** | Open the folder holding the run. |
-| **Export** | Same as the export panel. |
+| **Export** | Save the open run as a native CSV or a Moxfield upload. |
 
 Commit or discard a pending capture before switching runs.
 

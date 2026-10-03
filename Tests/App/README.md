@@ -42,7 +42,7 @@ dotnet test Tests/App/LoreFetch.Tests.App.csproj -c Release
 | `CohortGridTests.cs` | The cohort grid's visual tree (A5) — the correct marker per tile state, plus a full screenshot render; both tiers run on every platform. |
 | `TileInteractionTests.cs` | A6 — `ToggleExcludedFromUi` / `SetManuallyFromUi` / `ClearFromUi`, and the type-ahead populator (prefix length, cap, ordinal matching, runners-up first). |
 | `KeyboardCaptureTests.cs` | A7 — Space/Enter/Escape via the real window-level tunnel handler, the focus bail that keeps the type-ahead typable, `AutoCaptured` marshaling, and the no-`IsDefault`-button invariant. |
-| `CollectionViewTests.cs` | A8 — the collection `DataGrid` over `ListAsync`, and the exporter picker's verified/unverified badge. |
+| `CollectionViewTests.cs` | A8 — the collection `DataGrid` over `ListAsync`, and the File › Export entries and their unverified label. |
 | `ErrorStateTests.cs` | A9 — empty collection, `SourceFailed` banner, store-lock retry, startup-error surface, the Unresolved "set manually" hint; asserts no banner ever carries a stack trace. |
 | `LayoutFollowingCardDetectorTests.cs` | The A10-prep fake wrapper that makes the detector track `ScanSettings.ExpectedCount` live. |
 | `DemoCardIdentifierTests.cs` | The A10-prep fake wrapper that cycles a captured cohort through all three hash-reachable tile states. |
