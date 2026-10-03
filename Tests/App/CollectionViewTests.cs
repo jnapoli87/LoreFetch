@@ -196,6 +196,39 @@ public class CollectionViewTests
             store: store, exporters: exporters);
     }
 
+    /// <summary>
+    /// Issue #20: when two loads overlap, the one started last wins. A
+    /// reload started for one run that finishes after the window switched
+    /// to another must not overwrite the newer run's rows. The first read is
+    /// held open on purpose, so the order is fixed rather than raced.
+    /// </summary>
+    [Fact]
+    public async Task OverlappingLoads_TheLaterLoadWins_EvenWhenTheEarlierReadFinishesLast()
+    {
+        var slowRead = new TaskCompletionSource<IReadOnlyList<CollectionRow>>();
+        var store = new ScriptedListStore(slowRead.Task, Task.FromResult<IReadOnlyList<CollectionRow>>(
+            [new CollectionRow("oracle-new", "Newer Run Card", 1, null, DateTimeOffset.UtcNow, 10, RowSource.Hash, null)]));
+        var vm = new CollectionViewModel(store, null);
+
+        var earlier = vm.LoadAsync(CancellationToken.None);
+        await vm.LoadAsync(CancellationToken.None);
+        slowRead.SetResult(
+            [new CollectionRow("oracle-old", "Older Run Card", 1, null, DateTimeOffset.UtcNow, 10, RowSource.Hash, null)]);
+        await earlier;
+
+        Assert.Equal("Newer Run Card", Assert.Single(vm.Rows).OracleName);
+    }
+
+    /// Answers each ListAsync with the next scripted task, in order.
+    private sealed class ScriptedListStore(params Task<IReadOnlyList<CollectionRow>>[] reads) : ICollectionStore
+    {
+        private int _next;
+
+        public Task<IReadOnlyList<CollectionRow>> ListAsync(CancellationToken ct) => reads[_next++];
+
+        public Task<int> CommitCohortAsync(Cohort cohort, CancellationToken ct) => throw new NotSupportedException();
+    }
+
     private sealed class NullScanPipeline : IScanPipeline
     {
 #pragma warning disable CS0067

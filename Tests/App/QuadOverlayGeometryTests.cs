@@ -77,6 +77,66 @@ public class QuadOverlayGeometryTests
         await AssertOverlayMatchesTransform(windowWidth: 1600, windowHeight: 900, letterboxed: false);
     }
 
+    /// The detector's corners wobble by a pixel or two on a card lying
+    /// still. The drawn border must not follow that wobble, but must follow
+    /// a real move.
+    [AvaloniaFact]
+    public async Task QuadOverlay_CornerJitter_LeavesTheDrawnPolygonStill_ButARealMoveRedrawsIt()
+    {
+        var pipeline = new FirableScanPipeline();
+        var session = new AppSession(pipeline, new NullFrameSource(), Task.CompletedTask, new ScanSettings());
+        var window = new MainWindow(session) { Width = 1600, Height = 900 };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var overlayCanvas = window.GetVisualDescendants().OfType<Avalonia.Controls.Canvas>()
+            .First(c => c.Name == "QuadOverlayCanvas");
+
+        var quad = new CardQuad(
+            new PointF2(400, 200), new PointF2(800, 200), new PointF2(800, 760), new PointF2(400, 760));
+
+        // Fires one frame and waits for the overlay to be rebuilt from it:
+        // DrawQuadOverlay creates fresh Polygon instances on every render.
+        async Task<Polygon> DrawAsync(CardQuad drawn, Polygon? previous)
+        {
+            using var frame = MakeFrame(FrameWidth, FrameHeight);
+            pipeline.Fire(frame, new DetectionSnapshot([drawn], new FrameGeometry(FrameWidth, FrameHeight, 0), DateTimeOffset.UtcNow));
+
+            Polygon? current = null;
+            await PumpUntilAsync(() =>
+            {
+                current = overlayCanvas.Children.OfType<Polygon>().FirstOrDefault();
+                return current is not null && !ReferenceEquals(current, previous);
+            });
+
+            Assert.NotNull(current);
+            Assert.False(ReferenceEquals(current, previous), "the overlay was not redrawn for the new frame");
+            return current!;
+        }
+
+        var first = await DrawAsync(quad, previous: null);
+        var jittered = await DrawAsync(Shift(quad, 2, -2), first);
+
+        // A real move redraws once it has held for MoveAfterRenders renders.
+        var moved = jittered;
+        for (var i = 0; i < QuadOverlayDeadband.MoveAfterRenders; i++)
+        {
+            moved = await DrawAsync(Shift(quad, 40, 0), moved);
+        }
+
+        Assert.Equal(first.Points, jittered.Points);
+        Assert.True(moved.Points[0].X > jittered.Points[0].X + 5,
+            $"a 40 px move should redraw the border: was {jittered.Points[0]}, now {moved.Points[0]}");
+
+        window.Close();
+    }
+
+    private static CardQuad Shift(CardQuad q, float dx, float dy) => new(
+        new PointF2(q.TL.X + dx, q.TL.Y + dy),
+        new PointF2(q.TR.X + dx, q.TR.Y + dy),
+        new PointF2(q.BR.X + dx, q.BR.Y + dy),
+        new PointF2(q.BL.X + dx, q.BL.Y + dy));
+
     private static async Task AssertOverlayMatchesTransform(int windowWidth, int windowHeight, bool letterboxed)
     {
         var label = letterboxed ? "letterboxed" : "pillarboxed";

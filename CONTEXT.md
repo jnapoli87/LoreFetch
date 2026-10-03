@@ -1,6 +1,6 @@
 # LoreFetch
 
-A webcam collection scanner for Magic: The Gathering: cards laid on a desk are identified by image and recorded into a collection file the user owns.
+A webcam collection scanner for Magic: The Gathering: cards laid on a desk are identified by image and recorded into a run file the user owns, then exported to the tool that holds their collection.
 
 ## Language
 
@@ -71,7 +71,7 @@ Reverting a manually set tile to the hash's own proposal (or to unresolved if th
 _Avoid_: reset, remove
 
 **Commit**:
-Accepting a cohort (Enter): every included and manually set tile is written to the collection.
+Accepting a cohort (Enter): every included and manually set tile is written to the open run.
 _Avoid_: save, accept (as a noun)
 
 **Discard**:
@@ -81,15 +81,19 @@ _Avoid_: cancel, clear
 ### Collection
 
 **Collection**:
-The user's inventory, held in the native format; the source of truth.
+The user's whole inventory. It lives in the tool they export to (Moxfield), not in LoreFetch; each run adds to it.
 _Avoid_: database, library, inventory file
 
+**Run**:
+One native-format file of the cards committed in a scanning batch; the unit LoreFetch opens, writes, renames and exports. Each launch starts a new one. In code it is still an `ICollectionStore`, which predates the distinction.
+_Avoid_: session, batch file, collection (for one file)
+
 **Native format**:
-LoreFetch's own collection CSV, carrying every field known at commit time; every export projects down from it.
+LoreFetch's own run CSV, carrying every field known at commit time; every export projects down from it.
 _Avoid_: internal format, save format
 
 **Export adapter**:
-A projection of the collection into a third-party tool's import shape; lossy by definition.
+A projection of a run into a third-party tool's import shape; lossy by definition.
 _Avoid_: exporter plugin, converter
 
 **Verified adapter**:

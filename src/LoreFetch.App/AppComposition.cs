@@ -20,7 +20,8 @@ namespace LoreFetch.App;
 /// no camera, no hash index and no collection store.
 ///
 /// `Real` (packages I1–I3) wires every piece for real: the collection store
-/// (`LoreFetch.Core.Collection.CsvCollectionStore`) and both export adapters
+/// (`LoreFetch.Core.Collection.CsvCollectionStore`, one per run file, behind
+/// `RunStore` since issue #20) and both export adapters
 /// (`LoreFetch.Core.Export.NativeCsvExporter`, `LoreFetch.Core.Export.MoxfieldCsvExporter`,
 /// package I1); the detector, rectifier, and a single
 /// `LoreFetch.Core.Identification.HashCardIdentifier` used as BOTH
@@ -95,6 +96,13 @@ public sealed class AppSession : IAsyncDisposable
     /// pass one without also passing the <paramref name="diagnostics"/> it
     /// reads from.
     /// </param>
+    /// <param name="runs">
+    /// The open run (issue #20), which the window can switch to another
+    /// file. Optional so that existing test constructors continue to compile
+    /// without change. When null (Fakes mode, most tests) the File menu's
+    /// run commands are disabled; pass the same instance as
+    /// <paramref name="store"/>, since it is what commits go to.
+    /// </param>
     public AppSession(
         IScanPipeline pipeline,
         IFrameSource source,
@@ -105,7 +113,8 @@ public sealed class AppSession : IAsyncDisposable
         IReadOnlyList<ICollectionExporter>? exporters = null,
         Action? onDisposed = null,
         PreviewDiagnostics? diagnostics = null,
-        DiagnosticsReporter? reporter = null)
+        DiagnosticsReporter? reporter = null,
+        RunStore? runs = null)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
         ArgumentNullException.ThrowIfNull(source);
@@ -122,6 +131,7 @@ public sealed class AppSession : IAsyncDisposable
         _onDisposed = onDisposed;
         Diagnostics = diagnostics;
         _reporter = reporter;
+        Runs = runs;
     }
 
     private readonly DiagnosticsReporter? _reporter;
@@ -181,6 +191,13 @@ public sealed class AppSession : IAsyncDisposable
     /// "don't record".
     /// </summary>
     public PreviewDiagnostics? Diagnostics { get; }
+
+    /// <summary>
+    /// The open run, for the File menu (issue #20). The same instance as
+    /// <see cref="Store"/> when present. Null in Fakes mode, whose store is
+    /// in memory and has no file to open, rename or show.
+    /// </summary>
+    public RunStore? Runs { get; }
 
     /// Disposes the pipeline (which cancels and drains its loop), awaits the
     /// run task, then disposes the frame source itself — only at that point
@@ -379,17 +396,29 @@ public static class AppComposition
         settings.CameraRotationDegrees = 0;
         logger.LogInformation("Real mode camera rotation: {RotationDegrees} degrees.", settings.CameraRotationDegrees);
 
-        ICardDetector detector = new ContourCardDetector(loggers.CreateLogger<ContourCardDetector>());
+        // The contour detector judges each frame alone, so a card it finds on
+        // some frames and misses on others blinks in the overlay and resets
+        // the auto trigger's settle timer. The stabilizer holds it steady.
+        ICardDetector detector = new StabilizingCardDetector(
+            new ContourCardDetector(loggers.CreateLogger<ContourCardDetector>()));
         IRectifier rectifier = new PerspectiveRectifier();
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
 
         var (frameSourceFactory, onDisposed) = ChooseRealFrameSourceFactory(
             Environment.GetEnvironmentVariable("LOREFETCH_FRAMES_DIR"), loggers, logger);
 
-        var collectionPath = ResolveCollectionPath(
+        // Issue #20: each launch starts a fresh run, unless LOREFETCH_COLLECTION
+        // pins one file (tests, replays). The run is the store: commits go to
+        // whichever file it currently points at.
+        var pinnedPath = ResolveCollectionPath(
             Environment.GetEnvironmentVariable("LOREFETCH_COLLECTION"), logger);
-
-        ICollectionStore store = new CsvCollectionStore(collectionPath, loggers.CreateLogger<CsvCollectionStore>());
+        var storeLogger = loggers.CreateLogger<CsvCollectionStore>();
+        var runs = new RunStore(
+            ResolveRunsFolder(),
+            path => new CsvCollectionStore(path, storeLogger),
+            TimeProvider.System,
+            pinnedPath);
+        logger.LogInformation("Real mode run file: {Path}", runs.Path);
 
         // Both v1 export adapters (CONTRACTS.md: "v1 ships exactly two
         // formats"), in the same order the Fakes-mode stub pair models
@@ -412,9 +441,10 @@ public static class AppComposition
             loggers,
             ct,
             catalog: identifier,
-            store: store,
+            store: runs,
             exporters: exporters,
-            onDisposed: onDisposed);
+            onDisposed: onDisposed,
+            runs: runs);
     }
 
     /// Loads the committed hash index, used as BOTH <see cref="ICardIdentifier"/>
@@ -577,11 +607,11 @@ public static class AppComposition
     }
 
     /// <summary>
-    /// Resolves the collection file's path. Takes the raw env var value as a
-    /// parameter (see <see cref="ResolveCompositionMode"/> for why), so
-    /// <c>Tests/App</c> can exercise the whole resolution — including the
-    /// "create the directory if missing" step — against a temp path, never the
-    /// real Documents folder.
+    /// Resolves the run file pinned by <c>LOREFETCH_COLLECTION</c>, if any.
+    /// Takes the raw env var value as a parameter (see
+    /// <see cref="ResolveCompositionMode"/> for why), so <c>Tests/App</c> can
+    /// exercise the whole resolution — including the "create the directory if
+    /// missing" step — against a temp path, never the real Documents folder.
     /// </summary>
     /// <param name="envVar">
     /// The raw value of <c>LOREFETCH_COLLECTION</c> (a full file path), or
@@ -589,28 +619,38 @@ public static class AppComposition
     /// </param>
     /// <param name="logger">Receives an informational line naming the resolved path.</param>
     /// <returns>
-    /// <paramref name="envVar"/>, fully qualified, when set; otherwise
-    /// <c>&lt;Environment.SpecialFolder.MyDocuments&gt;/LoreFetch/collection.csv</c>.
-    /// Either way, the containing directory is created first if it does not
-    /// already exist — <see cref="Directory.CreateDirectory"/> is a no-op when
-    /// it does — so <see cref="CsvCollectionStore"/> never has to.
+    /// <paramref name="envVar"/>, fully qualified, with its containing
+    /// directory created if it does not already exist. <c>null</c> when
+    /// unset: issue #20 — the app then starts a fresh run in
+    /// <see cref="ResolveRunsFolder"/> instead of reopening one long-lived
+    /// file, and touches nothing on disk until the first commit.
     /// </returns>
-    internal static string ResolveCollectionPath(string? envVar, ILogger logger)
+    internal static string? ResolveCollectionPath(string? envVar, ILogger logger)
     {
-        var path = string.IsNullOrWhiteSpace(envVar)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LoreFetch", "collection.csv")
-            : envVar;
+        if (string.IsNullOrWhiteSpace(envVar))
+        {
+            return null;
+        }
 
-        var fullPath = Path.GetFullPath(path);
+        var fullPath = Path.GetFullPath(envVar);
         var directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory))
         {
             Directory.CreateDirectory(directory);
         }
 
-        logger.LogInformation("Real mode collection file: {Path}", fullPath);
+        logger.LogInformation("LOREFETCH_COLLECTION pins the run file: {Path}", fullPath);
         return fullPath;
     }
+
+    /// <summary>
+    /// Where new runs are created and recent runs are listed from:
+    /// <c>&lt;Documents&gt;/LoreFetch/Runs</c>. Not created here — see
+    /// <see cref="RunStore"/> — so a launch with no commits leaves Documents
+    /// untouched.
+    /// </summary>
+    internal static string ResolveRunsFolder() =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "LoreFetch", "Runs");
 
     private static ScanSettings CreateSettingsWithDemoThresholds()
     {
@@ -796,7 +836,8 @@ public static class AppComposition
         IOracleCatalog? catalog = null,
         ICollectionStore? store = null,
         IReadOnlyList<ICollectionExporter>? exporters = null,
-        Action? onDisposed = null)
+        Action? onDisposed = null,
+        RunStore? runs = null)
     {
         ArgumentNullException.ThrowIfNull(frameSourceFactory);
         ArgumentNullException.ThrowIfNull(detector);
@@ -820,7 +861,7 @@ public static class AppComposition
 
         return new AppSession(pipeline, source, runTask, settings,
             catalog: catalog, store: store, exporters: exporters, onDisposed: onDisposed,
-            diagnostics: diagnostics, reporter: reporter);
+            diagnostics: diagnostics, reporter: reporter, runs: runs);
     }
 
     // A4: image extensions that FolderFrameSource can decode. Must stay in
