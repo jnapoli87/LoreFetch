@@ -45,7 +45,7 @@ The owner is learning this codebase and works on it at a slow pace. Favour small
 
 **Follow [`CONTRIBUTING.md`](CONTRIBUTING.md)** for every change: issue → branch → PR → green CI → squash-merge, with terse issues and PRs. On top of it:
 
-- **File the issue before opening the branch or PR**, so the branch name and `Fixes #<n>` both carry the issue's number (a PR opened first takes that number itself).
+- **File the issue before opening the branch or PR**, so the branch name and `Fixes #<n>` both carry the issue's number (a PR opened first takes that number itself). Release-notes PRs are the one exception (`CONTRIBUTING.md` "Releasing").
 - **Draft issue and PR text for the owner's approval before posting it.** Terse: symptom and evidence for an issue; `Fixes #<n>`, the change and its verification for a PR. Decisions that come out of an issue land in the repo (`docs/DECISIONS.md`, `docs/CONTRACTS.md`, a design doc), and the issue links to them.
 - **Chaos-test for real:** the planted bug must make the new test fail on the assertion that guards it. A plant that still passes proves nothing.
 - **A failing `Tests/Architecture` rule** means either the change is wrong or a decision is changing. In the second case, update the rule and the doc it cites together.
