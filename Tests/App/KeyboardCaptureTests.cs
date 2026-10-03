@@ -42,13 +42,13 @@ public class KeyboardCaptureTests
     private static CardCandidate Candidate(string name, int distance = 50) =>
         new("oracle-" + name, name, distance, ArtworkId: null);
 
-    private static Cohort MakeCohort(int count = 1)
+    private static Cohort MakeCohort(int count = 1, CaptureReason reason = CaptureReason.Manual)
     {
         var card = MakeCard();
         var tiles = Enumerable.Range(0, count)
             .Select(i => new CohortTile(card, [Candidate($"Card{i}")], Good, Ok))
             .ToList<CohortTile>();
-        return new Cohort(Guid.NewGuid(), DateTimeOffset.UtcNow, count, CaptureReason.Manual, tiles);
+        return new Cohort(Guid.NewGuid(), DateTimeOffset.UtcNow, count, reason, tiles);
     }
 
     /// <summary>
@@ -342,6 +342,78 @@ public class KeyboardCaptureTests
     }
 
     // -----------------------------------------------------------------------
+    // Manual-set lock: once "Set card manually…" is open or picked, a new
+    // capture must not replace the grid under the user.
+    // -----------------------------------------------------------------------
+
+    [AvaloniaFact]
+    public async Task AutoCaptured_WhileTypeAheadOpen_KeepsTheGrid()
+    {
+        var pipeline = new SpyPipeline();
+        var window = new MainWindow(MakeSession(pipeline));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeCohort(1));
+        var typingTile = vm.Tiles[0];
+        typingTile.IsTypeAheadOpen = true;
+
+        await Task.Run(() => pipeline.RaiseAutoCaptured(MakeCohort(3, CaptureReason.AutoSettle)));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(typingTile, Assert.Single(vm.Tiles));
+        Assert.Null(vm.NoticeMessage); // the user didn't ask for this capture
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Space_AfterManualPick_OverridesTheLock()
+    {
+        var pipeline = new SpyPipeline(MakeCohort(3));
+        var window = new MainWindow(MakeSession(pipeline));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeCohort(1));
+        vm.Tiles[0].SetManuallyFromUi(new OracleEntry("oracle-pick", "Black Lotus"));
+
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(3, vm.Tiles.Count);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task AutoCaptured_AfterEscapeDiscardsManualPick_LoadsAgain()
+    {
+        var pipeline = new SpyPipeline();
+        var window = new MainWindow(MakeSession(pipeline));
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeCohort(1));
+        vm.Tiles[0].SetManuallyFromUi(new OracleEntry("oracle-pick", "Black Lotus"));
+
+        await Task.Run(() => pipeline.RaiseAutoCaptured(MakeCohort(3, CaptureReason.AutoSettle))); // dropped: locked
+        Dispatcher.UIThread.RunJobs();
+        Assert.Single(vm.Tiles);
+
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        await Task.Run(() => pipeline.RaiseAutoCaptured(MakeCohort(3, CaptureReason.AutoSettle)));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(3, vm.Tiles.Count);
+
+        window.Close();
+    }
+
+    // -----------------------------------------------------------------------
     // No IsDefault button in the visual tree.
     // A Button with IsDefault=True registers on the input root and fires on
     // Enter regardless of focus (docs/design/app.md §A6), which would intercept
@@ -474,4 +546,24 @@ public class KeyboardCaptureTests
  *   Result: After Escape, the store has rows (the commit fired). Test FAILS:
  *     Assert.Empty(rows) → collection has 1 element.
  *   Conclusion: fails for the right reason (store written on Escape). ✓
+ *
+ * Case 4 — No manual-set lock (`TileViewModel.LocksCohort => false`):
+ *   Affected tests: AutoCaptured_WhileTypeAheadOpen_KeepsTheGrid,
+ *     AutoCaptured_AfterEscapeDiscardsManualPick_LoadsAgain
+ *   Result: the auto-captured 3-tile cohort replaces the grid. Both FAIL:
+ *     Assert.Single() → the collection contained 3 items. ✓
+ *
+ * Case 5 — Lock never releases (`IsCohortLocked` latched in a field that
+ *           nothing resets):
+ *   Affected test: AutoCaptured_AfterEscapeDiscardsManualPick_LoadsAgain
+ *   Result: the auto-capture after Escape is still dropped. Test FAILS:
+ *     Assert.Equal(3, vm.Tiles.Count) → Values differ. ✓
+ *   Note: the test raises one auto-capture while locked; without that, the
+ *     latch is never read and this plant passes.
+ *
+ * Case 6 — Lock also blocks Space (drop the `Reason == AutoSettle` check
+ *           in MainViewModel.LoadCohort):
+ *   Affected test: Space_AfterManualPick_OverridesTheLock
+ *   Result: Space is dropped and the manual pick stays. Test FAILS:
+ *     Assert.Equal(3, vm.Tiles.Count) → Values differ. ✓
  */

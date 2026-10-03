@@ -83,6 +83,8 @@ Happy path is **space, enter, space, enter** — no mouse. Auto mode fires on a 
 
 Capture only *fills the grid*; commit is always the separate explicit Enter. That separation is what makes auto mode safe — a spurious capture costs an Escape, not a corrupted row.
 
+**Setting a card by hand freezes auto-capture** (#30). From *Set card manually…* until Enter or Escape, an auto-capture is dropped rather than replacing the cohort, so it can't wipe a half-typed name or a pick. Space still replaces the cohort: it's the user asking for a fresh capture. The flow is *check the grid, set what needs setting, then Enter or Escape*. The lock covers the whole cohort, not just the hand-set tile. Keeping one tile across captures would mix two captures in one cohort, could silently drop the rest of the first capture uncommitted, and would need position matching across exactly the scene change that triggered the recapture.
+
 Match distance drives **emphasis, not gating**: low-confidence tiles are highlighted so the eye lands there. Enter is the real gate, per-cohort rather than per-card, which is what preserves throughput.
 
 ## Storage — CSV, not a database

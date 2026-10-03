@@ -40,11 +40,11 @@ One window: live preview with card outlines on the left, the capture grid on the
 
 | Key / action | Effect |
 |---|---|
-| **Space** | Capture whatever is detected right now. Replaces any pending grid. |
+| **Space** | Capture whatever is detected right now. Replaces any pending grid, including one you're setting by hand. |
 | **Enter** | Commit every tile that isn't X'd. |
 | **Escape** | Discard. Nothing is written. |
 | **Left-click a tile** | Toggle its **X**. No X means included. |
-| **Right-click a tile** | Set the card by hand, or clear a manual pick. |
+| **Right-click a tile** | Set the card by hand, or clear a manual pick. From "Set card manually…" until Enter, Escape or Space, auto mode won't replace the grid. |
 
 The happy path is space, enter, space, enter — no mouse. Capture only fills the grid; Enter is the only thing that writes.
 
@@ -53,6 +53,8 @@ The happy path is space, enter, space, enter — no mouse. Capture only fills th
 **Tile borders:** none = confident · amber = low confidence, worth a look · red = unresolved, right-click to set · grey with ✕ = excluded · blue with **M** = set by hand.
 
 **Auto mode** captures on its own once the expected count (1, 3 or 9) holds still for 500 ms. It fires once per scene, then waits for the count to change — so swapping one card for another won't re-fire. Press Space for that.
+
+**Fixing a card by hand:** check the grid, then right-click any card that needs it and set it. From that point auto mode leaves the grid alone, so a stray capture can't wipe your work. Press Enter to commit or Escape to discard, and auto mode picks up again. Space still forces a fresh capture.
 
 **Runs.** Each launch starts a new, empty run: one CSV per scanning batch, named after the time it started and saved to `Documents\LoreFetch\Runs\` as you commit. Nothing is written until the first Enter. The title bar and the panel header name the open run.
 
