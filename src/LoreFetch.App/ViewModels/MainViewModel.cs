@@ -253,6 +253,26 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>True when there is a store-lock message to display.</summary>
     public bool HasStoreLock => _storeLockMessage is not null;
 
+    private string? _noticeMessage;
+
+    /// <summary>
+    /// A one-line notice the user dismisses (issue #20): why a File-menu
+    /// action was refused or failed, e.g. switching runs while a cohort is
+    /// pending, or opening a file that isn't a run. Null means no banner.
+    /// </summary>
+    public string? NoticeMessage
+    {
+        get => _noticeMessage;
+        set
+        {
+            if (SetProperty(ref _noticeMessage, value))
+                OnPropertyChanged(nameof(HasNotice));
+        }
+    }
+
+    /// <summary>True when there is a notice to display.</summary>
+    public bool HasNotice => _noticeMessage is not null;
+
     private string? _startupErrorMessage;
 
     /// <summary>

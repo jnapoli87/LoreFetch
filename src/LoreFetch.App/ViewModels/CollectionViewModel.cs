@@ -65,8 +65,37 @@ public sealed class CollectionViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(IsEmpty));
             OnPropertyChanged(nameof(HasRows));
+            OnPropertyChanged(nameof(CardCount));
+            OnPropertyChanged(nameof(HeaderText));
         };
     }
+
+    private string? _runName;
+
+    /// <summary>
+    /// The open run's name (issue #20), shown in <see cref="HeaderText"/> so
+    /// the panel always says which file it is showing. Null when there is no
+    /// run file (Fakes mode).
+    /// </summary>
+    public string? RunName
+    {
+        get => _runName;
+        set
+        {
+            if (SetProperty(ref _runName, value))
+                OnPropertyChanged(nameof(HeaderText));
+        }
+    }
+
+    /// <summary>
+    /// Cards in <see cref="Rows"/>, counting quantities: nine Forests are
+    /// nine cards, matching what a commit reports.
+    /// </summary>
+    public int CardCount => Rows.Sum(r => r.Quantity);
+
+    /// <summary>The panel header, e.g. "Run: 2026-10-02 14-30 · 37 cards".</summary>
+    public string HeaderText =>
+        $"{(RunName is null ? "Collection" : "Run: " + RunName)} · {CardCount} {(CardCount == 1 ? "card" : "cards")}";
 
     /// <summary>
     /// Rows from the collection store, bound to the DataGrid. Populated by

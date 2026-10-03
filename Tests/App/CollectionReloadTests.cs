@@ -117,10 +117,6 @@ public class CollectionReloadTests
     public void Space_NeverReloadsCollectionGrid()
     {
         var store = new StubCollectionStore();
-        store.Seed(new CollectionRow(
-            "oracle-existing", "Existing Card", 1, null,
-            DateTimeOffset.UtcNow, 50, RowSource.Hash, null));
-
         var cohort = MakeCohort(1);
         var pipeline = new SpyPipeline(cohort);
         var session = MakeSession(pipeline, store);
@@ -132,8 +128,13 @@ public class CollectionReloadTests
         Dispatcher.UIThread.RunJobs();
 
         var dataGrid = FindCollectionGrid(window);
-        // Never refreshed, so the pre-existing store row is not shown yet.
         Assert.Equal(0, RowCount(dataGrid));
+
+        // Issue #20: the window loads the store at startup, so this row is
+        // seeded only after that load. Only a reload could show it now.
+        store.Seed(new CollectionRow(
+            "oracle-existing", "Existing Card", 1, null,
+            DateTimeOffset.UtcNow, 50, RowSource.Hash, null));
 
         window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
@@ -153,15 +154,6 @@ public class CollectionReloadTests
     public async Task Enter_WhenStoreThrowsCollectionStoreException_DoesNotReloadCollectionGrid()
     {
         var store = new StubCollectionStore();
-        // Seed a row that already exists in the store BEFORE the failed
-        // commit. The grid never called Refresh, so it must still show 0
-        // rows after Enter fails — if the catch branch erroneously reloaded
-        // (chaos case (b)), this seeded row would leak into the grid even
-        // though nothing new was committed, which a store that stays merely
-        // empty could never reveal.
-        store.Seed(new CollectionRow(
-            "oracle-preexisting", "Pre-existing Card", 1, null,
-            DateTimeOffset.UtcNow, 50, RowSource.Hash, null));
         store.ArmNextCommitToThrow();
         var pipeline = new SpyPipeline();
         var session = MakeSession(pipeline, store);
@@ -171,6 +163,16 @@ public class CollectionReloadTests
         window.Height = 768;
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // Seed a row that already exists in the store BEFORE the failed
+        // commit, but AFTER the window's startup load (issue #20), so the
+        // grid has not seen it. It must still show 0 rows after Enter fails
+        // — if the catch branch erroneously reloaded (chaos case (b)), this
+        // seeded row would leak into the grid even though nothing new was
+        // committed, which a store that stays merely empty could never reveal.
+        store.Seed(new CollectionRow(
+            "oracle-preexisting", "Pre-existing Card", 1, null,
+            DateTimeOffset.UtcNow, 50, RowSource.Hash, null));
 
         var vm = (MainViewModel)window.DataContext!;
         vm.LoadCohort(MakeCohort(2));

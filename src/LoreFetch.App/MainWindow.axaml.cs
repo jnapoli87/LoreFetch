@@ -91,6 +91,11 @@ public partial class MainWindow : Window
     // do not inherit the window's MainViewModel DataContext.
     private CollectionViewModel _collectionVm;
 
+    // Issue #20: the open run, which the File menu switches. Null when the
+    // session has no run file (Fakes mode, most tests): the run commands are
+    // then disabled.
+    private RunStore? _runs;
+
     // A7: cancelled in OnClosed to signal any in-flight CaptureAsync or
     // CommitCohortAsync that the window is shutting down.
     private readonly CancellationTokenSource _cts = new();
@@ -158,6 +163,13 @@ public partial class MainWindow : Window
         _collectionVm = new CollectionViewModel(session.Store, session.Exporters);
         CollectionPanel.DataContext = _collectionVm;
 
+        // Issue #20: the File menu works on the session's run.
+        _runs = session.Runs;
+        BuildExportMenu();
+        foreach (var item in new[] { NewRunMenuItem, OpenRunMenuItem, RecentRunsMenuItem, RenameRunMenuItem, ShowRunInFolderMenuItem })
+            item.IsEnabled = _runs is not null;
+        ShowCurrentRun();
+
         // A7: window-level tunnel handler for Space/Enter/Escape. Must use
         // RoutingStrategies.Tunnel explicitly — AddHandler's default is
         // Direct|Bubble, which would miss the tunnel pass (docs/design/app.md
@@ -167,6 +179,11 @@ public partial class MainWindow : Window
         // ancestors' KeyBindings before the routed event even fires, so
         // mixing KeyBindings with the tunnel handler would double-fire.
         AddHandler(InputElement.KeyDownEvent, OnKeyDownTunnel, RoutingStrategies.Tunnel);
+
+        // Issue #20: show the open run's rows from the start. The grid used
+        // to stay empty until the first commit's reload, which then brought
+        // back every card from earlier sessions at once.
+        _ = RefreshCollectionAsync();
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -250,7 +267,7 @@ public partial class MainWindow : Window
             file = await topLevel.StorageProvider.SaveFilePickerAsync(
                 new FilePickerSaveOptions
                 {
-                    SuggestedFileName = "collection",
+                    SuggestedFileName = _collectionVm.RunName ?? "collection",
                     DefaultExtension = exporter.Format.FileExtension.TrimStart('.'),
                     FileTypeChoices =
                     [
@@ -291,6 +308,214 @@ public partial class MainWindow : Window
         catch (IOException)
         {
             // Disk write error — not a CollectionStoreException; no retry banner.
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Issue #20: the File menu (runs and export)
+    // -----------------------------------------------------------------------
+
+    /// Puts the open run's name in the title bar and the collection header.
+    private void ShowCurrentRun()
+    {
+        _collectionVm.RunName = _runs?.Name;
+        Title = _runs is null ? "LoreFetch" : $"LoreFetch — {_runs.Name}";
+    }
+
+    /// One Export entry per session exporter, the same list the sidebar
+    /// shows. Built here rather than bound in XAML so the window, like the
+    /// sidebar, never names a format.
+    private void BuildExportMenu()
+    {
+        ExportMenuItem.Items.Clear();
+        foreach (var item in _collectionVm.ExporterItems)
+        {
+            var exporter = item.Exporter;
+            var menuItem = new MenuItem { Header = PlainHeader(item.DisplayName) };
+            menuItem.Click += (_, _) => _ = ExportAsync(exporter);
+            ExportMenuItem.Items.Add(menuItem);
+        }
+
+        ExportMenuItem.IsEnabled = ExportMenuItem.Items.Count > 0;
+    }
+
+    /// Lists recent runs each time File opens, so the list is never stale and
+    /// there is nothing to keep in sync (RunStore.ListRecent lists the folder).
+    private void OnFileMenuOpened(object? sender, RoutedEventArgs e)
+    {
+        // SubmenuOpened bubbles; only File itself opening should rebuild.
+        if (!ReferenceEquals(e.Source, FileMenu) || _runs is null) return;
+
+        RecentRunsMenuItem.Items.Clear();
+        foreach (var path in _runs.ListRecent())
+        {
+            var menuItem = new MenuItem { Header = PlainHeader(System.IO.Path.GetFileNameWithoutExtension(path)) };
+            menuItem.Click += (_, _) => _ = OpenRunAsync(path);
+            RecentRunsMenuItem.Items.Add(menuItem);
+        }
+
+        if (RecentRunsMenuItem.Items.Count == 0)
+            RecentRunsMenuItem.Items.Add(new MenuItem { Header = "No earlier runs", IsEnabled = false });
+    }
+
+    // A string header treats "_" as an access-key marker; a run named
+    // "trade_box" must show as typed.
+    private static TextBlock PlainHeader(string text) => new() { Text = text };
+
+    private void OnNewRunClick(object? sender, RoutedEventArgs e) => _ = StartNewRunAsync();
+
+    private void OnRenameRunClick(object? sender, RoutedEventArgs e) => _ = PromptRenameRunAsync();
+
+    private void OnNoticeDismissClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is ViewModels.MainViewModel vm)
+            vm.NoticeMessage = null;
+    }
+
+    /// Switching runs while a cohort waits for Enter would commit it to a
+    /// run it wasn't captured for, so every switch is refused until the
+    /// cohort is committed or discarded. A cohort stays pending until its
+    /// commit has succeeded, so this also covers a commit still in flight.
+    private bool RefuseWhileCohortPending()
+    {
+        if (DataContext is not ViewModels.MainViewModel { HasPendingCohort: true } vm) return false;
+
+        vm.NoticeMessage = "Commit (Enter) or discard (Escape) the pending capture first.";
+        return true;
+    }
+
+    /// File → New run: a fresh, empty run named after the current time.
+    internal async Task StartNewRunAsync()
+    {
+        if (_runs is null || RefuseWhileCohortPending()) return;
+
+        _runs.StartNew();
+        await RunSwitchedAsync();
+    }
+
+    /// File → Open… / Open recent: makes an existing run the open one. A file
+    /// that isn't a native run (a Moxfield export, say) is refused with a
+    /// notice, and the current run stays open.
+    internal async Task OpenRunAsync(string path)
+    {
+        if (_runs is null || RefuseWhileCohortPending()) return;
+
+        var fileName = System.IO.Path.GetFileName(path);
+        string? failure = null;
+        try
+        {
+            await _runs.OpenAsync(path, _cts.Token);
+        }
+        catch (FormatException ex)
+        {
+            failure = $"'{fileName}' isn't a LoreFetch run, so it wasn't opened. {ex.Message}";
+        }
+        catch (CollectionStoreException)
+        {
+            failure = $"Couldn't read '{fileName}'. If it's open in another program (e.g. Excel), close it and try again.";
+        }
+        catch (FileNotFoundException ex)
+        {
+            failure = ex.Message;
+        }
+        catch (OperationCanceledException)
+        {
+            return; // window closing
+        }
+
+        if (failure is not null)
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+                vm.NoticeMessage = failure;
+            return;
+        }
+
+        await RunSwitchedAsync();
+    }
+
+    /// File → Rename run…: renames the open run in its own folder.
+    internal async Task RenameRunAsync(string newName)
+    {
+        if (_runs is null || RefuseWhileCohortPending()) return;
+
+        try
+        {
+            _runs.Rename(newName);
+        }
+        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+                vm.NoticeMessage = ex.Message;
+            return;
+        }
+
+        await RunSwitchedAsync();
+    }
+
+    private async Task RunSwitchedAsync()
+    {
+        if (DataContext is ViewModels.MainViewModel vm)
+            vm.NoticeMessage = null;
+
+        ShowCurrentRun();
+        await RefreshCollectionAsync();
+    }
+
+    private async void OnOpenRunClick(object? sender, RoutedEventArgs e)
+    {
+        // Refuse before the picker, not after the user has chosen a file.
+        if (_runs is null || RefuseWhileCohortPending()) return;
+
+        var storage = GetTopLevel(this)?.StorageProvider;
+        if (storage is null) return;
+
+        IReadOnlyList<IStorageFile> files;
+        try
+        {
+            files = await storage.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Open run",
+                AllowMultiple = false,
+                SuggestedStartLocation = await storage.TryGetFolderFromPathAsync(_runs.RunsFolder),
+                FileTypeFilter = [new FilePickerFileType("LoreFetch run") { Patterns = ["*" + RunStore.FileExtension] }],
+            });
+        }
+        catch (OperationCanceledException) { return; }
+
+        var path = files.Count > 0 ? files[0].TryGetLocalPath() : null;
+        if (path is not null)
+            await OpenRunAsync(path);
+    }
+
+    private async Task PromptRenameRunAsync()
+    {
+        if (_runs is null || RefuseWhileCohortPending()) return;
+
+        var newName = await new RenameRunDialog(_runs.Name).ShowDialog<string?>(this);
+        if (newName is not null)
+            await RenameRunAsync(newName);
+    }
+
+    /// File → Show in folder: opens the folder holding the run. A new run's
+    /// folder may not exist before its first commit; asking to see it is
+    /// reason enough to create it.
+    private async void OnShowRunInFolderClick(object? sender, RoutedEventArgs e)
+    {
+        if (_runs is null) return;
+
+        var launcher = GetTopLevel(this)?.Launcher;
+        if (launcher is null) return;
+
+        var folder = System.IO.Path.GetDirectoryName(_runs.Path)!;
+        try
+        {
+            Directory.CreateDirectory(folder);
+            await launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(folder));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (DataContext is ViewModels.MainViewModel vm)
+                vm.NoticeMessage = $"Couldn't open the folder: {ex.Message}";
         }
     }
 
@@ -572,6 +797,11 @@ public partial class MainWindow : Window
         // returns early when user code handled the event). Reproducible in
         // headless tests on both platforms.
         if (FocusManager?.GetFocusedElement() is TextBox)
+            return;
+
+        // Issue #20: while the File menu is open, Space/Enter/Escape belong to
+        // it. Escape closes the menu; it must not also discard the cohort.
+        if (MainMenu.IsOpen)
             return;
 
         switch (e.Key)

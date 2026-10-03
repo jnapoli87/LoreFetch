@@ -223,11 +223,4 @@ public sealed class RunStoreTests : IDisposable
 
         Assert.Equal(new[] { newer, older }, runs.ListRecent());
     }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
-
-        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
-    }
 }

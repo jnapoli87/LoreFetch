@@ -102,7 +102,8 @@ public sealed class RunStore : ICollectionStore
     /// <summary>
     /// Renames the current run, in its own folder. Moves the file (and its
     /// <c>.bak</c>) when one has been written. Throws
-    /// <see cref="ArgumentException"/> for an unusable name and
+    /// <see cref="ArgumentException"/> for an unusable name (with no
+    /// parameter name, so its message can be shown to the user as-is) and
     /// <see cref="IOException"/> when a run of that name already exists or
     /// the file cannot be moved; either way the current run is unchanged.
     /// </summary>
@@ -118,12 +119,12 @@ public sealed class RunStore : ICollectionStore
 
         if (name.Length == 0)
         {
-            throw new ArgumentException("Enter a name for the run.", nameof(newName));
+            throw new ArgumentException("Enter a name for the run.");
         }
 
         if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
         {
-            throw new ArgumentException($"A run name can't contain any of: {InvalidCharsForDisplay()}", nameof(newName));
+            throw new ArgumentException($"A run name can't contain any of: {InvalidCharsForDisplay()}");
         }
 
         var newPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, name + FileExtension);
