@@ -379,7 +379,11 @@ public static class AppComposition
         settings.CameraRotationDegrees = 0;
         logger.LogInformation("Real mode camera rotation: {RotationDegrees} degrees.", settings.CameraRotationDegrees);
 
-        ICardDetector detector = new ContourCardDetector(loggers.CreateLogger<ContourCardDetector>());
+        // The contour detector judges each frame alone, so a card it finds on
+        // some frames and misses on others blinks in the overlay and resets
+        // the auto trigger's settle timer. The stabilizer holds it steady.
+        ICardDetector detector = new StabilizingCardDetector(
+            new ContourCardDetector(loggers.CreateLogger<ContourCardDetector>()));
         IRectifier rectifier = new PerspectiveRectifier();
         IAutoCaptureTrigger trigger = new AutoCaptureTrigger(settings);
 
