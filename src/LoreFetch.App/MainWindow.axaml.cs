@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
@@ -668,12 +669,30 @@ public partial class MainWindow : Window
     /// <summary>
     /// Left-click (Tapped) on a tile's outer Grid → toggle the X opt-out.
     /// </summary>
+    /// <remarks>
+    /// Issue #18: a click inside the type-ahead box bubbles <c>Tapped</c> up
+    /// to this Grid and toggled the X while the user was typing. Taps whose
+    /// source has an <see cref="AutoCompleteBox"/> among its LOGICAL ancestors
+    /// are ignored; the logical tree also reaches the box's dropdown popup,
+    /// which renders under a separate visual root. <see cref="TileViewModel.IsTypeAheadOpen"/>
+    /// can't gate this: a pick closes the overlay before <c>Tapped</c>
+    /// finishes bubbling. Only the in-box click is covered by a test; the
+    /// dropdown-item path can't be hit-tested headlessly.
+    /// </remarks>
     private void OnTileTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is Grid { DataContext: TileViewModel vm })
+        if (sender is not Grid { DataContext: TileViewModel vm })
         {
-            vm.ToggleExcludedFromUi();
+            return;
         }
+
+        if (e.Source is ILogical sourceLogical &&
+            (sourceLogical is AutoCompleteBox || sourceLogical.GetLogicalAncestors().OfType<AutoCompleteBox>().Any()))
+        {
+            return;
+        }
+
+        vm.ToggleExcludedFromUi();
     }
 
     /// <summary>
@@ -744,6 +763,18 @@ public partial class MainWindow : Window
             acb.AsyncPopulator = vm.TypeAheadPopulator;
             acb.MinimumPrefixLength = 2;
             acb.MinimumPopulateDelay = TimeSpan.FromMilliseconds(150);
+
+            // AsyncPopulator already returns the exact ranked matches (prefix
+            // tier, then substring-elsewhere tier — TileViewModel.BuildPopulator).
+            // The control's own default FilterMode is StartsWith, which would
+            // re-filter that list against the raw typed text and silently drop
+            // every substring-elsewhere match the populator deliberately
+            // included — "holding" would then show nothing for "Bag of
+            // Holding". None disables that second filter pass so the
+            // populator's own ordering and membership are what the dropdown
+            // actually displays.
+            acb.FilterMode = AutoCompleteFilterMode.None;
+
             acb.PropertyChanged += OnTypeAheadPropertyChanged;
         }
     }
@@ -814,16 +845,46 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// AutoCompleteBox selection changed → apply the chosen entry via
-    /// <see cref="TileViewModel.SetManuallyFromUi"/> and close the overlay.
-    /// Fires for both selection and de-selection; guards against a null
-    /// <c>SelectedItem</c> (de-selection sets it to null).
+    /// AutoCompleteBox selection changed → pick it, unless the dropdown is
+    /// still open.
     /// </summary>
+    /// <remarks>
+    /// Issue #18: <c>AutoCompleteBox</c> moves <c>SelectedItem</c> with every
+    /// arrow key while the dropdown is open, so picking here unconditionally
+    /// took the first entry on the first ArrowDown and closed the list. An
+    /// open dropdown means the user is still choosing; Enter or a click
+    /// closes it and <see cref="OnTypeAheadDropDownClosed"/> picks. Escape
+    /// closes it too, but resets <c>SelectedItem</c> first, so nothing is
+    /// picked.
+    /// </remarks>
     private void OnTypeAheadSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is AutoCompleteBox acb &&
-            acb.DataContext is TileViewModel vm &&
-            acb.SelectedItem is CatalogItem item)
+        if (sender is AutoCompleteBox { IsDropDownOpen: false } acb)
+        {
+            PickTypeAheadSelection(acb);
+        }
+    }
+
+    /// <summary>
+    /// Dropdown closed by Enter or a click → pick the highlighted entry. See
+    /// <see cref="OnTypeAheadSelectionChanged"/>.
+    /// </summary>
+    private void OnTypeAheadDropDownClosed(object? sender, EventArgs e)
+    {
+        if (sender is AutoCompleteBox acb)
+        {
+            PickTypeAheadSelection(acb);
+        }
+    }
+
+    /// <summary>
+    /// Applies the box's <c>SelectedItem</c> via
+    /// <see cref="TileViewModel.SetManuallyFromUi"/> and closes the overlay.
+    /// A null <c>SelectedItem</c> (de-selection, Escape) picks nothing.
+    /// </summary>
+    private static void PickTypeAheadSelection(AutoCompleteBox acb)
+    {
+        if (acb.DataContext is TileViewModel vm && acb.SelectedItem is CatalogItem item)
         {
             vm.SetManuallyFromUi(item.ToEntry());
             vm.IsTypeAheadOpen = false;
