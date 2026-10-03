@@ -52,7 +52,13 @@ public class RoundTripGateTests
     /// oracle ids / 1,852 basic lands) -- see docs/accuracy.md "Results --
     /// win-x64 committed index rebuild". The prior value
     /// (6495314e...) pinned the unfiltered 48,750-art index the Mac built.
-    private const string ExpectedIndexSha256 = "b261cea11c1ad944a05f04f9d8cf1bb27a11682efc31e9732c9fce4cb1937402";
+    ///
+    /// Updated for the 2026-10-03 refresh (#38): Scryfall's bulk file of that
+    /// day, 47,480 arts / 32,743 oracle ids / 1,857 basic lands, which adds
+    /// Reality Fracture's final scans. The prior value (b261cea1...) pinned
+    /// the 2026-09-22 build. Steps: src/LoreFetch.Lab/README.md
+    /// "Refreshing the index".
+    private const string ExpectedIndexSha256 = "77c93191f0a193cd807cf358928c1ae2c8df8d9ed74b8fa7955e10a654cb6854";
 
     /// Measured 2026-09-22 on arm64-darwin against the real 48,750-artwork
     /// index and the full real cache: own-distance max was well under 100

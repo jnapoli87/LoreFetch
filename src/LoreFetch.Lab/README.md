@@ -43,6 +43,24 @@ Hand-rolled dispatch in `Program.cs` (the `.csproj` is frozen and can't take a C
 
 Run `dotnet run --project src/LoreFetch.Lab -- <command>` with no arguments, or see `Program.cs`'s `PrintUsage()`, for the full flag list per command.
 
+## Refreshing the index
+
+The committed index goes stale as sets release. Refresh it before a release that should recognise them, on `win-x64` only (the goldens and `referenceFloor` are measured there). The hash transforms don't change, so the "rebuild with every transform change" rule isn't in play; this is the same build over newer data. #15 will automate these steps.
+
+Paths below are the owner's PC. `$CACHE` is the image cache (`C:/LoreFetchData/scryfall-cache`), `$BULK` a dated folder outside the repo, such as `C:/LoreFetchData/bulk-2026-10-03`, so the manifest outlives the worktree that built it.
+
+1. **Bulk:** `lab bulk --out $BULK`. Note the art count it prints against `indexArtworkCount` in `data/index/thresholds.json`.
+2. **Move updated renders aside.** `images` skips files already cached, so a render Scryfall has since replaced (a preview scan swapped for the final one) would stay stale. Each `ImageUriNormal` ends in `?<unix time>` of its last change; move every cached file older than that into a dated folder beside the cache rather than deleting it:
+   ```bash
+   python -c "import json,os,re,shutil,sys; b,c,d=sys.argv[1:]; os.makedirs(d,exist_ok=True); [shutil.move(p,d) for r in map(json.loads,open(b+'/filtered-artworks.jsonl')) for p in [f'{c}/{r[\"ArtworkId\"]}.jpg'] if os.path.exists(p) and int(re.search(r'\?(\d+)$',r['ImageUriNormal']).group(1))>os.path.getmtime(p)]" $BULK $CACHE $CACHE-replaced-$(date +%F)
+   ```
+3. **Images:** `lab images --manifest $BULK/filtered-artworks.jsonl --cache $CACHE`. It fetches only the new and moved renders.
+4. **Build:** `lab build-index --manifest $BULK/filtered-artworks.jsonl --cache $CACHE --out C:/LoreFetchData/index-out/cards.<date>.lfidx`, then copy it over `data/index/cards.lfidx`.
+5. **Round-trip gate:** `lab round-trip-gate --cache $CACHE --out data/index/thresholds.json`. It must report 100% rank-1 (it refuses to write below 99%). It updates the index fields and the B2 statistics, but it also rewrites `notes` to say `goodDistance`/`okDistance` are "NOT YET SET", reorders the keys and escapes characters. Restore the committed file's layout, keep the new values, and rewrite the B2 part of `notes`; `CommittedThresholdsFileTests` fails until the notes are right.
+6. **Accuracy:** `lab accuracy --images-root <checkout with test-images/>`, once with the new index and once with `--index` on the old one. The gate must still PASS with wrong@1 = 0. If the headline moves, `goodDistance`/`okDistance` need recalibrating, which is a separate change.
+7. **Pins and docs:** update `ExpectedIndexSha256` in `Tests/Lab/RoundTrip/RoundTripGateTests.cs`, the artwork count in the README's "How it works", and add a dated entry to `docs/accuracy.md`.
+8. **Tests:** `LOREFETCH_SCRYFALL_CACHE=$CACHE scripts/lorefetch.sh test` from a checkout that has `test-images/`, with `LOREFETCH_REQUIRE_REAL=1` to prove nothing skipped.
+
 ## Test gating
 
 Most of `Tests/Lab`'s tests need real Scryfall renders on disk and are gated on an environment variable rather than a mock: `LOREFETCH_SCRYFALL_CACHE` (default `~/LoreFetchData/scryfall-cache`; on the Windows PC that's `C:\LoreFetchData\scryfall-cache`). If the variable isn't set, or the directory it names doesn't exist, those tests **skip silently** rather than fail — a machine whose cache lives somewhere else just runs a smaller suite, with no red to flag it. Set the variable explicitly rather than assuming the default matches your machine.
