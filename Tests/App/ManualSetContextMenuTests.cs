@@ -293,22 +293,6 @@ public class ManualSetContextMenuTests
     /// Enter ever reaching <see cref="MainWindow.OnEnterAsync"/> and
     /// committing the whole pending cohort.
     /// </summary>
-    /// <remarks>
-    /// Keyboard pick: a single <c>ArrowDown</c> is sent, not
-    /// <c>ArrowDown</c> then <c>Enter</c>. Empirically (see the chaos-test
-    /// notes below), this <c>AutoCompleteBox</c> has no separate "highlight,
-    /// then confirm with Enter" step — the first <c>ArrowDown</c> already
-    /// sets <c>SelectedItem</c>, fires <c>SelectionChanged</c>
-    /// (<see cref="MainWindow.OnTypeAheadSelectionChanged"/>) and closes the
-    /// overlay, all synchronously. A further <c>Enter</c> at that point is a
-    /// separate, CORRECT action — commit the whole cohort, the next step of
-    /// the ordinary space/enter happy path — not a confirmation of the
-    /// dropdown pick, so sending it here would not be testing this issue's
-    /// fix at all. The assertion this test actually makes — that the pick
-    /// itself never touched <c>Key.Enter</c> and the cohort is still loaded —
-    /// is the meaningful, true form of "Enter did not commit the cohort" for
-    /// this control's real behaviour.
-    /// </remarks>
     [AvaloniaFact]
     public async Task TypeAhead_TypingCaseInsensitivePrefix_FindsCardInDropdown_AndKeyboardPickSetsManuallySet()
     {
@@ -343,15 +327,107 @@ public class ManualSetContextMenuTests
         Assert.Contains("Bag of Holding", displayed);
 
         window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(TileState.ManuallySet, tileVm.State);
         Assert.Equal("Bag of Holding", tileVm.DisplayName);
         Assert.False(tileVm.IsExcluded);
 
-        // Enter was never sent during the pick, so it cannot have reached
-        // OnEnterAsync — the cohort is still loaded, not committed.
+        // Enter went to the focused box, so the window's tunnel handler bailed
+        // and OnEnterAsync never ran — the cohort is still loaded.
         Assert.Single(vm.Tiles);
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Arrow keys move the dropdown's highlight; they must not pick. Found
+    /// live: the first ArrowDown set the tile to the top entry and closed the
+    /// list, so only the first match was ever reachable by keyboard. Enter
+    /// picks the highlighted entry.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_ArrowKeysOnlyHighlight_EnterPicksTheHighlightedEntry()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+            new OracleEntry("oracle-bot", "Bag of Tricks"),
+            new OracleEntry("oracle-bod", "Bag of Devouring"),
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+        var third = DisplayedDropdownNames(acb)[2];
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(tileVm.IsManuallySet, "Arrow keys must only move the highlight, not pick an entry.");
+        Assert.True(tileVm.IsTypeAheadOpen, "The overlay must stay open while arrowing through the list.");
+        Assert.True(acb.IsDropDownOpen, "The dropdown must stay open while arrowing through the list.");
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(TileState.ManuallySet, tileVm.State);
+        Assert.Equal(third, tileVm.DisplayName);
+        Assert.False(tileVm.IsTypeAheadOpen, "Overlay must close after Enter picks an entry.");
+        Assert.Single(vm.Tiles); // Enter went to the box, not to the cohort commit
+
+        window.Close();
+    }
+
+    /// <summary>
+    /// Escape abandons the dropdown without picking, even with an entry
+    /// highlighted.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task TypeAhead_EscapeWithAnEntryHighlighted_LeavesTheTileUnchanged()
+    {
+        var catalog = new InlineOracleCatalog([
+            new OracleEntry("oracle-boh", "Bag of Holding"),
+            new OracleEntry("oracle-bot", "Bag of Tricks"),
+        ]);
+        var session = MakeSession(catalog);
+        var window = new MainWindow(session);
+        window.Width = 1024;
+        window.Height = 768;
+
+        var vm = (MainViewModel)window.DataContext!;
+        vm.LoadCohort(MakeSingleCohort());
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var tileGrid = FindTileGrid(window);
+        var tileVm = (TileViewModel)tileGrid.DataContext!;
+        var acb = OpenTypeAhead(window, tileGrid);
+
+        window.KeyTextInput("bag o");
+        await WaitUntilAsync(() => acb.IsDropDownOpen, TimeSpan.FromSeconds(5));
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(tileVm.IsManuallySet, "Escape must not pick the highlighted entry.");
+        Assert.Equal("Lightning Bolt", tileVm.DisplayName);
+        Assert.Single(vm.Tiles); // Escape in the box must not clear the cohort
 
         window.Close();
     }
@@ -402,38 +478,12 @@ public class ManualSetContextMenuTests
     /// toggle the X.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The TextBox click is sent BEFORE any text is typed, i.e. while
-    /// <c>IsDropDownOpen</c> is still false. Empirically, once the dropdown
-    /// is open, Avalonia's <c>LightDismissOverlayLayer</c> covers the entire
-    /// window and <c>InputHitTest</c> at the TextBox's own coordinates
-    /// resolves to that overlay, not the TextBox — so a coordinate-based
-    /// click can never land on the box at all while its own dropdown is open
-    /// (confirmed empirically: with the dropdown open, neither
-    /// <c>PointerPressed</c>/<c>PointerReleased</c> nor <c>Tapped</c> fire on
-    /// the TextBox for a click at its own centre). Clicking before typing —
-    /// positioning the caret right after "Set card manually…" opens the
-    /// overlay — is the real, reachable case, and it reproduces the original
-    /// bug directly: with <see cref="OnTileTapped"/>'s guard removed, this
-    /// same click flips <see cref="TileViewModel.IsExcluded"/> to
-    /// <c>true</c> (see the chaos-test notes below).
-    /// </para>
-    /// <para>
-    /// The dropdown-item pick could not be driven through a genuinely
-    /// hit-tested pointer click either: <c>TopLevel.GetTopLevel</c> on a
-    /// realised <c>ListBoxItem</c> inside the open popup returns <c>null</c>
-    /// under the headless platform, so there is no coordinate space to click
-    /// into at all (confirmed empirically). This mirrors the existing
-    /// right-click tests above, which raise <c>MenuItem.ClickEvent</c>
-    /// directly rather than clicking a <c>ContextMenu</c> item by coordinate,
-    /// for the identical reason. <c>ListBoxItem.IsSelected</c> is set
-    /// directly instead — the same public selection state a hit-tested click
-    /// would set — which still exercises <c>AutoCompleteBox</c>'s REAL
-    /// selection-changed plumbing
-    /// (<see cref="MainWindow.OnTypeAheadSelectionChanged"/>), just not the
-    /// pointer-event path itself, which is not exercisable headlessly by any
-    /// technique tried (see <see cref="OnTileTapped"/>'s own remarks).
-    /// </para>
+    /// The TextBox click is sent before any text is typed. Once the dropdown
+    /// is open, Avalonia's light-dismiss overlay covers the window and a
+    /// click at the TextBox's coordinates never reaches it. The dropdown item
+    /// can't be hit-tested headlessly (the popup has no top level), so
+    /// <see cref="ClickDropdownItem"/> raises the press and release on the
+    /// item directly; the box's own selection adapter still handles them.
     /// </remarks>
     [AvaloniaFact]
     public async Task TypeAhead_PointerClickInTextBox_DoesNotToggleExcluded_AndSelectingItemSetsManuallySet()
@@ -473,7 +523,7 @@ public class ManualSetContextMenuTests
 
         var popup = acb.GetVisualDescendants().OfType<Popup>().First();
         var item = popup.Child!.GetVisualDescendants().OfType<ListBoxItem>().First();
-        item.IsSelected = true;
+        ClickDropdownItem(item);
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(TileState.ManuallySet, tileVm.State);
@@ -527,6 +577,22 @@ public class ManualSetContextMenuTests
         var acb = window.GetVisualDescendants().OfType<AutoCompleteBox>().FirstOrDefault(a => a.DataContext == tileVm);
         Assert.NotNull(acb);
         return acb!;
+    }
+
+    /// <summary>
+    /// Clicks a dropdown entry. The headless popup has no coordinate space to
+    /// click into, so this raises the pointer press and release a real click
+    /// produces on the item itself, which is what the box's selection adapter
+    /// listens to.
+    /// </summary>
+    private static void ClickDropdownItem(ListBoxItem item)
+    {
+        var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+        var pressed = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+        var released = new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased);
+
+        item.RaiseEvent(new PointerPressedEventArgs(item, pointer, item, default, 0, pressed, KeyModifiers.None));
+        item.RaiseEvent(new PointerReleasedEventArgs(item, pointer, item, default, 0, released, KeyModifiers.None, MouseButton.Left));
     }
 
     /// <summary>
@@ -684,23 +750,22 @@ public class ManualSetContextMenuTests
  *     the same Tapped still reaches `tileGrid.Tapped` (so the test is not
  *     vacuous — it is exercising real bubbling) but `IsExcluded` stays
  *     `false`.
- *   - The dropdown-ITEM half of the same test (`item.IsSelected = true`)
- *     could not be chaos-tested via a real pointer gesture either way — see
- *     OnTileTapped's own remarks for the full empirical investigation
- *     (TopLevel.GetTopLevel(item) is null under the headless popup; a
- *     synthetic Tapped raised directly on the item does not bubble to the
- *     tile Grid with or without the guard, confirming Avalonia's bubbling
- *     walks the visual tree and the popup's content is not visually attached
- *     to the window at all under headless). That half of the guard is
- *     untested, not vacuously tested — it simply could not be exercised.
+ *   - The dropdown-item half of the guard could not be chaos-tested: under
+ *     headless, the popup's content is not visually attached to the window,
+ *     so a Tapped raised on an item never reaches the tile Grid with or
+ *     without the guard. That half is untested, not vacuously tested.
  *   Reverted; the test passes again.
  *
- * A real, hit-tested pointer click on the TextBox only reproduces the bug
- * when sent BEFORE the dropdown opens — once `IsDropDownOpen` is true,
- * `InputHitTest` at the TextBox's own coordinates resolves to Avalonia's own
- * `LightDismissOverlayLayer` (which covers the whole window while any popup
- * is open) instead of the TextBox, so neither `PointerPressed` /
- * `PointerReleased` nor `Tapped` reach it at all. This was confirmed with a
- * diagnostic spike before settling on the final test, which clicks the
- * TextBox immediately after opening the overlay and before typing.
+ * Cause (d), found in the live app after the above — ArrowDown picked the
+ * first entry and closed the list. Re-planted by removing the
+ * `{ IsDropDownOpen: false }` condition in OnTypeAheadSelectionChanged, so
+ * every highlight change picks again:
+ *   - TypeAhead_ArrowKeysOnlyHighlight_EnterPicksTheHighlightedEntry: FAILED —
+ *     "Arrow keys must only move the highlight, not pick an entry."
+ *   - TypeAhead_EscapeWithAnEntryHighlighted_LeavesTheTileUnchanged: FAILED —
+ *     "Escape must not pick the highlighted entry."
+ *   - TypeAhead_TypingCaseInsensitivePrefix_...: FAILED too (it now picks
+ *     with ArrowDown + Enter).
+ *   Both new tests also failed against the code before the fix, on the same
+ *   assertions. Restored; all pass again.
  */

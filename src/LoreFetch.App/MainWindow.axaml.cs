@@ -666,50 +666,14 @@ public partial class MainWindow : Window
     /// Left-click (Tapped) on a tile's outer Grid → toggle the X opt-out.
     /// </summary>
     /// <remarks>
-    /// Issue #18: a click inside the type-ahead overlay's own inner TextBox
-    /// bubbles <c>Tapped</c> up to this Grid — the TextBox is a template part
-    /// realised inside the <see cref="AutoCompleteBox"/>, which sits fully
-    /// inside the tile's own visual tree — so without a guard, clicking into
-    /// the box to position the caret or select typed text also toggled the
-    /// tile's X. <see cref="TileViewModel.IsTypeAheadOpen"/> is NOT a
-    /// sufficient guard on its own: picking a dropdown item closes the
-    /// overlay (<see cref="OnTypeAheadSelectionChanged"/> sets it false)
-    /// before <c>Tapped</c> finishes bubbling here, so by the time this
-    /// handler would run for that click the box already reads as closed.
-    /// Walking <paramref name="e"/>'s LOGICAL ancestors from its
-    /// <c>Source</c> catches both: the in-box case (ordinary visual-tree
-    /// bubbling) and, in principle, a click on a dropdown item, since a
-    /// popup's content keeps the control that opened it as its LOGICAL
-    /// parent even though the popup itself renders through a separate visual
-    /// root — crossing exactly the boundary a visual-tree-only check would
-    /// miss.
-    /// <para>
-    /// Empirically verified only for the in-box case: a chaos test (remove
-    /// this check, click the inner TextBox's own coordinates BEFORE any text
-    /// is typed) reproduces the bug — <c>IsExcluded</c> flips to
-    /// <c>true</c> — and the fix stops it. The click has to land before the
-    /// dropdown opens: once <c>IsDropDownOpen</c> is true, Avalonia's own
-    /// <c>LightDismissOverlayLayer</c> covers the whole window and
-    /// <c>InputHitTest</c> at the TextBox's own coordinates resolves to that
-    /// overlay instead (confirmed empirically — neither
-    /// <c>PointerPressed</c>/<c>PointerReleased</c> nor <c>Tapped</c> reach
-    /// the TextBox at all while its own dropdown is open), so this is also
-    /// the only coordinate-clickable window for a real user. The
-    /// dropdown-ITEM case could not be driven through a real, hit-tested
-    /// pointer click at all: <c>TopLevel.GetTopLevel(item)</c> on a realised
-    /// <c>ListBoxItem</c> inside the open popup returns <c>null</c>, so there
-    /// is no coordinate space to click into. Directly raising a synthetic
-    /// <c>Tapped</c> on that item (bypassing hit-testing) did not bubble to
-    /// this Grid either way — with or without this guard — showing
-    /// Avalonia's own routed-event bubbling walks the VISUAL tree and a
-    /// headless popup's content is not visually attached to the owning
-    /// window's tree at all, so this specific path is not exercisable
-    /// headlessly by any technique tried. The guard is kept regardless — it
-    /// is cheap, provably correct for the verified in-box case, and
-    /// consistent with the documented live-app mechanism for the
-    /// dropdown-item case — but that second case is unverified. See
-    /// <c>ManualSetContextMenuTests</c>'s chaos-test notes.
-    /// </para>
+    /// Issue #18: a click inside the type-ahead box bubbles <c>Tapped</c> up
+    /// to this Grid and toggled the X while the user was typing. Taps whose
+    /// source has an <see cref="AutoCompleteBox"/> among its LOGICAL ancestors
+    /// are ignored; the logical tree also reaches the box's dropdown popup,
+    /// which renders under a separate visual root. <see cref="TileViewModel.IsTypeAheadOpen"/>
+    /// can't gate this: a pick closes the overlay before <c>Tapped</c>
+    /// finishes bubbling. Only the in-box click is covered by a test; the
+    /// dropdown-item path can't be hit-tested headlessly.
     /// </remarks>
     private void OnTileTapped(object? sender, TappedEventArgs e)
     {
@@ -877,16 +841,46 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// AutoCompleteBox selection changed → apply the chosen entry via
-    /// <see cref="TileViewModel.SetManuallyFromUi"/> and close the overlay.
-    /// Fires for both selection and de-selection; guards against a null
-    /// <c>SelectedItem</c> (de-selection sets it to null).
+    /// AutoCompleteBox selection changed → pick it, unless the dropdown is
+    /// still open.
     /// </summary>
+    /// <remarks>
+    /// Issue #18: <c>AutoCompleteBox</c> moves <c>SelectedItem</c> with every
+    /// arrow key while the dropdown is open, so picking here unconditionally
+    /// took the first entry on the first ArrowDown and closed the list. An
+    /// open dropdown means the user is still choosing; Enter or a click
+    /// closes it and <see cref="OnTypeAheadDropDownClosed"/> picks. Escape
+    /// closes it too, but resets <c>SelectedItem</c> first, so nothing is
+    /// picked.
+    /// </remarks>
     private void OnTypeAheadSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (sender is AutoCompleteBox acb &&
-            acb.DataContext is TileViewModel vm &&
-            acb.SelectedItem is CatalogItem item)
+        if (sender is AutoCompleteBox { IsDropDownOpen: false } acb)
+        {
+            PickTypeAheadSelection(acb);
+        }
+    }
+
+    /// <summary>
+    /// Dropdown closed by Enter or a click → pick the highlighted entry. See
+    /// <see cref="OnTypeAheadSelectionChanged"/>.
+    /// </summary>
+    private void OnTypeAheadDropDownClosed(object? sender, EventArgs e)
+    {
+        if (sender is AutoCompleteBox acb)
+        {
+            PickTypeAheadSelection(acb);
+        }
+    }
+
+    /// <summary>
+    /// Applies the box's <c>SelectedItem</c> via
+    /// <see cref="TileViewModel.SetManuallyFromUi"/> and closes the overlay.
+    /// A null <c>SelectedItem</c> (de-selection, Escape) picks nothing.
+    /// </summary>
+    private static void PickTypeAheadSelection(AutoCompleteBox acb)
+    {
+        if (acb.DataContext is TileViewModel vm && acb.SelectedItem is CatalogItem item)
         {
             vm.SetManuallyFromUi(item.ToEntry());
             vm.IsTypeAheadOpen = false;

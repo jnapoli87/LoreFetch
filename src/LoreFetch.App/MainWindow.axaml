@@ -497,7 +497,8 @@
                     predictable than explicit C# assignment.
 
                     Loaded="OnTypeAheadLoaded"     — wires AsyncPopulator from TileViewModel.TypeAheadPopulator
-                    SelectionChanged="…"           — calls SetManuallyFromUi + closes overlay
+                    SelectionChanged / DropDownClosed — pick the selected entry once the
+                                                     dropdown is closed (arrowing only highlights)
                   -->
                   <!--
                     Issue #18: HorizontalAlignment="Stretch" so the box spans
@@ -514,7 +515,8 @@
                                    VerticalAlignment="Bottom"
                                    ZIndex="200"
                                    Loaded="OnTypeAheadLoaded"
-                                   SelectionChanged="OnTypeAheadSelectionChanged" />
+                                   SelectionChanged="OnTypeAheadSelectionChanged"
+                                   DropDownClosed="OnTypeAheadDropDownClosed" />
 
                 </Grid>
               </DataTemplate>
