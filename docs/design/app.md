@@ -89,6 +89,8 @@ A tile per `CohortTile`: thumbnail from `RectifiedCard`, proposed oracle name, m
 
 The X is deliberately the only marker: with opt-out there's nothing to affirm, so a checkmark on every tile would be noise.
 
+**Layout (#17).** The grid is a fixed three columns, so a 3 × 3 capture reads as 3 × 3, and it shares the window's width with the preview about half and half, behind a draggable divider. The proposed name sits at the top of each tile, next to the title printed on the card it is checked against, and it wraps rather than being trimmed: a name that can't be read can't be validated. Every name strip in the grid takes the height of the tallest, so a wrapped name doesn't push its card out of line with the others. When space runs short, the thumbnail shrinks, not the name.
+
 ### A5 — Tile interactions
 All three call the tile's own methods — the UI never assigns `State` or `Chosen`.
 
