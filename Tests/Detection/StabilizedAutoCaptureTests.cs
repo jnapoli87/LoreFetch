@@ -3,7 +3,7 @@ using LoreFetch.Core.Detection;
 using LoreFetch.Core.Trigger;
 using Xunit;
 
-namespace LoreFetch.Tests.Integration.EndToEnd;
+namespace LoreFetch.Tests.Detection;
 
 /// Detection feeding the real `AutoCaptureTrigger`, the way `ScanPipeline`
 /// wires them. A card the detector finds only on alternate frames resets the
